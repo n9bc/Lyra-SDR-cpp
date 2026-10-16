@@ -1020,9 +1020,12 @@ void MeterModel::ladderRowFor(int src, double *level, double *danger) const {
         return;
     }
     case RX_SMETER: {
-        // RX-mode hero row: reuse the active S-meter level/danger so
-        // the Ladder's primary line matches what the Arc/Bar would show.
-        *level = level_;
+        // Use the live Arc ballistic when S is the primary; otherwise
+        // a one-shot calibrated reading for the Ladder S row.
+        if (source_ == RX_SMETER)
+            *level = level_;
+        else if (wdsp_)
+            *level = normForDbm(calibratedSMeterDbm(wdsp_->sMeterDbm()));
         *danger = normAtS9();
         return;
     }
@@ -1040,22 +1043,26 @@ void MeterModel::buildLadderRows() {
     // stays RX on the wire) — follow the same keyed-state OR the single
     // meter uses, so the Ladder flips to the TX rows when sending CW.
     const bool tx = stream_->moxActive() || stream_->cwKeyingActive();
+    const int style = activeStyle();
+    const bool helios = style == meterstyle::Helios;
     QList<int> srcs;
     QStringList labels;
     if (tx) {
-        // TX: full telemetry stack.  #160 — the TX audio chain has
-        // landed, so the live MIC / ALC / ALC-G rows now sit between
-        // SWR and the hardware telemetry (PA / VDD / T), matching the
-        // reference TX multimeter.  Leveler rows stay off the stack
-        // until the leveler runs (it's bypassed → would read floor);
-        // they remain selectable as secondary readouts.
-        srcs   = {PWR, SWR, MIC, ALC_PK, ALC_G, LVL_PK,
-                  PA_CURRENT, PA_VOLTS, TEMP};
-        labels = {QStringLiteral("PWR"), QStringLiteral("SWR"),
-                  QStringLiteral("MIC"), QStringLiteral("ALC"),
-                  QStringLiteral("ALC G"), QStringLiteral("LEV"),
-                  QStringLiteral("PA"),  QStringLiteral("VDD"),
-                  QStringLiteral("T")};
+        // Helios: title+value only (MIC/ALC/GAIN).
+        // Ladder / Cluster: full telemetry stack.
+        if (helios) {
+            srcs   = {MIC, ALC_PK, ALC_G};
+            labels = {QStringLiteral("MIC"), QStringLiteral("ALC"),
+                      QStringLiteral("GAIN")};
+        } else {
+            srcs   = {PWR, SWR, MIC, ALC_PK, ALC_G, LVL_PK,
+                      PA_CURRENT, PA_VOLTS, TEMP};
+            labels = {QStringLiteral("PWR"), QStringLiteral("SWR"),
+                      QStringLiteral("MIC"), QStringLiteral("ALC"),
+                      QStringLiteral("ALC G"), QStringLiteral("LEV"),
+                      QStringLiteral("PA"),  QStringLiteral("VDD"),
+                      QStringLiteral("T")};
+        }
     } else {
         // RX: three-row degraded view.  The S-meter row is the hero
         // (matches the operator's RX expectation); noise floor + SNR
@@ -1144,6 +1151,17 @@ void MeterModel::tick() {
         }
     }
 
+    // Helios's hero is always S on RX / PWR on TX.  Click-cycle on Arc
+    // can leave source_ on PWR/SWR, which skipped computeSMeter() and
+    // froze NF/SNR (those only update in the S-meter tick).
+    if (activeStyle() == meterstyle::Helios) {
+        const bool keyed = stream_ &&
+            (stream_->moxActive() || stream_->cwKeyingActive());
+        if (keyed) computePwr();
+        else       computeSMeter();
+        return;
+    }
+
     switch (source_) {
     case RX_SMETER:   computeSMeter();    return;
     case PWR:         computePwr();       return;
@@ -1207,10 +1225,19 @@ void MeterModel::computeSMeter() {
         frontEndHoldTicks_ = 0;
     }
 
-    if (frontEndHoldTicks_ > 0)
-        --frontEndHoldTicks_;                    // hold: freeze the reading
-    else
-        dispDbm_ += kSmooth * (dbm - dispDbm_);
+    // Don't chase WDSP's ≈−200 "not running" sentinel — it drags
+    // dispDbm_ into the basement, the rolling-min floor follows it
+    // instantly, and SNR pins at the 99 dB display cap until the
+    // 1 dB/s leak crawls back (Radar made this obvious because it
+    // always ticks the S-meter path).
+    if (raw > -190.0) {
+        if (frontEndHoldTicks_ > 0)
+            --frontEndHoldTicks_;                // hold: freeze the reading
+        else
+            dispDbm_ += kSmooth * (dbm - dispDbm_);
+    } else if (frontEndHoldTicks_ > 0) {
+        --frontEndHoldTicks_;
+    }
     const double n = normForDbm(dispDbm_);
     level_ = n;
 
@@ -1237,14 +1264,22 @@ void MeterModel::computeSMeter() {
     // sMeterDbm() returns on stop/start + rate changes — feeding it pinned
     // the floor at −200 with no recovery, which is what jammed SNR at 99.
     if (raw > -190.0) {
-        if (dispDbm_ < noiseFloorDbm_) noiseFloorDbm_ = dispDbm_;
-        else noiseFloorDbm_ = std::min(dispDbm_, noiseFloorDbm_ + kNoiseLeak);
+        // A passband S-meter on SSB rarely has 50 dB of true SNR; a
+        // gap that big means the floor followed a sentinel. Snap it
+        // back so Radar/Arc don't sit on "99 dB" for a minute.
+        constexpr double kMaxSnrDb = 50.0;
+        if (dispDbm_ - noiseFloorDbm_ > kMaxSnrDb)
+            noiseFloorDbm_ = dispDbm_ - kMaxSnrDb;
+        else if (dispDbm_ < noiseFloorDbm_)
+            noiseFloorDbm_ = dispDbm_;
+        else
+            noiseFloorDbm_ = std::min(dispDbm_, noiseFloorDbm_ + kNoiseLeak);
     }
     noiseLevel_ = normForDbm(noiseFloorDbm_);
     const double snr = dispDbm_ - noiseFloorDbm_;
     snrText_ = (level_ <= 0.01 || snr < 1.0)
                    ? QStringLiteral("—")
-                   : QStringLiteral("SNR %1 dB").arg(std::lround(std::min(snr, 99.0)));
+                   : QStringLiteral("SNR %1 dB").arg(std::lround(std::min(snr, 50.0)));
     // The second secondary readout (task #37) is a TX-only feature; RX
     // already shows dBm + SNR on the two small lines.  Clear it so a
     // stale TX-source value doesn't render under the S-meter on swap.

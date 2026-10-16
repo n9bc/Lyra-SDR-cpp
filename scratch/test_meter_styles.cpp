@@ -24,14 +24,15 @@ int main()
     std::printf("test_meter_styles\n");
 
     // Kept faces load as themselves.
-    for (int s : {0, 1, 2, 7, 10, 11, 12, 16, 17}) {
+    for (int s : {0, 1, 2, 7, 10, 11, 12, 16, 17, 18}) {
         char name[48];
         std::snprintf(name, sizeof name, "kept %d", s);
         check(name, keptStyle(s), s);
     }
     check("kept Cluster (17)",           keptStyle(Cluster), Cluster);
     check("Cluster is a new index",      Cluster, 17);
-    check("kStyleMax is the last face",  kStyleMax, Cluster);
+    check("Helios is a new index",       Helios, 18);
+    check("kStyleMax is the last face",  kStyleMax, Helios);
 
     // Retired faces.
     check("3 Porthole -> Iris",          keptStyle(3), 11);
@@ -60,6 +61,7 @@ int main()
     // Faces that read the ladder rows.
     check("Ladder uses ladder rows",     usesLadderRows(VerticalLadder), 1);
     check("Cluster uses ladder rows",    usesLadderRows(Cluster), 1);
+    check("Helios uses ladder rows",     usesLadderRows(Helios), 1);
     check("13 (retired) does not",       usesLadderRows(13), 0);
     check("Arc does not",                usesLadderRows(HorizonArc), 0);
 

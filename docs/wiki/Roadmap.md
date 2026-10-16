@@ -4,12 +4,15 @@ Where Lyra is headed. This is a **direction, not a dated schedule** — items la
 when they're solid. Everything shipped today is on the [Feature Status](Feature-Status)
 page.
 
-**Now (v0.25.21 Sheliak):** HL2 / HL2+
+**Now (v0.25.22 Sheliak):** HL2 / HL2+
 P1, BrickSDR2 / Brick3SDR P2, SUB + SPLIT, PureSignal, TX rack. Brick3 /
 ANAN-100D get a second SUB panadapter. **Diversity** (two ADCs, same
 frequency) is in and confirmed on Brick3SDR.
-**Next:** G2 on-air validation, 7000/8000 when OrionMkII BPF is in scope,
-Linux then macOS.
+**Next:** graduate Orion MkII testers (ANAN-7000DLE / 8000DLE / Orion MkII /
+Anvelina-Pro3) off dummy-load TX, G2 on-air validation, then Linux.
+**macOS stays a separate branch** (`macos-port`);
+it is not merged into the Windows tree. Brent tracks trunk into that
+branch. P2 on Mac is untested.
 
 > **Legend:** ✅ done · 🚧 in progress · 🗺️ planned · 💡 exploring (early idea, not scheduled)
 
@@ -55,7 +58,7 @@ keyup. Attestation in **Settings → TX** (default off). **2-tone** on the
 TX panel is the usual tune-up carrier.
 Operator detail: **[User Guide → PureSignal](User-Guide#puresignal)**.
 
-### ✅ Protocol 2 on BrickSDR2 / Brick3SDR · 🚧 Classic ANAN P2 on-air (G2 dummy-load) · 🗺️ 7000/8000
+### ✅ Protocol 2 on BrickSDR2 / Brick3SDR · 🚧 Classic ANAN P2 on-air (G2 dummy-load · Orion MkII in tester hands)
 
 HPSDR **Protocol 2** is live on **BrickSDR2** and **Brick3SDR** (RX + TX,
 including radio mic → modulator, analog drive, watts-cap, ATT-on-TX).
@@ -64,9 +67,11 @@ arm); first RF dummy load. **SUB** opens a second panadapter. A Brick that
 still answers **Protocol 1** is **discovered but not opened** — P1 TX in
 Lyra is HL2-only. Flash **P2** (Anton / linoobs for Brick images).
 **ANAN-10 / 10E** = BrickSDR2 TX; **ANAN-100 / 100B / 100D / 200D** =
-Brick3SDR TX. **G2 / G2-1K** still dummy-load arm. Boxes that shipped as
-Protocol 1 should run the **P2 FPGA** when they can. **7000DLE / 8000**
-(OrionMkII BPF) stay locked.
+Brick3SDR TX. **G2 / G2-1K** still dummy-load arm. **7000DLE / 8000DLE / Orion MkII /
+Anvelina-Pro3** are **in tester hands** (not locked) — RX and BPF follow
+reported on Anvelina PROIII; TX stays dummy-load + drive ceiling until RF
+is confirmed. Boxes that shipped as Protocol 1 should run the **P2 FPGA**
+when they can.
 
 ## Platforms
 
@@ -112,25 +117,20 @@ features above and may change shape or timing.
 
 ### 💡 Remote operation
 
-Run a radio at one location from a Lyra somewhere else, over the internet — a
-purpose-built **Lyra-to-Lyra** link that carries the DSP, compressed audio, and
-spectrum, with the operating position's controls driving the remote radio. This
-is an early idea, not a dated feature: it sits **behind** the remaining
-platform work (Linux / macOS, 7000/8000),
-and would only ship with **mandatory authentication, encryption,
-and fail-safe transmit** — a dropped or degraded link must never leave the
-transmitter keyed.
+**Hold** (2026-10-16): a second Lyra as the desk, shack Lyra stays Open
+(**Hosted Lyra** as the rig). Auth, encryption, fail-safe unkey. Behind
+confirmed radios, then Linux.
 
-### 💡 TX rack setup without RF (looped speech + bandwidth)
+**Drop:** Windows service / headless-only package; in-app gateware flash;
+naked WAN / port-forward of HPSDR UDP to the radio (Reid-style). LTE IQ
+is huge even on Wireguard (tester note). LAN **Lyra Remote** (TCI browser)
+stays what we ship for remote-on-the-house-net.
 
-Dial in EQ / speech / Combinator / Plate **without keying** — no MOX, no
-TX I/Q, PA stays off. Optional **20–30 s recorded speech**, looped into the
-same pre-rack mic funnel so rack knobs and **TX bandwidth (3 / 4 / 6 kHz
-and ESSB)** can be A/B'd on identical words.
+### TX rack setup without RF — dropped
 
-Today: **▶ Review** is raw WAV (no rack); **MON TX** is post-rack **before**
-ALC and TX bandpass, and only while keyed. Hearing 3 kHz vs 6 kHz needs a
-**post-bandpass listen tap**, not the current MON tap. Parked — later add-in.
+On-air TX always sounds different from a local tap. **MON TX** into a dummy
+load is enough to hear whether the rack grabbed; a Kiwi or a trusted ear
+is how you set it. No no-RF listen path.
 
 ## Want to influence it?
 

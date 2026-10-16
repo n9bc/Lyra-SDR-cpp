@@ -42,7 +42,8 @@ Rectangle {
         { "sid": 11, "name": "Iris" },
         { "sid": 12, "name": "Sonar" },
         { "sid": 17, "name": "Cluster" },
-        { "sid": 16, "name": "Phosphor" }
+        { "sid": 16, "name": "Phosphor" },
+        { "sid": 18, "name": "Helios" }
     ]
 
     function styleName(id) {
@@ -176,6 +177,7 @@ Rectangle {
             case 12: return sonarFace
             case 16: return phosphorFace
             case 17: return clusterFace
+            case 18: return heliosFace
             default: return arcFace
             }
         }
@@ -190,6 +192,7 @@ Rectangle {
     Component { id: sonarFace;    MeterSonar {} }
     Component { id: clusterFace;  MeterCluster {} }
     Component { id: phosphorFace; MeterPhosphor {} }
+    Component { id: heliosFace;   LyraHelios {} }
 
     // ── Click-to-cycle source picker (task #35 / FEATURES.md §6) ──
     // Click on the meter face cycles the source through the wired
@@ -209,9 +212,11 @@ Rectangle {
         anchors.fill: face
         z: 1                              // below the style chip (z:10)
         // Disabled on Ladder (2) and Cluster (17) — they show all the
-        // ladder sources at once, so there's no primary to cycle.  Operator
+        // ladder sources at once, so there's no primary to cycle — and on
+        // Helios (18), which always shows S on RX / PWR on TX.  Operator
         // picks per-state preference from Settings → Meter as usual.
         enabled: Meter.activeStyle !== 2 && Meter.activeStyle !== 17
+                 && Meter.activeStyle !== 18
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton
         property var sourceCycle: [0, 1, 2]  // RX_SMETER, PWR, SWR

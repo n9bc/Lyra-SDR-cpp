@@ -22,7 +22,21 @@ not programmers — if you can click a menu, you can use this.
 
 ## Current build
 
-**v0.25.21 Sheliak.** See [What's new in 0.25.21](#whats-new-in-02521).
+**v0.25.22 Sheliak.** See [What's new in 0.25.22](#whats-new-in-02522).
+
+## What's new in 0.25.22
+
+- **Helios meter face.** A sun-and-planets look (S9 = Jupiter; TX watts
+  plus MIC / ALC / GAIN), in the meter's style chip next to Sonar and
+  Cluster. Same calibration as Arc. See [Meter panel](#meter-panel).
+- **Band change while transmitting.** Tuning across a band edge while
+  keyed (dial, wheel, any VFO write) is refused like a one-click band
+  jump: transmit stops. Status bar: *Band change blocked — transmit
+  stopped.*
+- **Xvtr.** Each transverter chip remembers its LNA (HL2) or ATT (P2).
+- **Password required to listen** is disabled until a listen lock can
+  run without breaking a receiver page or a digital program on another
+  computer. **Start voice** still uses the password.
 
 ## What's new in 0.25.21
 
@@ -124,8 +138,10 @@ arm). Still **beta testing**: first RF into a dummy load.
 **ANAN Protocol 2 TX mapping.** Pick the marketed model in Settings →
 Hardware. **ANAN-10 / 10E** follow BrickSDR2 TX. **ANAN-100 / 100B /
 100D / 200D** follow Brick3SDR TX (on-air, independent **Enable PA**).
-**G2 / G2-1K** still use the dummy-load arm. **7000DLE / 8000** stay
-locked.
+**G2 / G2-1K** still use the dummy-load arm. **7000DLE / 8000DLE /
+Orion MkII / Anvelina-Pro3** are **in tester hands** (not locked) — RX and
+BPF follow on Anvelina PROIII; TX dummy-load + drive ceiling until RF is
+confirmed. Pick the marketed model in Settings → Hardware.
 
 **PureSignal dock** — ON, 2-tone, **Voice** (male-voice shaped noise +
 level), ATT, FB, Reset. Engine chips (st / cal / D0 / D1) live on
@@ -350,6 +366,7 @@ Dummy load first.
 
 ## Contents
 
+- [What's new in 0.25.22](#whats-new-in-02522)
 - [What's new in 0.25.21](#whats-new-in-02521)
 - [What's new in 0.25.20](#whats-new-in-02520)
 - [What's new in 0.25.19](#whats-new-in-02519)
@@ -545,7 +562,7 @@ to BrickSDR2). Leftover P1 rows stay refused.
 | **ANAN-100 / 100B** | Like **Brick3SDR** TX (on-air, independent Enable PA). One ADC + classic Alex — SUB overlay, not a second pane. |
 | **ANAN-100D / 200D** | Like **Brick3SDR** TX **and** two converters: **SUB** opens a second panadapter. **Diversity** is the same path as Brick3. **RX2 jack isolate on TX** default on. |
 | **ANAN-G2 / G2-1K** | Dummy-load **Arm P2 TX** until a tester validates RF. Two ADC. |
-| **7000DLE / 8000** | Stay locked. |
+| **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** | **In tester hands** (not locked). Pick the marketed model. Anvelina PROIII: filters follow the band. TX dummy-load arm + drive ceiling — dummy load on first TX. |
 
 ---
 
@@ -1559,11 +1576,24 @@ display cap, not the slot editor. ~2.147 GHz is the signed-int ceiling
 **Slot editor (right-click a chip).** On/off, name, **RF** low/high
 (MHz), LO (MHz), error (Hz), Disable PA, RX-only. Disable PA defaults
 **on** so the Hermes Lite onboard PA stays off with a transverter in
-circuit. PA-gain and USB-BCD follow **displayed RF**. The N2ADR / OC
+circuit. Clicking a chip (or QSYing into its RF range) also recalls that
+slot’s last **LNA** (Hermes Lite PGA) or **ATT** (Protocol 2 pad). Auto-LNA /
+Auto Step stay the global switch; the **number** they last left on that
+chip is what comes back. 20 m vs **2m** vs **70cm** are separate. First
+visit to a slot keeps the live value until you move the slider. PA-gain and USB-BCD follow **displayed RF**. The N2ADR / OC
 filter map uses the **IF of that slot’s RF-low** (not the live IF as
 you QSY). Otherwise a 2 m hop such as 145.675 ↔ 145.775 with a 116 MHz
 LO would cross the 10 m amateur edge at **29.7 MHz IF** and chatter the
 HL2 filter-board relays. USB-BCD does not do that (it keys on RF).
+
+**HL2 + transverter with a 30 dB pad** (for example UR3LMZ TR2020 Mini and
+an automatic TX/RX switch). The split RX/TX ports are **on that box**, not
+an extra HL2 antenna. Right-click the **2m** (or matching) chip: uncheck
+**Disable radio PA**, set **Error** about **−200…−300 Hz** (re-trim if the
+LO drifts). Turn **Enable PA** on in Settings when you want the HL2 PA into
+the pad. **Auto** on the DSP+Audio strip is Auto-LNA (lit = on, the default).
+Click Auto off for a fixed LNA, then use the LNA slider. Each Xvtr chip
+remembers its last LNA number; Auto stays one global switch.
 
 **IF window.** The HL2 ADC/NCO is HF (~DC–30.72 MHz). Example: RF
 144–146 MHz with LO 116 MHz → IF 28–30 MHz (inside). RF **148** MHz at
@@ -2231,9 +2261,9 @@ is the extra Visuals pair for the second pane.
 
 ## Meter panel
 
-A GPU-drawn **RX signal-strength meter** with three looks — pick whichever
-you like with the small **Arc | Bar | Ladder** toggle in the panel's
-top-right corner (your choice is remembered):
+A GPU-drawn **RX / TX meter** with a choice of faces — pick one from the
+**style chip** in the panel's top-right corner, or right-click the meter
+(your choice is remembered). The main ones:
 
 - **Horizon Arc** (default) — a sweep dial against a fixed, calibrated
   S-scale. The fill climbs through colour zones (cyan → green → amber →
@@ -2249,6 +2279,18 @@ top-right corner (your choice is remembered):
   readouts at once as labelled bars (e.g. PWR / SWR / ALC together on
   transmit) instead of one big primary readout — handy when you want to
   watch the whole picture at a glance.
+- **Sonar** — PPI with a compass ring. The return rides the sweep all the
+  way round (afterglow of the last rotation). Same 0…1 as Arc.
+- **Helios** — sun plus a planet row on the **same 0…1** as Arc. On RX,
+  Earth holds S5–S7, Jupiter is S9+, Saturn +15, Uranus +30, Pluto a
+  tickle at +45, wormhole at +50. On TX the planets follow the watts
+  scale (rated max in Settings → Meter); a small **MIC · ALC · GAIN**
+  line (cyan / green / red, no bars) sits under the poster. The big
+  S / watts number stays.
+- **Cluster** — cockpit arc of lamps plus segmented bars for the Ladder
+  stack (S / NF / SNR on RX; PWR and the TX rows on TX). Theme cyan.
+- **VFD, Drum, Iris, Phosphor** — single-hue tube, drum, aperture and
+  phosphor-trace looks on the same scale.
 
 Both styles also carry an optional **max-peak marker** — a second, **red**
 "high-water mark" that latches the highest level reached and falls back
@@ -2630,8 +2672,9 @@ plot (live `GetPSDisp` curve).
 7. Next keyup should land **near** the previous FB, not a full hunt.
 8. Kill-test once, then antenna when you are ready.
 
-> **ANAN-7000 / 8000** TX stays locked; do not expect PS there yet.
-> Classic ANAN P2 TX is dummy-load / not on-air validated.
+> **ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** are in tester
+> hands. TX is not on-air validated (dummy-load arm + drive ceiling). Do
+> not expect PureSignal there yet.
 
 ---
 
@@ -4686,6 +4729,12 @@ amplifier. Both live in **Settings → TX** (the safety column, next to
 ATT-on-TX); SWR protection also has a front-panel **PROT lamp** on the
 TX panel.
 
+**Band change while transmitting.** A one-shot VFO jump that would leave
+the amateur band (band chip, memory, GEN/TIME, CAT, TCI, and so on) is
+**ignored**. Transmit stays up. The status bar says *Frequency change
+ignored while transmitting.* Same-band hops still go through. Filters
+and the PA band do not switch under RF.
+
 **SWR protection (auto-cut / fold on high reflected power).** While you
 transmit, Lyra watches forward/reflected power and acts if the SWR stays
 above your limit — protection against a bad antenna, a disconnected
@@ -5462,9 +5511,7 @@ Taking the token is what moves the microphone. A TCI connection by itself leaves
 
 Unkey only stops the transmit audio. The remote profile stays until the session ends or the link drops, and then the previous microphone, rack, and leveler come back. Lyra does not write those changes into Settings, so a crash comes back on the desk profile.
 
-One password covers three things: listening, when you tick the box below; changing the radio; and transmit. A listen-only connection does not receive a transmit token.
-
-**Password required to listen** is off unless you tick it. The box is saved. Spectrum and receiver audio stay open. The later hold, where spectrum and audio wait for the same proof, is not applied yet. Programs on the computer running Lyra are not asked.
+**Password required to listen** is **disabled** in this build. The tick was saved but never held spectrum or audio. Enabling it would look like a lock we do not apply, and it would break a receiver page or a digital program on another computer. **Start voice** already proves the password. Address lists still apply. A listen-only connection does not receive a transmit token.
 
 The browser chooses its own microphone and applies its own EQ before the samples are sent. Lyra never sees the device name.
 
@@ -5476,7 +5523,7 @@ A remote program that asks to start a voice session receives one challenge. The 
 
 When a token is granted, Lyra moves transmit audio to that connection, steps the speech rack aside, and parks the leveler. Those three stay live only. Settings keep the desk microphone. Unkey leaves the session up. Releasing the token, or dropping the link, puts the desk microphone, rack, and leveler back.
 
-The page asks for the password only after **Start voice**. A normal connection leaves the desk profile alone. After the session is on, **MOX** sends that computer's microphone and **Tune** sends a carrier from Lyra. Open the page with **Open Lyra Remote**. A file opened by double-click can still listen, and it cannot prove the password or open a microphone. **Password required to listen** is saved. It does not hold the spectrum, and it does not drop a connection. The address lists and an unforwarded port keep other computers out.
+The page asks for the password only after **Start voice**. A normal connection leaves the desk profile alone. After the session is on, **MOX** sends that computer's microphone and **Tune** sends a carrier from Lyra. Open the page with **Open Lyra Remote**. A file opened by double-click can still listen, and it cannot prove the password or open a microphone. **Password required to listen** is disabled until a listen lock can run without breaking those paths. The address lists and an unforwarded port keep other computers out.
 
 Save the password before you allow a remote to transmit. The proof is checked by Lyra, on the Lyra computer, for that connection alone.
 

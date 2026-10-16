@@ -19,6 +19,10 @@
 // setLive(true) + wires player() into the funnel; that one change lights up
 // OTA/Review/Record + the F-keys with no panel change.
 //
+// Mic REC / OTA inject: on macos-port they tap the selected mic source in
+// xcmaster (codec, VAC or TCI — see MainWindow).  Upstream still taps the
+// HL2 EP6 codec jack and holds this change until a Windows dummy-load pass.
+//
 // Global voice-keyer state (playback gain + the single Bypass-TX-DSP toggle,
 // per the locked design decisions) persists to QSettings (clips/*); per-clip
 // trims live on the ClipBank.

@@ -1334,6 +1334,7 @@ public slots:
     void syncPsAttToTxBand();
     void setPaEnabled(bool on);
     void setXvtrSlots(lyra::ui::XvtrSlots *xvtrSlots);
+    lyra::ui::XvtrSlots *xvtrSlots() const { return xvtr_; }
     // Display RF → radio IF/DDS (identity when no Xvtr slot matches).
     int ddsHzForRf(quint32 rfHz) const;
     // Enabled Xvtr slot index containing displayed RF, or -1.
@@ -1994,6 +1995,11 @@ private:
     // then is written twice.  Skipped on Protocol 2.  force is accepted
     // so startup / P1-return call sites stay source-compatible.
     void pushIoboardTxFreq(bool force = false);
+    // While keyed: refuse a VFO write (dial, wheel, CAT, …) that would
+    // change amateur-band region (filters / OC / PA band under RF) and
+    // un-key through stopTxForBlockedJump — the backstop for writes the
+    // one-click guards (txBlocksBandJump / txBlocksVfoBJump) never see.
+    bool refuseTxBandJump(quint32 fromHz, quint32 toHz);
     // Writes the RX DDC NCOs from rx1FreqHz_ + (ritEnabled ? ritOffsetHz : 0)
     // — the single RX-NCO writer, mirror of pushEffectiveTxFreq.  Called by
     // setRx1FreqHz (every dial gesture) and the RIT setters.

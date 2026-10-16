@@ -32,15 +32,17 @@ enum Style : int {
     // 14 Sunburst, 15 Lamps (retired)
     Phosphor       = 16,
     Cluster        = 17,
+    Helios         = 18,
 };
 
 // Highest index in use.  Anything above it (a newer build's face) clamps.
-inline constexpr int kStyleMax = Cluster;
+inline constexpr int kStyleMax = Helios;
 
-// Ladder and Cluster both draw MeterModel::ladderRows.
+// Ladder and Cluster draw MeterModel::ladderRows; Helios reads them for its
+// TX MIC / ALC / GAIN strip.
 constexpr bool usesLadderRows(int style)
 {
-    return style == VerticalLadder || style == Cluster;
+    return style == VerticalLadder || style == Cluster || style == Helios;
 }
 
 // A saved index for a retired face becomes the nearest face still there.

@@ -152,6 +152,8 @@ private:
     // The floor is a slow rolling-minimum of the level; SNR = signal-floor.
     Q_PROPERTY(double noiseLevel READ noiseLevel NOTIFY updated)
     Q_PROPERTY(QString snrText   READ snrText    NOTIFY updated)
+    Q_PROPERTY(double noiseFloorDbm READ noiseFloorDbm NOTIFY updated)
+    Q_PROPERTY(double rxSnrDb READ rxSnrDb NOTIFY updated)
     // The normalized position of the S9 boundary — renderers paint the
     // over-S9 region red.  Tracks the HF/VHF scale (S9 shifts at 30 MHz).
     Q_PROPERTY(double normAtS9 READ normAtS9 NOTIFY updated)
@@ -294,6 +296,7 @@ public:
     double  glow()     const { return glow_; }
     double  noiseLevel() const { return noiseLevel_; }
     QString snrText()  const { return snrText_; }
+    double  noiseFloorDbm() const { return noiseFloorDbm_; }
     QString text()     const { return text_; }
     QString dbmText()  const { return dbmText_; }
     QVariantList history() const { return history_; }

@@ -1,15 +1,16 @@
 # Feature Status
 
 Where Lyra stands today. Everything marked ✅ is shipped and working in
-**v0.25.21 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
+**v0.25.22 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
 **BrickSDR2 / Brick3SDR** (Protocol 2), unless a row says otherwise.
 
 > **Legend:** ✅ working now · 🚧 in progress · 🗺️ planned (see [Roadmap](Roadmap))
 
-### Last several builds (0.25.16 → 0.25.21)
+### Last several builds (0.25.16 → 0.25.22)
 
 | Build | What landed |
 |---|---|
+| **0.25.22** | **Helios / Sonar / Cluster** meter faces · **TX band-jump ignore** (stay keyed) · Xvtr per-chip LNA (HL2) / ATT (P2) · listen-password box disabled until a real RX lock |
 | **0.25.21** | **[Lyra Remote](Lyra-Remote)** voice session (separate browser desk) · Brick3 holds the first key until PA enable is already in receive · TCI meter line carries ALC headroom |
 | **0.25.20** | **Diversity** (Brick3 / 100D / 200D) · **band stack** (three frequencies per chip) · **separate RX and TX filter lows** · filter-board voltage follows a return to a band already on the dial (Issue #17) |
 | **0.25.19** | IQ backlog cap · PC-ring underrun fade · NB/AF atomics |
@@ -36,6 +37,7 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 - ✅ **MSAA** picker **Off / 2× / 4× / 8×** (Settings → Visuals; default 4×; restart)
 - ✅ **Xvtr** band chips — RF dial (ten-digit LED, ~2.147 GHz), IF NCO, Disable PA default on; Shift+click SUB hop; right-click slot editor. Band-plan **region does not rewrite** slot MHz — set RF low/high/LO for your allocation. See User Guide **Band panel**.
 - ✅ HL2 **N2ADR / IO board** — OC LPF (I2C **0x20**) is the **Enable N2ADR / IO board** checkbox. Filter-board follow is always Protocol 1 TX frequency on I2C **0x1D**, not gated on that box. **v0.25.20 / #17:** a return to a band already on the dial is written again. Leave **Band Volts on J3** off unless the amp is on the fan header.
+- ✅ **OC Control** — Settings → **Filters / BCD**: per-band J16 RX/TX pins, N2ADR preset, USB-BCD, J3 fan vs analog. Do not add a second tab.
 
 ## Receive (RX)
 
@@ -70,13 +72,14 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 - ✅ **5-band Combinator** (multiband compressor — Lyra’s CFC equivalent)
 - ✅ **Plate reverb** for ESSB "air"
 - ✅ **Speech processing** — formant boost, sibilance/consonant emphasis, DX cut-through, de-esser, auto-AGC
-- ✅ **Voice keyer** (message memory) + **VOX** (with anti-VOX)
+- ✅ **Voice keyer** (message memory) + **VOX** (with anti-VOX). **Parked:** REC / OTA still use the HL2 EP6 jack, not VAC/TCI mic — fix on a dedicated Windows pass, not the macOS branch.
 - ✅ **TX profiles** — save/recall the whole chain (including VAC1 **and VAC2** knobs; audio device names stay global); a profile can even launch its companion app (VarAC / MSHV / WSJT-X). Startup: mode-family binding → last-used → Default (v0.25.15). How to build one: in-app **Help → How to create a profile**.
 - ✅ **Hot-mic monitor** / SSB sidetone, separate monitor output device
 
 ### Metering &amp; TX safety
 
-- ✅ Multimeter — **PO / SWR / MIC / COMP / ALC / PA current**. The **PWR** needle keeps the loudest coupler sample between ticks so voice peaks land on the scale (factory peak-hold 700 ms if you have not saved your own)
+- ✅ Multimeter — **PO / SWR / MIC / COMP / ALC / PA current**. The **PWR** needle keeps the loudest coupler sample between ticks so voice peaks land on the scale (factory peak-hold 700 ms if you have not saved your own). Optional **Sonar** (PPI + compass; replaces Radar), **Helios** (sun + planets), and **Cluster** (arc + segmented bars) — same cal as Arc.
+- ✅ **TX band-jump ignore** — while keyed, a VFO write that would change amateur-band region is refused; transmit stays up. Status: *Frequency change ignored while transmitting.*
 - ✅ **ATT-on-TX** RX-front-end protection · **RX2 jack isolate on TX** (two-converter radios, default on) · **TR-sequencing** for amp hot-switch safety
 - ✅ **SWR protection** (auto-cut above threshold) · **max power / drive cap** for low-drive amps
 - ✅ **TX time-out** · hard **External TX Inhibit**
@@ -101,7 +104,7 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 - ✅ **Session recorder** — RX audio on Protocol 1 and Protocol 2 + timed
   panadapter snapshots (Vulkan-safe) → a synced **MP4**; default folder
   `%USERPROFILE%\Lyra\Recordings` (v0.25.12, never Program Files)
-- ✅ **CAT / Serial** — Kenwood TS-480/2000 CAT over COM/TCP, serial PTT input, Winkeyer
+- ✅ **CAT / Serial** — Kenwood TS-480/2000 CAT over COM/TCP, serial PTT, serial CW key (CTS/DSR). A Winkeyer keys the **radio KEY jack** (Iambic off) or that serial key line — Lyra does not own the Winkeyer USB protocol.
 - ✅ **TCI server** — two channels; `vfo:0,1` = SPLIT VFO B, `vfo:1,0` / `dds:1` = SUB; RX1 + RX2 S-meter sensors; **CW terminal** (key line stays up between letters; callsign correct mid-send) and **TX sensors** that keep reporting at receive; handshake sends `start` only when the radio session is running (otherwise `stop` then `ready`); **STOP** never closes the radio and never drops MOX (echoes `start` while live so WSJT-X / JTDX stay attached and can key); **TUNE** keys the host TUN path, **TRX** keys MOX, **CHRONO** TX-audio headers use the negotiated rate / samples / format / channels (v0.25.14; MSHV / WSJT-X / JTDX / SDRLogger+); **[SDRLogger+ Combo](SDRLogger-Plus-Combo)** (call/name/RST from **RX1** + one-click log); **[Lyra Remote](Lyra-Remote)** voice session (password proof, then that browser's microphone) and a fifth TX-sensor number, ALC headroom (v0.25.21)
 - ✅ **USB-BCD** band data for linear-amp band switching
 - ✅ **Backup &amp; Restore** — export config, dated snapshots (survive reinstall), selective restore
@@ -113,9 +116,8 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 ## Not yet — see the Roadmap 🗺️
 
 - 🚧 **ANAN-G2 / G2-1K** — Saturn BPF; TX still dummy-load arm until on-air validated. **ANAN-10…200D** already use Brick2 / Brick3 TX (see above).
-- 🗺️ **ANAN-7000DLE / 8000** — OrionMkII BPF / PA not in this pass
-- 🗺️ **Linux, then macOS**
-- 💡 **TX rack setup without RF** — looped speech through the rack + hear TX bandwidth (3/4/6 kHz); not scheduled ([Roadmap](Roadmap#tx-rack-setup-without-rf-looped-speech--bandwidth))
+- 🚧 **ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** — **in tester hands** (not locked). RX/BPF being proven on the bench (Anvelina PROIII: filters follow the band). TX dummy-load arm + drive ceiling until RF is confirmed. Pick the marketed model in Settings → Hardware.
+- 🗺️ **Linux, then macOS** — **hold** (radios first; no Mac bench)
 
 ---
 
