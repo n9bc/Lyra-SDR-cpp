@@ -68,7 +68,8 @@ void DeepFistSpectrogram::fft256(std::complex<float>* a) const {
 }
 
 void DeepFistSpectrogram::compute(const float* audio, int n,
-                                  std::vector<float>& outTile, int& T) {
+                                  std::vector<float>& outTile, int& T,
+                                  bool standardize) {
     T = 0;
     outTile.clear();
     if (!audio || n <= 0) return;
@@ -102,6 +103,8 @@ void DeepFistSpectrogram::compute(const float* audio, int n,
             m2   += d * (val - mean);
         }
     }
+
+    if (!standardize) return;
 
     // global standardize: (x - mean) / (std + 1e-6), unbiased std (torch default)
     const double var = (count > 1) ? m2 / (count - 1) : 0.0;

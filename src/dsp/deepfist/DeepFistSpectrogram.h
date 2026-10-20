@@ -32,8 +32,11 @@ public:
     DeepFistSpectrogram();
 
     // audio: mono @ 3200 Hz, `n` samples.  Fills `outTile` (resized to 65*T)
-    // and sets `T` = number of STFT frames = 1 + n/hop.
-    void compute(const float* audio, int n, std::vector<float>& outTile, int& T);
+    // and sets `T` = number of STFT frames = 1 + n/hop.  `standardize` false
+    // stops after log1p (models trained without the global standardize, e.g.
+    // DeepCW); the tile layout is the same either way.
+    void compute(const float* audio, int n, std::vector<float>& outTile, int& T,
+                 bool standardize = true);
 
 private:
     void fft256(std::complex<float>* a) const;   // in-place radix-2, N=256

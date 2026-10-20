@@ -149,7 +149,8 @@ class Prefs : public QObject {
                NOTIFY cwDecodeBandwidthChanged)
     Q_PROPERTY(int cwDecodeSpeed READ cwDecodeSpeed WRITE setCwDecodeSpeed
                NOTIFY cwDecodeSpeedChanged)
-    // DeepFist — persisted CW decode engine (0=Classic fldigi, 1=Neural).
+    // DeepFist — persisted CW decode engine (0=Classic fldigi, 1=Neural DeepFist,
+    // 2=Auto, 3=DeepCW, 4=Compare).
     Q_PROPERTY(int cwDecodeEngine READ cwDecodeEngine WRITE setCwDecodeEngine
                NOTIFY cwDecodeEngineChanged)
     // DeepFist — persisted CTC blank-logit penalty (0..5) for the neural engine.

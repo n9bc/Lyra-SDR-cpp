@@ -32,7 +32,8 @@ Rectangle {
     property int    rxWpm: 0
     property bool   matchTxSpeed: false
 
-    // DeepFist — active engine (0=Classic fldigi, 1=Neural).  Both engines now
+    // DeepFist — active engine (0=Classic fldigi, 1=Neural DeepFist, 2=Auto,
+    // 3=DeepCW, the operator-supplied e04 model).  All engines now
     // stream characters incrementally into the transcript: the classic engine
     // per decoded element, the neural engine via frame-timed commit (~1.3 s
     // latency).  So both just append to decodedText.
@@ -55,7 +56,42 @@ Rectangle {
         if (t.length > 6000) t = t.slice(-4500)
         root.decodedText = t
     }
-    function clearDecoded() { root.decodedText = ""; root.greenSeen = {} }
+    function clearDecoded() {
+        root.decodedText = ""
+        root.cmpText = ["", "", ""]
+        root.greenSeen = {}
+    }
+
+    // Compare engine (4): Classic, DeepFist and DeepCW decode the same audio at
+    // once, each into its own stacked, colour-coded window.  Index = pane
+    // (0 Classic, 1 DeepFist, 2 DeepCW); cmpSource maps it to the engine id the
+    // cwCompareText/cwCompareWpm signals carry.
+    readonly property var cmpTitle:  [qsTr("Classic"), qsTr("DeepFist"), qsTr("DeepCW")]
+    readonly property var cmpColor:  ["#e6edf3", "#00e5ff", "#d7a6ff"]
+    readonly property var cmpSource: [0, 1, 3]
+    property var cmpText: ["", "", ""]
+    property var cmpWpm:  [0, 0, 0]
+    function appendCompare(source, s) {
+        var i = root.cmpSource.indexOf(source)
+        if (i < 0) return
+        var t = root.cmpText[i] + s
+        if (t.length > 6000) t = t.slice(-4500)
+        var a = root.cmpText.slice(); a[i] = t
+        root.cmpText = a
+    }
+    function setCompareWpm(source, w) {
+        var i = root.cmpSource.indexOf(source)
+        if (i < 0) return
+        var a = root.cmpWpm.slice(); a[i] = w
+        root.cmpWpm = a
+    }
+
+    // The transcript the "→ His Call / → Name" chips read the selection from:
+    // the single pane, or in Compare the window last clicked or selected in.
+    property var activeOut: null
+    function selOut() {
+        return (root.cwEngine === 4 && root.activeOut) ? root.activeOut : mainPane.out
+    }
 
     // Auto engine: fallback (Classic-during-fade) runs are wrapped in private
     // control-char markers (U+0002 / U+0003) so displayHtml() can dim them.
@@ -73,17 +109,17 @@ Rectangle {
     // Word (call) under the last right-click, for the grab menu.
     property string grabWord: ""
 
-    // The call-shaped word at document position `pos` in the transcript.
-    // MUST read from decodeOut's OWN rendered plain text (getText), NOT the raw
-    // decodedText: decodeOut is a RichText pane, so positionAt() returns an
+    // The call-shaped word at document position `pos` in transcript `area`.
+    // MUST read from the pane's OWN rendered plain text (getText), NOT the raw
+    // decodedText: the pane is RichText, so positionAt() returns an
     // index into the rendered document, where the dim-run control markers,
     // HTML entities and collapsed whitespace make the raw decodedText a
     // DIFFERENT length.  Indexing raw decodedText with a rendered position
     // drifts earlier by the number of markers before the click — the "grabs a
     // word from before the call / hit-miss" bug.  getText is the same stream
     // positionAt indexes, so the two always agree.
-    function wordAt(pos) {
-        var t = decodeOut.getText(0, decodeOut.length)
+    function wordAt(area, pos) {
+        var t = area.getText(0, area.length)
         if (pos < 0 || pos > t.length) return ""
         function isCh(c) {
             return (c >= "A" && c <= "Z") || (c >= "a" && c <= "z")
@@ -176,10 +212,10 @@ Rectangle {
         WdspEngine.setCwDecodeMatchedFilter(root.matchedFilter)
         pushSquelch()
         WdspEngine.setCwBlankPenalty(Prefs.cwBlankPenalty)   // DeepFist blank penalty
-        // Restore the persisted engine (DeepFist or Auto); if the neural model
-        // can't load, WdspEngine stays on Classic (cwDecodeEngine reflects the
-        // truth, and the chips light accordingly).
-        if (Prefs.cwDecodeEngine === 1 || Prefs.cwDecodeEngine === 2)
+        // Restore the persisted engine (DeepFist, Auto, DeepCW or Compare); if a
+        // neural model can't load, WdspEngine stays on Classic (cwDecodeEngine
+        // reflects the truth, and the chips light accordingly).
+        if (Prefs.cwDecodeEngine >= 1 && Prefs.cwDecodeEngine <= 4)
             WdspEngine.cwDecodeEngine = Prefs.cwDecodeEngine
         // Harvest is a developer capture tool with no UI chip: start it only
         // when armed by LYRA_CW_HARVEST (WdspEngine.cwHarvestEnabled).
@@ -204,6 +240,9 @@ Rectangle {
         function onCwNeuralText(newText) { root.appendDecoded(newText) }
         // Auto engine: arbiter output; fallback runs are source-marked (dimmed).
         function onCwAutoText(text, fallback) { root.appendAuto(text, fallback) }
+        // Compare engine: each decoder's text / WPM into its own window.
+        function onCwCompareText(source, text) { root.appendCompare(source, text) }
+        function onCwCompareWpm(source, w) { root.setCompareWpm(source, w) }
         // Engine switch: KEEP the transcript (the operator A/Bs engines on the
         // same signal and tunes each; the Clear chip empties it manually) —
         // just drop a seam glyph so the eye can see where the engine changed.
@@ -213,6 +252,7 @@ Rectangle {
         // MASTER.SCP arrives with the neural model (first switch to
         // DeepFist/Auto) — re-render so already-copied calls gain their amber.
         function onCwNeuralAvailableChanged() { root.spotRev++ }
+        function onCwDeepCwAvailableChanged() { root.spotRev++ }
     }
 
     // Re-highlight the transcript when the spot bank changes.  The bumped
@@ -271,138 +311,50 @@ Rectangle {
         Rectangle { Layout.fillWidth: true; height: 1; color: "#243845" }
     }
 
-    ColumnLayout {
-        id: body
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 8
+    // ── Reusable decoded-text window: auto-following transcript with call
+    //    highlighting, double-click → His Call and the right-click grab menu.
+    //    `title` (Compare only) adds a coloured header with that decoder's WPM. ──
+    component DecodePane: Rectangle {
+        id: pane
+        property string title: ""
+        property int    wpm: 0
+        property string text: ""
+        property color  textColor: Prefs.cwDecodeColor
+        property string placeholder: ""
+        readonly property alias out: decodeOut
+        radius: 6
+        color: "#070d12"
+        border.color: pane.title.length > 0
+                      ? Qt.darker(pane.textColor, 2.2) : "#1c2a36"
 
-        // ── Header ──
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Label { text: qsTr("CW Decoder"); color: root.cAccent
-                    font.bold: true; font.pixelSize: 14 }
-            Label {
-                visible: WdspEngine.cwDecodeEnabled && !root.cwActive
-                text: qsTr("• switch to CW to decode")
-                color: "#e0a030"; font.pixelSize: 11
-            }
-            Item { Layout.fillWidth: true }
-            Label {
-                text: (root.rxWpm > 0 ? root.rxWpm : "—") + qsTr(" wpm")
-                color: root.cText; font.family: "Consolas"; font.bold: true
-                font.pixelSize: 12
-            }
-            ChipButton {
-                label: root.collapsed ? "▲" : "▼"
-                onClicked: root.collapsed = !root.collapsed
-            }
-        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 2
 
-        // ── Decode on/off + Clear ──
-        RowLayout {
-            visible: !root.collapsed
-            Layout.fillWidth: true
-            spacing: 8
-            ChipButton {
-                label: WdspEngine.cwDecodeEnabled ? qsTr("Decoding") : qsTr("Decode OFF")
-                lit: WdspEngine.cwDecodeEnabled
-                onClicked: WdspEngine.cwDecodeEnabled = !WdspEngine.cwDecodeEnabled
-            }
-            Item { Layout.fillWidth: true }
-            ChipButton {
-                label: qsTr("Clear")
-                onClicked: root.clearDecoded()
-            }
-        }
-
-        // ── Engine selector: Classic (fldigi) vs DeepFist (neural) ──
-        RowLayout {
-            visible: !root.collapsed
-            Layout.fillWidth: true
-            spacing: 8
-            Label { text: qsTr("Engine"); color: root.cText; font.pixelSize: 12 }
-            ChipButton {
-                label: qsTr("Classic")
-                lit: root.cwEngine === 0
-                onClicked: { WdspEngine.cwDecodeEngine = 0
-                             Prefs.cwDecodeEngine = 0 }
-            }
-            ChipButton {
-                label: qsTr("DeepFist")
-                lit: root.cwEngine === 1
-                onClicked: { WdspEngine.cwDecodeEngine = 1
-                             // Persist only if it actually engaged (model loaded).
-                             if (WdspEngine.cwDecodeEngine === 1)
-                                 Prefs.cwDecodeEngine = 1 }
-            }
-            ChipButton {
-                label: qsTr("Auto")
-                lit: root.cwEngine === 2
-                onClicked: { WdspEngine.cwDecodeEngine = 2
-                             // Persist only if it actually engaged (model loaded).
-                             if (WdspEngine.cwDecodeEngine === 2)
-                                 Prefs.cwDecodeEngine = 2 }
-            }
-            Label {
-                visible: (root.cwEngine === 1 || root.cwEngine === 2) && !WdspEngine.cwNeuralAvailable
-                text: qsTr("• model not found — see models/")
-                color: "#e0a030"
-                font.pixelSize: 11
-            }
-            Item { Layout.fillWidth: true }
-        }
-
-        // ── DeepFist: live "Sensitivity" (CTC blank-penalty) slider ──
-        RowLayout {
-            visible: !root.collapsed && root.cwEngine === 1
-            Layout.fillWidth: true
-            spacing: 10
-            Label { text: qsTr("Sensitivity"); color: root.cText; font.pixelSize: 12 }
-            LyraSlider {
-                id: penSlider
+            RowLayout {
+                visible: pane.title.length > 0
                 Layout.fillWidth: true
-                // Bipolar: negative = "cleaner" (suppress stray/doubled chars on
-                // strong signals), 0 = neutral, positive = recover weak code.
-                from: -1; to: 1; stepSize: 0.5; snapMode: Slider.SnapAlways
-                showTicks: true
-                showTickNumbers: true
-                value: Prefs.cwBlankPenalty
-                onMoved: {
-                    Prefs.cwBlankPenalty = value
-                    WdspEngine.setCwBlankPenalty(value)
+                Label { text: pane.title; color: pane.textColor
+                        font.bold: true; font.pixelSize: 11 }
+                Label {
+                    visible: pane.placeholder.length > 0
+                    text: "• " + pane.placeholder
+                    color: "#e0a030"; font.pixelSize: 10
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                }
+                Item { Layout.fillWidth: true }
+                Label {
+                    text: (pane.wpm > 0 ? pane.wpm : "—") + qsTr(" wpm")
+                    color: pane.textColor; font.family: "Consolas"; font.pixelSize: 11
                 }
             }
-            Label {
-                // Signed value, e.g. "-0.5", "0", "+2".
-                text: (WdspEngine.cwBlankPenalty > 0 ? "+" : "")
-                      + WdspEngine.cwBlankPenalty.toFixed(1)
-                color: root.cText; font.pixelSize: 11
-                Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight
-            }
-        }
-        Label {
-            visible: !root.collapsed && root.cwEngine === 1
-            Layout.fillWidth: true
-            text: qsTr("0 = neutral.  Negative = cleaner copy on strong signals "
-                       + "(fewer stray/doubled characters).  Positive = pull weak/"
-                       + "fainter code out of the noise (but more stray characters).")
-            color: root.cMuted; font.pixelSize: 10; wrapMode: Text.WordWrap
-        }
 
-        // ── Decoded-text pane (operator font + colour) ──
-        Rectangle {
-            visible: !root.collapsed
-            Layout.fillWidth: true
-            Layout.preferredHeight: 132
-            radius: 6
-            color: "#070d12"
-            border.color: "#1c2a36"
             ScrollView {
                 id: decodeScroll
-                anchors.fill: parent
-                anchors.margins: 8
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 clip: true
 
                 // Auto-scroll follows the newest copy ONLY while the view is
@@ -450,8 +402,8 @@ Rectangle {
                     selectByMouse: true
                     wrapMode: TextArea.WrapAnywhere
                     textFormat: TextArea.RichText   // spotted calls highlighted
-                    text: root.displayHtml(root.decodedText)
-                    color: Prefs.cwDecodeColor
+                    text: root.displayHtml(pane.text)
+                    color: pane.textColor
                     font.family: "Consolas"
                     font.pixelSize: Prefs.cwDecodeFontSize
                     background: null
@@ -479,12 +431,15 @@ Rectangle {
                     onCursorRectangleChanged:
                         if (decodeScroll.followBottom)
                             Qt.callLater(decodeScroll.scrollToBottom)
+                    // Selecting in this window makes it the grab chips' source.
+                    onSelectedTextChanged:
+                        if (selectedText.length > 0) root.activeOut = decodeOut
 
                     // Double-click a word → His Call (robust word extraction).
                     TapHandler {
                         acceptedButtons: Qt.LeftButton
                         onDoubleTapped: (pt) => {
-                            var w = root.wordAt(
+                            var w = root.wordAt(decodeOut,
                                 decodeOut.positionAt(pt.position.x, pt.position.y))
                             if (w.length > 0) CwMacros.hisCall = w.toUpperCase()
                         }
@@ -493,12 +448,181 @@ Rectangle {
                     TapHandler {
                         acceptedButtons: Qt.RightButton
                         onTapped: (pt) => {
-                            root.grabWord = root.wordAt(
+                            root.grabWord = root.wordAt(decodeOut,
                                 decodeOut.positionAt(pt.position.x, pt.position.y))
                             grabMenu.popup()
                         }
                     }
                 }
+            }
+        }
+    }
+
+    ColumnLayout {
+        id: body
+        anchors.fill: parent
+        anchors.margins: 8
+        spacing: 8
+
+        // ── Header ──
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+            Label { text: qsTr("CW Decoder"); color: root.cAccent
+                    font.bold: true; font.pixelSize: 14 }
+            Label {
+                visible: WdspEngine.cwDecodeEnabled && !root.cwActive
+                text: qsTr("• switch to CW to decode")
+                color: "#e0a030"; font.pixelSize: 11
+            }
+            Item { Layout.fillWidth: true }
+            Label {
+                text: (root.rxWpm > 0 ? root.rxWpm : "—") + qsTr(" wpm")
+                color: root.cText; font.family: "Consolas"; font.bold: true
+                font.pixelSize: 12
+            }
+            ChipButton {
+                label: root.collapsed ? "▲" : "▼"
+                onClicked: root.collapsed = !root.collapsed
+            }
+        }
+
+        // ── Decode on/off + Clear ──
+        RowLayout {
+            visible: !root.collapsed
+            Layout.fillWidth: true
+            spacing: 8
+            ChipButton {
+                label: WdspEngine.cwDecodeEnabled ? qsTr("Decoding") : qsTr("Decode OFF")
+                lit: WdspEngine.cwDecodeEnabled
+                onClicked: WdspEngine.cwDecodeEnabled = !WdspEngine.cwDecodeEnabled
+            }
+            Item { Layout.fillWidth: true }
+            ChipButton {
+                label: qsTr("Clear")
+                onClicked: root.clearDecoded()
+            }
+        }
+
+        // ── Engine selector: Classic (fldigi) / DeepFist / Auto / DeepCW / Compare ──
+        RowLayout {
+            visible: !root.collapsed
+            Layout.fillWidth: true
+            spacing: 8
+            Label { text: qsTr("Engine"); color: root.cText; font.pixelSize: 12 }
+            ChipButton {
+                label: qsTr("Classic")
+                lit: root.cwEngine === 0
+                onClicked: { WdspEngine.cwDecodeEngine = 0
+                             Prefs.cwDecodeEngine = 0 }
+            }
+            ChipButton {
+                label: qsTr("DeepFist")
+                lit: root.cwEngine === 1
+                onClicked: { WdspEngine.cwDecodeEngine = 1
+                             // Persist only if it actually engaged (model loaded).
+                             if (WdspEngine.cwDecodeEngine === 1)
+                                 Prefs.cwDecodeEngine = 1 }
+            }
+            ChipButton {
+                label: qsTr("Auto")
+                lit: root.cwEngine === 2
+                onClicked: { WdspEngine.cwDecodeEngine = 2
+                             // Persist only if it actually engaged (model loaded).
+                             if (WdspEngine.cwDecodeEngine === 2)
+                                 Prefs.cwDecodeEngine = 2 }
+            }
+            ChipButton {
+                label: qsTr("DeepCW")
+                lit: root.cwEngine === 3
+                onClicked: { WdspEngine.cwDecodeEngine = 3
+                             // Persist only if it actually engaged (model loaded).
+                             if (WdspEngine.cwDecodeEngine === 3)
+                                 Prefs.cwDecodeEngine = 3 }
+            }
+            ChipButton {
+                label: qsTr("Compare")
+                lit: root.cwEngine === 4
+                onClicked: { WdspEngine.cwDecodeEngine = 4
+                             if (WdspEngine.cwDecodeEngine === 4)
+                                 Prefs.cwDecodeEngine = 4 }
+            }
+            // A failed model load leaves the engine where it was, so surface
+            // why (and where the model is expected) instead of failing silently.
+            Label {
+                visible: WdspEngine.cwModelError.length > 0
+                text: "• " + WdspEngine.cwModelError
+                color: "#e0a030"
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+            }
+            Item { Layout.fillWidth: true }
+        }
+
+        // ── DeepFist: live "Sensitivity" (CTC blank-penalty) slider ──
+        RowLayout {
+            visible: !root.collapsed && (root.cwEngine === 1 || root.cwEngine === 4)
+            Layout.fillWidth: true
+            spacing: 10
+            Label { text: qsTr("Sensitivity"); color: root.cText; font.pixelSize: 12 }
+            LyraSlider {
+                id: penSlider
+                Layout.fillWidth: true
+                // Bipolar: negative = "cleaner" (suppress stray/doubled chars on
+                // strong signals), 0 = neutral, positive = recover weak code.
+                from: -1; to: 1; stepSize: 0.5; snapMode: Slider.SnapAlways
+                showTicks: true
+                showTickNumbers: true
+                value: Prefs.cwBlankPenalty
+                onMoved: {
+                    Prefs.cwBlankPenalty = value
+                    WdspEngine.setCwBlankPenalty(value)
+                }
+            }
+            Label {
+                // Signed value, e.g. "-0.5", "0", "+2".
+                text: (WdspEngine.cwBlankPenalty > 0 ? "+" : "")
+                      + WdspEngine.cwBlankPenalty.toFixed(1)
+                color: root.cText; font.pixelSize: 11
+                Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight
+            }
+        }
+        Label {
+            visible: !root.collapsed && (root.cwEngine === 1 || root.cwEngine === 4)
+            Layout.fillWidth: true
+            text: qsTr("0 = neutral.  Negative = cleaner copy on strong signals "
+                       + "(fewer stray/doubled characters).  Positive = pull weak/"
+                       + "fainter code out of the noise (but more stray characters).")
+            color: root.cMuted; font.pixelSize: 10; wrapMode: Text.WordWrap
+        }
+
+        // ── Decoded-text pane (operator font + colour) ──
+        DecodePane {
+            id: mainPane
+            visible: !root.collapsed && root.cwEngine !== 4
+            Layout.fillWidth: true
+            Layout.preferredHeight: 132
+            text: root.decodedText
+            textColor: Prefs.cwDecodeColor
+        }
+
+        // ── Compare: one stacked, colour-coded window per decoder ──
+        Repeater {
+            model: root.cwEngine === 4 && !root.collapsed ? 3 : 0
+            delegate: DecodePane {
+                required property int index
+                Layout.fillWidth: true
+                Layout.preferredHeight: 132
+                title: root.cmpTitle[index]
+                wpm: root.cmpWpm[index]
+                text: root.cmpText[index]
+                textColor: root.cmpColor[index]
+                // A neural model that didn't load decodes nothing: say so here.
+                placeholder: (index === 1 && !WdspEngine.cwNeuralAvailable)
+                             || (index === 2 && !WdspEngine.cwDeepCwAvailable)
+                             ? qsTr("model not loaded — see the message above") : ""
             }
         }
 
@@ -513,27 +637,27 @@ Rectangle {
             }
             ChipButton {
                 label: qsTr("→ His Call")
-                chipEnabled: decodeOut.selectedText.length > 0
-                onClicked: CwMacros.hisCall = decodeOut.selectedText.trim().toUpperCase()
+                chipEnabled: root.selOut().selectedText.length > 0
+                onClicked: CwMacros.hisCall = root.selOut().selectedText.trim().toUpperCase()
             }
             ChipButton {
                 label: qsTr("→ Name")
-                chipEnabled: decodeOut.selectedText.length > 0
-                onClicked: CwMacros.opName = decodeOut.selectedText.trim()
+                chipEnabled: root.selOut().selectedText.length > 0
+                onClicked: CwMacros.opName = root.selOut().selectedText.trim()
             }
             Item { Layout.fillWidth: true }
         }
 
-        // ── Decoder (fldigi) controls — classic engine only; the neural engine
+        // ── Decoder (fldigi) controls — Classic and Compare; the neural engine
         //    is self-tuning (no BW/speed/squelch knobs). ──
         Divider {
             label: qsTr("Decoder")
-            visible: !root.collapsed && root.cwEngine === 0
+            visible: !root.collapsed && (root.cwEngine === 0 || root.cwEngine === 4)
         }
 
         // Speed (WPM seed) + adaptive Tracking + Matched-filter.
         RowLayout {
-            visible: !root.collapsed && root.cwEngine === 0
+            visible: !root.collapsed && (root.cwEngine === 0 || root.cwEngine === 4)
             Layout.fillWidth: true
             spacing: 8
             opacity: root.cwActive ? 1.0 : 0.6
@@ -582,7 +706,7 @@ Rectangle {
 
         // Bandwidth (disabled when matched-filter is on — fldigi auto-sets it).
         RowLayout {
-            visible: !root.collapsed && root.cwEngine === 0
+            visible: !root.collapsed && (root.cwEngine === 0 || root.cwEngine === 4)
             Layout.fillWidth: true
             spacing: 10
             opacity: root.cwActive ? 1.0 : 0.6
@@ -607,7 +731,7 @@ Rectangle {
 
         // Squelch on/off + metric level.
         RowLayout {
-            visible: !root.collapsed && root.cwEngine === 0
+            visible: !root.collapsed && (root.cwEngine === 0 || root.cwEngine === 4)
             Layout.fillWidth: true
             spacing: 10
             opacity: root.cwActive ? 1.0 : 0.6
@@ -642,7 +766,7 @@ Rectangle {
         // is the current signal; the amber tick is your Squelch threshold when
         // Squelch is on — set the slider just under the signal peaks.
         RowLayout {
-            visible: !root.collapsed && root.cwEngine === 0
+            visible: !root.collapsed && (root.cwEngine === 0 || root.cwEngine === 4)
             Layout.fillWidth: true
             spacing: 10
             opacity: root.cwActive ? 1.0 : 0.4

@@ -833,6 +833,16 @@ endif()
 # the trained model into models/ next to the exe.  The model is git-ignored;
 # if it isn't present locally the copy is skipped and the neural engine simply
 # reports "model not found" at runtime (classic decoder unaffected).
+#
+# macOS: the model goes in Contents/Resources/models, NOT beside the exe —
+# codesign treats every file under Contents/MacOS as nested code and refuses
+# to sign the bundle around a data file there ("code object is not signed at
+# all").  WdspEngine looks in Resources/models first on macOS.
+if(APPLE)
+    set(LYRA_MODELS_DIR "$<TARGET_BUNDLE_CONTENT_DIR:lyra>/Resources/models")
+else()
+    set(LYRA_MODELS_DIR "$<TARGET_FILE_DIR:lyra>/models")
+endif()
 if(WIN32)
     add_custom_command(TARGET lyra POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -842,13 +852,13 @@ if(WIN32)
 endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/models/deepfist.onnx")
     add_custom_command(TARGET lyra POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lyra>/models"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LYRA_MODELS_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/models/deepfist.onnx"
-            "$<TARGET_FILE_DIR:lyra>/models/"
+            "${LYRA_MODELS_DIR}/"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/models/deepfist.onnx.json"
-            "$<TARGET_FILE_DIR:lyra>/models/"
+            "${LYRA_MODELS_DIR}/"
         COMMENT "Bundling DeepFist model into models/"
         VERBATIM)
 else()
@@ -859,10 +869,10 @@ endif()
 # no-op without it, so no warning when absent).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/models/MASTER.SCP")
     add_custom_command(TARGET lyra POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:lyra>/models"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LYRA_MODELS_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/models/MASTER.SCP"
-            "$<TARGET_FILE_DIR:lyra>/models/"
+            "${LYRA_MODELS_DIR}/"
         COMMENT "Bundling MASTER.SCP into models/"
         VERBATIM)
 endif()

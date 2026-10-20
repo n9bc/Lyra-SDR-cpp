@@ -3,6 +3,7 @@
 
 #include "dsp/deepfist/DeepFistModel.h"
 
+#include <algorithm>
 #include <array>
 #include <fstream>
 #include <sstream>
@@ -38,16 +39,30 @@ std::vector<std::string> fallbackTokens() {
     return t;
 }
 
-// Minimal parse of the sidecar "tokens": [...] array of quoted strings.
-// Avoids pulling a JSON lib into this DSP path; the format is fixed + simple.
-std::vector<std::string> parseSidecarTokens(const std::string& path) {
+// DeepCW's published 42-class table (deepcw-engine model.onnx.json "chars",
+// blank_index 41), in model class order.  Fallback if the sidecar is missing.
+std::vector<std::string> fallbackDeepCwChars() {
+    std::vector<std::string> t;
+    const char* chars = ",./0123456789?ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+    for (const char* p = chars; *p; ++p) t.emplace_back(1, *p);
+    return t;
+}
+
+std::string readFile(const std::string& path) {
     std::ifstream f(path, std::ios::binary);
     if (!f) return {};
     std::stringstream ss;
     ss << f.rdbuf();
-    const std::string s = ss.str();
+    return ss.str();
+}
 
-    const std::string key = "\"tokens\"";
+// Minimal parse of a sidecar `"<key>": [...]` array of quoted strings.
+// Avoids pulling a JSON lib into this DSP path; the format is fixed + simple.
+// (No escape handling: neither model's tables contain quotes or backslashes.)
+std::vector<std::string> parseSidecarTokens(const std::string& s,
+                                            const char* keyName = "tokens") {
+    if (s.empty()) return {};
+    const std::string key = std::string("\"") + keyName + "\"";
     size_t k = s.find(key);
     if (k == std::string::npos) return {};
     size_t lb = s.find('[', k);
@@ -69,6 +84,20 @@ std::vector<std::string> parseSidecarTokens(const std::string& path) {
     return out;
 }
 
+// Minimal parse of a sidecar `"<key>": <int>`; `def` if absent.
+int parseSidecarInt(const std::string& s, const char* keyName, int def) {
+    const std::string key = std::string("\"") + keyName + "\"";
+    const size_t k = s.find(key);
+    if (k == std::string::npos) return def;
+    const size_t colon = s.find(':', k + key.size());
+    if (colon == std::string::npos) return def;
+    try {
+        return std::stoi(s.substr(colon + 1));
+    } catch (const std::exception&) {
+        return def;
+    }
+}
+
 #ifdef _WIN32
 std::wstring widen(const std::string& s) {
     if (s.empty()) return {};
@@ -84,25 +113,46 @@ std::wstring widen(const std::string& s) {
 DeepFistModel::DeepFistModel() : impl_(std::make_unique<Impl>()) {}
 DeepFistModel::~DeepFistModel() = default;
 
-bool DeepFistModel::load(const std::string& modelDir) {
+bool DeepFistModel::load(const std::string& modelDir,
+                         const NeuralModelProfile& profile) {
     ready_ = false;
     lastError_.clear();
+    profile_ = profile;
 
-    const std::string onnx    = modelDir + "/deepfist.onnx";
-    const std::string sidecar = modelDir + "/deepfist.onnx.json";
+    const std::string onnx    = modelDir + "/" + profile.fileStem + ".onnx";
+    const std::string sidecar = readFile(onnx + ".json");
 
-    // tokens: sidecar first, fallback to the built-in table
-    tokens_ = parseSidecarTokens(sidecar);
-    if (tokens_.size() < 2) tokens_ = fallbackTokens();
+    if (profile.timeMajor) {
+        // DeepCW: "chars" maps class -> text for the non-blank classes (the
+        // published table has blank last, at "blank_index" 41).  Rebuild as
+        // blank-first ids (the CTC, commit and rescorer code all assume
+        // blank == id 0); infer() moves the logit columns to match.
+        std::vector<std::string> chars = parseSidecarTokens(sidecar, "chars");
+        if (chars.size() < 2) chars = fallbackDeepCwChars();
+        blankIndex_ = parseSidecarInt(sidecar, "blank_index",
+                                      static_cast<int>(chars.size()));
+        if (blankIndex_ < 0 || blankIndex_ > static_cast<int>(chars.size())) {
+            lastError_ = std::string(profile.name) + " sidecar: bad blank_index";
+            return false;
+        }
+        tokens_.assign(1, std::string());
+        for (int c = 0; c < static_cast<int>(chars.size()); ++c)
+            if (c != blankIndex_) tokens_.push_back(chars[static_cast<size_t>(c)]);
+    } else {
+        blankIndex_ = 0;
+        // tokens: sidecar first, fallback to the built-in table
+        tokens_ = parseSidecarTokens(sidecar);
+        if (tokens_.size() < 2) tokens_ = fallbackTokens();
 
-    // Display prosigns in fldigi-style angle notation.  The model emits the
-    // aliased punctuation tokens "=" / "+" for BT / AR (that's how they're
-    // written in CW); relabel them to <BT>/<AR> so the copy matches the classic
-    // decoder and operator expectation (consistent with <SK>/<KN>).  Display
-    // only — a MISREAD prosign still shows whatever the model actually decoded.
-    for (std::string& t : tokens_) {
-        if (t == "=") t = "<BT>";
-        else if (t == "+") t = "<AR>";
+        // Display prosigns in fldigi-style angle notation.  The model emits the
+        // aliased punctuation tokens "=" / "+" for BT / AR (that's how they're
+        // written in CW); relabel them to <BT>/<AR> so the copy matches the classic
+        // decoder and operator expectation (consistent with <SK>/<KN>).  Display
+        // only — a MISREAD prosign still shows whatever the model actually decoded.
+        for (std::string& t : tokens_) {
+            if (t == "=") t = "<BT>";
+            else if (t == "+") t = "<AR>";
+        }
     }
 
     try {
@@ -135,20 +185,38 @@ bool DeepFistModel::infer(const float* audio, int n,
 
     // fldigi-style conditioner FIRST (exp14+ models are trained on conditioned,
     // single-signal, 600 Hz-centred, level-normalised audio — train==inference).
-    condScratch_ = cond_.condition(audio, n);
-    const float* condAudio = condScratch_.empty() ? audio : condScratch_.data();
+    // DeepCW is trained on raw audio, so its profile skips it.
+    const float* condAudio = audio;
+    if (profile_.conditioner) {
+        condScratch_ = cond_.condition(audio, n);
+        if (!condScratch_.empty()) condAudio = condScratch_.data();
+    }
 
     int specT = 0;
-    fe_.compute(condAudio, n, specScratch_, specT);  // [65 * specT] row-major
+    fe_.compute(condAudio, n, specScratch_, specT,   // [65 * specT] row-major
+                profile_.standardize);
     if (specT == 0 || specScratch_.empty()) return false;
+
+    // Time-major models (DeepCW) take [1,1,T,F]: transpose the freq-major tile.
+    constexpr int F = DeepFistSpectrogram::kFreqBins;
+    const float* in = specScratch_.data();
+    if (profile_.timeMajor) {
+        tmScratch_.resize(specScratch_.size());
+        for (int f = 0; f < F; ++f)
+            for (int t = 0; t < specT; ++t)
+                tmScratch_[static_cast<size_t>(t) * F + f] =
+                    specScratch_[static_cast<size_t>(f) * specT + t];
+        in = tmScratch_.data();
+    }
 
     try {
         Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(
             OrtArenaAllocator, OrtMemTypeDefault);
-        const std::array<int64_t, 4> inShape{
-            1, 1, DeepFistSpectrogram::kFreqBins, specT};
+        const std::array<int64_t, 4> inShape = profile_.timeMajor
+            ? std::array<int64_t, 4>{1, 1, specT, F}
+            : std::array<int64_t, 4>{1, 1, F, specT};
         Ort::Value input = Ort::Value::CreateTensor<float>(
-            mem, specScratch_.data(), specScratch_.size(),
+            mem, const_cast<float*>(in), specScratch_.size(),
             inShape.data(), inShape.size());
 
         const char* inNames[]  = {"spectrogram"};
@@ -157,13 +225,27 @@ bool DeepFistModel::infer(const float* audio, int n,
             Ort::RunOptions{nullptr}, inNames, &input, 1, outNames, 1);
 
         auto info = outputs[0].GetTensorTypeAndShapeInfo();
-        auto oshape = info.GetShape();                // [t_out, batch=1, class]
+        auto oshape = info.GetShape();   // [t_out, 1, class] or [1, t_out, class]
         if (oshape.size() != 3) return false;
-        T = static_cast<int>(oshape[0]);
+        T = static_cast<int>(profile_.timeMajor ? oshape[1] : oshape[0]);
         C = static_cast<int>(oshape[2]);
+        if (blankIndex_ != 0 && C != static_cast<int>(tokens_.size())) {
+            lastError_ = std::string(profile_.name) + ": model has "
+                       + std::to_string(C) + " classes, sidecar "
+                       + std::to_string(tokens_.size());
+            return false;
+        }
         const float* logp = outputs[0].GetTensorData<float>();
-        // [t_out, 1, class] row-major == [t_out][class] for batch 1
+        // Either layout is row-major [t_out][class] for batch 1.
         logits.assign(logp, logp + static_cast<size_t>(T) * C);
+        if (blankIndex_ != 0) {
+            // Move the blank column to class 0 and shift the classes before it
+            // up by one, matching the blank-first tokens_ built in load().
+            for (int t = 0; t < T; ++t) {
+                float* row = logits.data() + static_cast<size_t>(t) * C;
+                std::rotate(row, row + blankIndex_, row + blankIndex_ + 1);
+            }
+        }
         return true;
     } catch (const Ort::Exception& e) {
         lastError_ = std::string("inference failed: ") + e.what();

@@ -226,13 +226,19 @@ class WdspEngine : public QObject {
     // separate CW decoder panel (CW-5b).
     Q_PROPERTY(bool cwDecodeEnabled READ cwDecodeEnabled WRITE setCwDecodeEnabled
                NOTIFY cwDecodeEnabledChanged)
-    // DeepFist — which CW decode engine is active (0=Classic fldigi, 1=Neural)
-    // and whether the neural model actually loaded (drives the panel's toggle
-    // + "model not found" status).
+    // DeepFist — which CW decode engine is active (0=Classic fldigi, 1=Neural
+    // DeepFist, 2=Auto, 3=DeepCW, 4=Compare: all three side by side) and
+    // whether each neural model actually loaded.  cwModelError is the last failed model load ("" once a load
+    // succeeds) — a failed switch leaves the engine where it was, so the panel
+    // shows this instead of silently staying on Classic.
     Q_PROPERTY(int cwDecodeEngine READ cwDecodeEngine WRITE setCwDecodeEngine
                NOTIFY cwDecodeEngineChanged)
     Q_PROPERTY(bool cwNeuralAvailable READ cwNeuralAvailable
                NOTIFY cwNeuralAvailableChanged)
+    Q_PROPERTY(bool cwDeepCwAvailable READ cwDeepCwAvailable
+               NOTIFY cwDeepCwAvailableChanged)
+    Q_PROPERTY(QString cwModelError READ cwModelError
+               NOTIFY cwModelErrorChanged)
     // Learn / Harvest are no longer user-facing chips.  Learn (record RBN-
     // confirmed calls into the local SCP list) is ON for everyone by default,
     // disabled only with LYRA_CW_LEARN=0.  Harvest (write trust-tiered CW audio
@@ -786,6 +792,8 @@ public:
     int  cwDecodeEngine() const { return cwEngine_.load(std::memory_order_relaxed); }
     Q_INVOKABLE void setCwDecodeEngine(int engine);
     bool cwNeuralAvailable() const { return neuralCw_.ready(); }
+    bool cwDeepCwAvailable() const { return deepCw_.ready(); }
+    QString cwModelError() const { return cwModelError_; }
     bool cwLearnEnabled()   const { return cwLearnEnabled_; }
     bool cwHarvestEnabled() const { return cwHarvestEnabled_; }
 
@@ -1063,6 +1071,12 @@ signals:
     // and the full current-window neural decode (replace-mode display).
     void cwDecodeEngineChanged();
     void cwNeuralAvailableChanged();
+    void cwDeepCwAvailableChanged();
+    void cwModelErrorChanged();
+    // Compare engine (4) — per-decoder transcript text and WPM.  `source` is
+    // the engine id of the decoder: 0 = Classic, 1 = DeepFist, 3 = DeepCW.
+    void cwCompareText(int source, QString text);
+    void cwCompareWpm(int source, int wpm);
     void cwBlankPenaltyChanged();
     void cwNeuralText(QString windowText);
     // Auto engine — unified arbiter output; fallback == true when the Classic
@@ -1156,6 +1170,8 @@ private:
     // The no-persist core of setAgcThreshDb; the latch timer uses this.
     void applyAgcThreshNoPersist(double db);
     void ensureCwScpLocal();    // lazy load of scp_local.txt (GUI thread)
+    QString ensureCwModel(bool deepCw);         // "" = loaded; else the reason
+    void    setCwModelError(const QString& err);
     // Push ANF (auto-notch) + LMS (line enhancer) run/vals.  No-op when
     // closed; channel-parameterized for RX2 reuse.
     void pushAnfState();
@@ -1594,8 +1610,13 @@ private:
     lyra::dsp::CwDecoder                 cwDecoder_;
 
     // DeepFist neural CW decoder — second engine sharing the same tap.
-    // cwEngine_: 0 = Classic (fldigi), 1 = Neural (DeepFist), 2 = Auto (arbiter).
+    // cwEngine_: 0 = Classic (fldigi), 1 = Neural (DeepFist), 2 = Auto (arbiter),
+    // 3 = DeepCW (operator-supplied e04 model on the same streaming pipeline;
+    // stand-alone, not part of Auto), 4 = Compare (all three at once, each to
+    // its own cwCompareText window).
     lyra::dsp::NeuralCwDecoder           neuralCw_;
+    lyra::dsp::NeuralCwDecoder           deepCw_;
+    QString                              cwModelError_;
     lyra::dsp::CwArbiter                 cwArbiter_;   // Auto: owns display handoff
     std::atomic<int>                     cwEngine_{0};
     lyra::dsp::ScpLocal                  cwScpLocal_;       // Phase 3 local calls

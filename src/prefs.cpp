@@ -307,7 +307,7 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
     // tracking on, matched filter off, squelch off (+ metric threshold).
     cwDecodeBandwidth_     = std::clamp(s.value(kCwDecBw, 150).toInt(), 50, 3000);
     cwDecodeSpeed_         = std::clamp(s.value(kCwDecSpeed, 18).toInt(), 5, 50);
-    cwDecodeEngine_        = std::clamp(s.value(kCwDecEngine, 0).toInt(), 0, 2);
+    cwDecodeEngine_        = std::clamp(s.value(kCwDecEngine, 0).toInt(), 0, 4);
     cwBlankPenalty_        = std::clamp(s.value(kCwBlankPen, 0.0).toDouble(), -1.0, 1.0);
     cwDecodeTracking_      = s.value(kCwDecTrack, true).toBool();
     cwDecodeMatchedFilter_ = s.value(kCwDecMfilt, false).toBool();
@@ -939,7 +939,7 @@ void Prefs::setCwDecodeSpeed(int wpm) {
 }
 
 void Prefs::setCwDecodeEngine(int engine) {
-    engine = std::clamp(engine, 0, 2);
+    engine = std::clamp(engine, 0, 4);
     if (engine != cwDecodeEngine_) {
         cwDecodeEngine_ = engine;
         QSettings().setValue(kCwDecEngine, engine);

@@ -37,11 +37,12 @@ public:
     DeepFistConditioner();
 
     // Dominant CW tone (Hz) in 400-1200 Hz, from the last 4096 samples.
-    float detectTone(const float* audio, int n) const;
+    // Applies a Hann window and smooths across calls via an EMA (alpha ~0.3).
+    float detectTone(const float* audio, int n);
 
     // Isolate + normalise one CW signal (auto tone lock).  Returns audio of the
     // same length at kSr, peak ~1.  For n < 4096 returns the input unchanged.
-    std::vector<float> condition(const float* audio, int n) const;
+    std::vector<float> condition(const float* audio, int n);
     std::vector<float> conditionAt(const float* audio, int n, float toneHz) const;
 
     // Keying-activity metric = p90/p10 of the isolated tone's envelope (the
@@ -61,8 +62,10 @@ public:
 private:
     void fft(std::vector<std::complex<double>>& a) const;   // radix-2, size kToneNfft
 
-    std::vector<int>                 rev_;   // bit-reversal permutation (4096)
-    std::vector<std::complex<double>> tw_;   // twiddles (2048)
+    std::vector<int>                  rev_;      // bit-reversal permutation (4096)
+    std::vector<std::complex<double>> tw_;       // twiddles (2048)
+    std::vector<double>               toneHann_; // Hann window for tone FFT (4096)
+    float                             toneEma_ = 0.0f; // smoothed tone (Hz), 0 = unset
 };
 
 }  // namespace lyra::dsp

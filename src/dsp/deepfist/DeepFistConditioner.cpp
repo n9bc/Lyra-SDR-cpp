@@ -24,6 +24,10 @@ DeepFistConditioner::DeepFistConditioner() {
     for (int k = 0; k < kToneNfft / 2; ++k)
         tw_[k] = std::complex<double>(std::cos(-2.0 * kPi * k / kToneNfft),
                                       std::sin(-2.0 * kPi * k / kToneNfft));
+    // Hann window for tone-detection FFT (reduces sidelobe leakage vs rectangular)
+    toneHann_.resize(kToneNfft);
+    for (int i = 0; i < kToneNfft; ++i)
+        toneHann_[i] = 0.5 - 0.5 * std::cos(2.0 * kPi * i / kToneNfft);
 }
 
 void DeepFistConditioner::fft(std::vector<std::complex<double>>& a) const {
@@ -46,14 +50,14 @@ void DeepFistConditioner::fft(std::vector<std::complex<double>>& a) const {
     }
 }
 
-float DeepFistConditioner::detectTone(const float* audio, int n) const {
-    if (!audio || n < 8) return kOutPitch;
+float DeepFistConditioner::detectTone(const float* audio, int n) {
+    if (!audio || n < 8) return toneEma_ > 0 ? toneEma_ : kOutPitch;
     const int m   = std::min(kToneNfft, n);
-    const int off = n - m;                       // analyse the most recent samples
+    const int off = n - m;
 
     std::vector<std::complex<double>> buf(kToneNfft, {0.0, 0.0});
     for (int i = 0; i < m; ++i)
-        buf[i] = std::complex<double>(audio[off + i], 0.0);   // no window (matches Rust)
+        buf[i] = std::complex<double>(audio[off + i] * toneHann_[i], 0.0);
     fft(buf);
 
     const double binHz = static_cast<double>(kSr) / kToneNfft;
@@ -65,10 +69,17 @@ float DeepFistConditioner::detectTone(const float* audio, int n) const {
         const double mag = std::abs(buf[b]);
         if (mag > bv) { bv = mag; best = b; }
     }
-    return static_cast<float>(best * binHz);
+    const float raw = static_cast<float>(best * binHz);
+
+    constexpr float kToneAlpha = 0.3f;
+    if (toneEma_ <= 0.0f)
+        toneEma_ = raw;
+    else
+        toneEma_ += kToneAlpha * (raw - toneEma_);
+    return toneEma_;
 }
 
-std::vector<float> DeepFistConditioner::condition(const float* audio, int n) const {
+std::vector<float> DeepFistConditioner::condition(const float* audio, int n) {
     return conditionAt(audio, n, detectTone(audio, n));
 }
 

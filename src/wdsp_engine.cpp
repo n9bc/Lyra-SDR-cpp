@@ -94,6 +94,35 @@ bool enumerateOutputsGuarded(QList<QAudioDevice> *outs, QAudioDevice *def) {
 #endif
 }
 
+// Per-user models dir (<AppData>/models, beside scp_local.txt) — where the
+// operator drops models Lyra does not ship, i.e. DeepCW (AGPL, not bundled).
+QString userCwModelDir() {
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+           + QStringLiteral("/models");
+}
+
+// DeepFist — resolve the neural CW model dir for `file`: the
+// DEEPFIST_MODEL_DIR env override, then the per-user models dir, then the
+// platform's bundled location.  On macOS bundled models live in
+// Contents/Resources/models (codesign rejects data files under
+// Contents/MacOS — see CMakeLists.txt); elsewhere they sit in models/ next to
+// the exe.  The bundled dir is the last candidate and is returned even when it
+// lacks `file`, so the load error names the real, expected path.
+QString resolveCwModelDir(const QString &file) {
+    const QString env = qEnvironmentVariable("DEEPFIST_MODEL_DIR");
+    if (!env.isEmpty() && QFileInfo::exists(env + QLatin1Char('/') + file))
+        return env;
+    const QString user = userCwModelDir();
+    if (QFileInfo::exists(user + QLatin1Char('/') + file))
+        return user;
+    const QString exeDir = QCoreApplication::applicationDirPath();
+#if defined(Q_OS_MACOS)
+    return QDir::cleanPath(exeDir + QStringLiteral("/../Resources/models"));
+#else
+    return exeDir + QStringLiteral("/models");
+#endif
+}
+
 }  // namespace
 
 namespace lyra::dsp {
@@ -469,8 +498,14 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     cwDecoder_.onText = [this](const std::string& s) {
         if (cwCaptureOn_.load(std::memory_order_relaxed))
             cwHarvester_->feedText(/*fromClassic=*/true, s);
-        if (cwEngine_.load(std::memory_order_relaxed) == 2) {
+        const int eng = cwEngine_.load(std::memory_order_relaxed);
+        if (eng == 2) {
             cwArbiter_.pushClassic(s);
+            return;
+        }
+        if (eng == 4) {   // Compare: Classic's own window
+            emit cwCompareText(0, QString::fromUtf8(s.c_str(),
+                                                    static_cast<int>(s.size())));
             return;
         }
         emit cwDecodedChar(QString::fromUtf8(s.c_str(),
@@ -482,6 +517,9 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
         // Auto: only the engine that owns the display drives the WPM readout.
         if (cwEngine_.load(std::memory_order_relaxed) == 2 &&
             cwArbiter_.owner() != lyra::dsp::CwArbiter::Source::Classic) return;
+        // Compare: Classic also drives the header readout / match-TX-speed.
+        if (cwEngine_.load(std::memory_order_relaxed) == 4)
+            emit cwCompareWpm(0, w);
         emit cwRxWpmChanged(w);
     };
 
@@ -494,8 +532,14 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     neuralCw_.onText = [this](const std::string& s) {
         if (cwCaptureOn_.load(std::memory_order_relaxed))
             cwHarvester_->feedText(/*fromClassic=*/false, s);
-        if (cwEngine_.load(std::memory_order_relaxed) == 2) {
+        const int eng = cwEngine_.load(std::memory_order_relaxed);
+        if (eng == 2) {
             cwArbiter_.pushDeepFist(s);
+            return;
+        }
+        if (eng == 4) {   // Compare: DeepFist's own window
+            emit cwCompareText(1, QString::fromUtf8(s.c_str(),
+                                                    static_cast<int>(s.size())));
             return;
         }
         emit cwNeuralText(QString::fromUtf8(s.c_str(),
@@ -511,7 +555,28 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
         // Auto: only the engine that owns the display drives the WPM readout.
         if (cwEngine_.load(std::memory_order_relaxed) == 2 &&
             cwArbiter_.owner() != lyra::dsp::CwArbiter::Source::DeepFist) return;
+        if (cwEngine_.load(std::memory_order_relaxed) == 4) {
+            emit cwCompareWpm(1, wpm);
+            return;
+        }
         emit cwRxWpmChanged(wpm);
+    };
+    // DeepCW (engine 3) — the operator-supplied e04 model on the same streaming
+    // pipeline.  Stand-alone: no Auto arbiter, no training harvest; on its own
+    // it shares the neural text + WPM surfaces, in Compare it has its own.
+    deepCw_.setSampleRate(cfg_.outRate);
+    deepCw_.onText = [this](const std::string& s) {
+        const QString t = QString::fromUtf8(s.c_str(), static_cast<int>(s.size()));
+        if (cwEngine_.load(std::memory_order_relaxed) == 4)
+            emit cwCompareText(3, t);
+        else
+            emit cwNeuralText(t);
+    };
+    deepCw_.onWpm = [this](int wpm) {
+        if (cwEngine_.load(std::memory_order_relaxed) == 4)
+            emit cwCompareWpm(3, wpm);
+        else
+            emit cwRxWpmChanged(wpm);
     };
     // Auto engine: DeepFist's keying ratio drives the arbiter's fade detector,
     // and the arbiter's unified output becomes the Auto transcript (queued to
@@ -790,6 +855,7 @@ void WdspEngine::shutdown()
     // running_.exchange(false)).
     cwCaptureOn_.store(false, std::memory_order_relaxed);  // no new harvester work
     neuralCw_.stop();                                      // join: no callback in flight after this
+    deepCw_.stop();                                        // DeepCW worker likewise (emits only)
 
     // Phase 2 harvest — stop the pump worker before the rest of teardown so
     // it can't touch a half-torn-down engine.
@@ -2743,44 +2809,77 @@ void WdspEngine::setCwCaptureEnabled(bool on)
     }
 }
 
-// DeepFist — select the active CW decode engine (0=Classic fldigi, 1=Neural,
-// 2=Auto).  The neural model is loaded lazily on the first switch to Neural OR
-// Auto (both need it).  Ordering is deliberate for audio-thread safety: we
-// finish loading + reset every consumer of the new engine BEFORE storing
+// Load one neural CW model (if not already loaded).  On failure, logs and
+// returns the operator-facing reason (where the model is expected); on success
+// returns an empty string.
+QString WdspEngine::ensureCwModel(bool deepCw)
+{
+    lyra::dsp::NeuralCwDecoder& dec = deepCw ? deepCw_ : neuralCw_;
+    if (dec.ready()) return {};
+    const lyra::dsp::NeuralModelProfile prof = deepCw
+        ? lyra::dsp::NeuralModelProfile::deepCw()
+        : lyra::dsp::NeuralModelProfile::deepFist();
+    const QString file = QString::fromLatin1(prof.fileStem) + QStringLiteral(".onnx");
+    const QString dir = resolveCwModelDir(file);
+    ensureCwScpLocal();
+    const bool ok = dec.loadModel(dir.toStdString(), cwScpLocal_.calls(), prof);
+    emit deepCw ? cwDeepCwAvailableChanged() : cwNeuralAvailableChanged();
+    if (!ok) {
+        qWarning("%s: neural CW model not loaded (%s).  %s",
+                 prof.name, qUtf8Printable(dir), dec.lastError().c_str());
+        // DeepCW is never bundled: point at the per-user dir to drop it in.
+        const QString where = deepCw ? userCwModelDir() : dir;
+        return tr("%1 model not loaded — expected %2 + %2.json in %3")
+                   .arg(QString::fromLatin1(prof.name), file, where);
+    }
+    qInfo("%s: neural CW model loaded from %s (SCP rescorer: %d calls, "
+          "blank_pen %.1f)", prof.name,
+          qUtf8Printable(dir), dec.scpCount(), dec.blankPenalty());
+    return {};
+}
+
+void WdspEngine::setCwModelError(const QString& err)
+{
+    if (err == cwModelError_) return;
+    cwModelError_ = err;
+    emit cwModelErrorChanged();
+}
+
+// DeepFist — select the active CW decode engine (0=Classic fldigi, 1=Neural
+// DeepFist, 2=Auto, 3=DeepCW, 4=Compare).  A neural model is loaded lazily on
+// the first switch that needs it: DeepFist for Neural or Auto, DeepCW for
+// DeepCW, both for Compare.  Ordering is deliberate for audio-thread safety:
+// we finish loading + reset every consumer of the new engine BEFORE storing
 // cwEngine_ (the audio tap only feeds them once cwEngine_ flips), so it never
-// touches a half-constructed ONNX session or stale decoder/arbiter state —
-// Auto additionally resets cwDecoder_ and cwArbiter_ since it runs both
-// engines.  If the model can't load we stay on the current engine.
+// touches a half-constructed ONNX session or stale decoder/arbiter state.  If
+// a single-model engine's model can't load we stay on the current engine;
+// Compare engages with whichever decoders are available (Classic always is).
+// Either way the reason is published in cwModelError.
 void WdspEngine::setCwDecodeEngine(int engine)
 {
     const int cur = cwEngine_.load(std::memory_order_relaxed);
     if (engine == cur) return;
 
-    if (engine == 1 || engine == 2) {           // both need the neural model
-        if (!neuralCw_.ready()) {
-            // Resolve the model dir: env override, then <exeDir>/models.
-            QString dir = qEnvironmentVariable("DEEPFIST_MODEL_DIR");
-            if (dir.isEmpty() ||
-                !QFileInfo::exists(dir + "/deepfist.onnx")) {
-                dir = QCoreApplication::applicationDirPath() + "/models";
-            }
-            ensureCwScpLocal();
-            const bool ok = neuralCw_.loadModel(dir.toStdString(),
-                                                cwScpLocal_.calls());
-            emit cwNeuralAvailableChanged();
-            if (!ok) {
-                qWarning("DeepFist: neural CW model not loaded (%s) — staying on "
-                         "the classic decoder.  %s",
-                         qUtf8Printable(dir), neuralCw_.lastError().c_str());
-                return;   // keep current engine
-            }
-            qInfo("DeepFist: neural CW model loaded from %s (SCP rescorer: %d calls, "
-                  "blank_pen %.1f)",
-                  qUtf8Printable(dir), neuralCw_.scpCount(), neuralCw_.blankPenalty());
+    if (engine == 4) {
+        // Compare: Classic + DeepFist + DeepCW side by side on the same audio.
+        QStringList errs;
+        for (const bool deepCw : {false, true}) {
+            const QString e = ensureCwModel(deepCw);
+            if (!e.isEmpty()) errs << e;
         }
+        setCwModelError(errs.join(QStringLiteral(" · ")));
+        cwDecoder_.reset();
+        if (neuralCw_.ready()) neuralCw_.reset();
+        if (deepCw_.ready())   deepCw_.reset();
+        cwEngine_.store(4, std::memory_order_relaxed);
+    } else if (engine >= 1 && engine <= 3) {
+        const bool deepCw = (engine == 3);
+        const QString err = ensureCwModel(deepCw);
+        setCwModelError(err);
+        if (!err.isEmpty()) return;   // keep current engine
         // Reset every consumer BEFORE storing the new engine, so the audio tap
         // (which only feeds them once cwEngine_ flips) never sees stale state.
-        neuralCw_.reset();
+        (deepCw ? deepCw_ : neuralCw_).reset();
         if (engine == 2) {
             cwDecoder_.reset();
             cwArbiter_.reset();
@@ -2789,6 +2888,7 @@ void WdspEngine::setCwDecodeEngine(int engine)
     } else {
         cwEngine_.store(0, std::memory_order_relaxed);
         cwDecoder_.reset();
+        setCwModelError({});
     }
     emit cwDecodeEngineChanged();
 }
@@ -4980,6 +5080,14 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
             neuralCw_.process(cwMonoBuf_.data(), nframes);
         } else if (eng == 1) {
             neuralCw_.process(cwMonoBuf_.data(), nframes);
+        } else if (eng == 3) {
+            deepCw_.process(cwMonoBuf_.data(), nframes);
+        } else if (eng == 4) {
+            // Compare: every available decoder on the same block (process() is
+            // a no-op for a neural decoder whose model did not load).
+            cwDecoder_.process(cwMonoBuf_.data(), nframes);
+            neuralCw_.process(cwMonoBuf_.data(), nframes);
+            deepCw_.process(cwMonoBuf_.data(), nframes);
         } else {
             cwDecoder_.process(cwMonoBuf_.data(), nframes);
         }

@@ -12,7 +12,10 @@
 // re-decoded several times per second on a WORKER THREAD (never the audio
 // callback), and characters are committed with FRAME-TIMED COMMIT — each
 // decoded char carries a frame time, and is emitted exactly once when its audio
-// has settled (older than `guard` seconds).  So text STREAMS character-by-
+// has settled (older than `guard` seconds).  A char's estimated time moves a
+// little between windows, so "exactly once" is decided by lining each window
+// up with the chars already committed (identity + time), not by the time
+// threshold alone.  So text STREAMS character-by-
 // character into an accumulating transcript (~1.3 s latency), instead of
 // dumping/replacing a whole window.  onText therefore delivers INCREMENTAL
 // committed text to append (not a full-window snapshot).
@@ -45,11 +48,13 @@ public:
     NeuralCwDecoder(const NeuralCwDecoder&)            = delete;
     NeuralCwDecoder& operator=(const NeuralCwDecoder&) = delete;
 
-    // Load the model dir (deepfist.onnx + sidecar); starts the worker on
-    // success.  extraScpCalls (Phase 3 scp_local) merge into the callsign DB
-    // before the worker starts.  Returns ready().
+    // Load the model dir (<stem>.onnx + sidecar, per `profile` — DeepFist by
+    // default, or DeepCW); starts the worker on success.  extraScpCalls
+    // (Phase 3 scp_local) merge into the callsign DB before the worker starts.
+    // Returns ready().
     bool loadModel(const std::string& modelDir,
-                   const std::vector<std::string>& extraScpCalls = {});
+                   const std::vector<std::string>& extraScpCalls = {},
+                   const NeuralModelProfile& profile = NeuralModelProfile::deepFist());
     bool ready() const { return model_.ready(); }
     int  scpCount() const { return scp_.count(); }   // 0 = rescorer disabled
 
@@ -113,7 +118,7 @@ private:
     std::mutex          mx_;
     std::vector<float>  ring_;          // fixed 6 s @ 3200 Hz, zero-padded
     long long           total3200_ = 0; // cumulative 3200 Hz samples seen
-    double              committedT_ = 0.0; // audio time already emitted (s)
+    double              committedT_ = 0.0; // newest committed char / silence (s)
     unsigned            gen_ = 0;       // bumped on reset() to discard in-flight
     bool                idleGap_ = false; // worker-only: in a keyed-CW pause
     int                 lastWpm_ = 0;     // worker-only: last emitted WPM
