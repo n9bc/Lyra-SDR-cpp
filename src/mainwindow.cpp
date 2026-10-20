@@ -315,7 +315,9 @@ inline bool safeBootLayout() {
 // that frame back on the next show. Reads happen on Move/Resize/Hide, before
 // Qt folds the float back into the dock area.  A panel the operator docked
 // into the main window is left docked: the frame is only put back when the
-// panel was floating as it was hidden (or is floating now, e.g. at start-up).
+// panel is floating as it shows.  Docking a floating panel hides it while it
+// is still a floating window and re-shows it docked, so "floating when it was
+// hidden" would pull every freshly docked panel straight back out.
 class FloatingDockMemory : public QObject {
 public:
     FloatingDockMemory(QDockWidget *dock, const QString &settingsKey,
@@ -336,7 +338,7 @@ public:
             // Qt resizes a float back to its size hint before this signal.
             // tracking_ stays false across that, so the hint cannot replace
             // the frame we stored on the way down.
-            if (!layoutBusy() && have_ && (wasFloating_ || dock_->isFloating()))
+            if (!layoutBusy() && have_ && dock_->isFloating())
                 armRecall();
             else
                 QTimer::singleShot(80, this, [this]() {
@@ -347,8 +349,6 @@ public:
 
 protected:
     bool eventFilter(QObject *o, QEvent *e) override {
-        if (o == dock_ && e->type() == QEvent::Hide && !recalling_)
-            wasFloating_ = dock_->isFloating();
         if (o != dock_ || recalling_ || !tracking_)
             return QObject::eventFilter(o, e);
         const bool live = dock_->isFloating()
@@ -431,7 +431,6 @@ private:
     bool have_ = false;
     bool recalling_ = false;
     bool tracking_ = false;
-    bool wasFloating_ = false;   // floating when last hidden
 };
 
 // The session layout is stored per DISPLAY SETUP, not in one global slot.
