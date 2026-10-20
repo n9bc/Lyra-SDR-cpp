@@ -214,6 +214,8 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
                         ? fwd : fwdPowerW_ + 0.35 * (fwd - fwdPowerW_);
                     revPowerW_ = std::isnan(revPowerW_)
                         ? rev : revPowerW_ + 0.35 * (rev - revPowerW_);
+                    if (txTransmitting_ && !std::isnan(fwdPowerW_))
+                        txPeakFwdW_ = std::max(txPeakFwdW_, fwdPowerW_);
                     // Feed the P2 coupler watts into HL2Stream's power model
                     // so the PA-Gain tab's Calibrate / Full-Output / watts-cap
                     // (which read stream_->fwdPowerW()) work on the Brick.
@@ -238,6 +240,12 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
             [this](bool ready, bool armed, bool transmitting,
                    bool paEnabled, int drive, bool fault,
                    const QString &detail) {
+                const bool wasTransmitting = txTransmitting_;
+                const bool wasPa = txPaEnabled_;
+                const int wasDrive = txEffectiveDrive_;
+                const double peakFwd = txPeakFwdW_;
+                const qint64 keyedMs =
+                    txOnAge_.isValid() ? txOnAge_.elapsed() : 0;
                 txTransportReady_ = ready;
                 txBenchArmed_ = armed;
                 if (!armed)
@@ -247,10 +255,50 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
                 txEffectiveDrive_ = drive;
                 txFaultLatched_ = fault;
                 txStateDetail_ = detail;
+                if (!wasTransmitting && transmitting) {
+                    txPeakFwdW_ = 0.0;
+                    txOnAge_.start();
+                } else if (!transmitting) {
+                    txOnAge_.invalidate();
+                }
                 if (fault && stream_ && stream_->moxActive())
                     stream_->requestMox(false);
+                // PA was not already in receive, so this key must not stay
+                // latched in the FSM. Not every key — only this refuse.
+                // Tune clears itself on the MOX-off edge.
+                if (detail.startsWith(QLatin1String(
+                        "key refused, PA enable"))
+                    && stream_ && stream_->moxActive())
+                    stream_->requestMox(false);
+                // A fault or a refused key forces the radio PA latch off. The
+                // unkey that follows must rewrite PA enable and let it sit
+                // in receive before the next key. A clean unkey does not
+                // take this path — hooking it to every key was reverted.
+                // A held key that asked for PA and a real drive byte and
+                // never showed forward power is the same latch (desk Tune
+                // closed the relay, host Tune stayed dark). Rewrite PA on
+                // that unkey only.
+                const bool keyRefused = detail.startsWith(
+                    QLatin1String("key refused"));
+                const bool returnedToRx = wasTransmitting && !transmitting;
+                const bool darkKey = returnedToRx && wasPa && wasDrive >= 128
+                    && peakFwd < 0.05 && keyedMs >= 400;
+                if (fault || keyRefused || darkKey ||
+                    (armed && returnedToRx && paNeedsResettle_)) {
+                    paNeedsResettle_ = true;
+                    if (armed)
+                        txPaSettled_ = false;
+                }
                 emit txStateChanged();
                 maybeAutoArmTx();
+                if (paNeedsResettle_ && !fault && ready && armed &&
+                    !transmitting) {
+                    txPaSettled_ = false;
+                    ensurePaSettled();
+                } else if (!fault && ready && armed && !transmitting &&
+                           !txPaSettled_) {
+                    ensurePaSettled();
+                }
             });
 
     // Connection confirmation: isRunning() must not go true until the
@@ -370,6 +418,11 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
                 });
         connect(stream_, &lyra::ipc::HL2Stream::txDriveLevelChanged, this,
                 [this](int) {
+                    if (open_ && stream_ && stream_->moxActive())
+                        syncTxIntentToSession(true);
+                });
+        connect(stream_, &lyra::ipc::HL2Stream::tuneDriveOverrideChanged, this,
+                [this]() {
                     if (open_ && stream_ && stream_->moxActive())
                         syncTxIntentToSession(true);
                 });
@@ -588,6 +641,74 @@ void P2RxBridge::setTxAutoArm(bool on) {
     emit txStateChanged();
 }
 
+void P2RxBridge::ensurePaSettled() {
+    if (paResettlePending_ || txPaSettled_ || !open_ || !session_ ||
+        !txBenchArmed_ || txFaultLatched_ || txTransmitting_ ||
+        !txTransportReady_)
+        return;
+    paResettlePending_ = true;
+    const quint32 epoch = txArmEpoch_;
+    const bool pa = stream_ && stream_->paEnabled();
+    auto *s = session_;
+    // Write PA enable now, while MOX is off, then leave it there for
+    // 200 ms before the next key. Opening the gate in the same turn as
+    // the write is the burst that latches the radio PA off until Stop.
+    // Same order as the arm path: write, sit 200 ms, write again, then
+    // open the key gate. The timer lives on the session thread; the gate
+    // decision stays on the bridge.
+    QMetaObject::invokeMethod(s, [this, s, pa, epoch]() {
+        s->setPaHold(pa);
+        QTimer::singleShot(200, s, [this, s, pa, epoch]() {
+            s->setPaHold(pa);
+            QMetaObject::invokeMethod(this, [this, epoch]() {
+                paResettlePending_ = false;
+                if (epoch != txArmEpoch_ || !open_ || !session_ ||
+                    txFaultLatched_ || !txBenchArmed_ ||
+                    txTransmitting_ || !txTransportReady_)
+                    return;
+                noteTxPaSettled(epoch);
+                if (txPaSettled_)
+                    paNeedsResettle_ = false;
+            }, Qt::QueuedConnection);
+        });
+    }, Qt::QueuedConnection);
+}
+
+void P2RxBridge::recoverLocalTx() {
+    if (txRecovering_ || !open_ || !session_)
+        return;
+    if (stream_ && stream_->moxActive()) {
+        txRecovering_ = true;
+        stream_->setTuneEnabled(false);
+        stream_->requestMox(false);
+        QTimer::singleShot(400, this, [this]() {
+            txRecovering_ = false;
+            recoverLocalTx();
+        });
+        return;
+    }
+    const bool sick = txFaultLatched_
+        || !txTransportReady_
+        || (txBenchArmed_ && !txPaSettled_);
+    if (!sick)
+        return;
+    txRecovering_ = true;
+    // A rejected desk key can leave the PA enable latched off while this
+    // flag still says the settle finished. Do not write PA and open the
+    // key gate in the same turn — that latches the radio PA off. The
+    // transport-ready update runs ensurePaSettled, which writes the bit
+    // and leaves it in receive before the next local key.
+    txPaSettled_ = false;
+    paNeedsResettle_ = true;
+    emit logLine(QStringLiteral(
+        "P2 TX: re-priming after the desk session so local Tune, "
+        "2-tone, and the foot switch can key"));
+    auto *s = session_;
+    QMetaObject::invokeMethod(s, [s]() { s->recoverIdleTx(); },
+                              Qt::QueuedConnection);
+    QTimer::singleShot(800, this, [this]() { txRecovering_ = false; });
+}
+
 void P2RxBridge::maybeAutoArmTx() {
     if ((txAutoArm_ || txOnAirValidated_) && !txBenchArmed_ &&
         txTransportReady_ && txHardwareSupported_ && running_ &&
@@ -613,6 +734,12 @@ void P2RxBridge::resetTxUiState() {
     txTransmitting_ = false;
     txPaEnabled_ = false;
     txFaultLatched_ = false;
+    // These survive close() on the bridge object. A process exit clears
+    // them; Stop must too, or the next Start resettles PA on top of a
+    // fresh arm and the radio stays dark.
+    paNeedsResettle_ = false;
+    paResettlePending_ = false;
+    txRecovering_ = false;
     txEffectiveDrive_ = 0;
     txStateDetail_ = QStringLiteral("Disconnected");
     ducFifoSamples_ = 0;
@@ -876,15 +1003,32 @@ void P2RxBridge::setTrxAntenna(int ant) {
     emit frontEndChanged();
 }
 
+void P2RxBridge::postDeskAntenna(bool alex, int count, int mask,
+                                 const QString &ext1) {
+    count = std::clamp(count, 0, 8);
+    mask = std::clamp(mask, 0, 15);
+    const bool on = alex && !running_;
+    const bool changed = deskAntOn_ != on || deskAntCount_ != count
+        || deskAntMask_ != mask || deskAntExt1_ != ext1;
+    deskAntOn_ = on;
+    deskAntCount_ = count;
+    deskAntMask_ = mask;
+    deskAntExt1_ = ext1;
+    if (changed) emit runningChanged();
+}
+
 int P2RxBridge::trxAntennaCount() const {
+    if (!running_ && deskAntOn_) return deskAntCount_;
     return lyra::hardware::trxAntennaCount(hardwareModelKey_);
 }
 
 int P2RxBridge::rxJackMask() const {
+    if (!running_ && deskAntOn_) return deskAntMask_;
     return static_cast<int>(lyra::hardware::rxJackMask(hardwareModelKey_));
 }
 
 QString P2RxBridge::rxExt1Label() const {
+    if (!running_ && deskAntOn_ && !deskAntExt1_.isEmpty()) return deskAntExt1_;
     return lyra::hardware::rxExt1Label(hardwareModelKey_);
 }
 
@@ -955,30 +1099,28 @@ int P2RxBridge::rxInputForBand(const QString &band) const {
 
 void P2RxBridge::setAntennaForBand(const QString &band, int ant) {
     ant = clampTrxAntenna(ant);
+    const int prev = antennaForBand(band);
     persistFrontEndForBand(band, QStringLiteral("trxAntenna"), ant);
-    if (band == currentBand_) {
-        if (ant == trxAntenna_) {
-            emit frontEndChanged();
-            return;
-        }
+    if (band == currentBand_ && ant != trxAntenna_) {
         trxAntenna_ = ant;
         pushFrontEndToSession();
     }
+    if (prev == ant) return;
     emit frontEndChanged();
+    emit bandAntennaEdited(band, ant, rxInputForBand(band));
 }
 
 void P2RxBridge::setRxInputForBand(const QString &band, int input) {
     input = clampRxInput(input);
+    const int prev = rxInputForBand(band);
     persistFrontEndForBand(band, QStringLiteral("rxInput"), input);
-    if (band == currentBand_) {
-        if (input == rxInput_) {
-            emit frontEndChanged();
-            return;
-        }
+    if (band == currentBand_ && input != rxInput_) {
         rxInput_ = input;
         pushFrontEndToSession();
     }
+    if (prev == input) return;
     emit frontEndChanged();
+    emit bandAntennaEdited(band, antennaForBand(band), input);
 }
 
 quint16 P2RxBridge::chooseRateKhz() {

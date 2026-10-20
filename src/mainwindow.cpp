@@ -20,6 +20,9 @@
 // is being ripped along with the rest of the TX DSP subsystem and
 // rebuilt from empty files per docs/TX_ARCHITECTURAL_MAPPING.md §10.3.
 #include "tci_server.h"
+#include "tci/TciTxBridge.h"
+#include "desk_link.h"
+#include "desk_session.h"
 #include "cat/SerialPtt.h"
 #include "cat/SerialCwKey.h" // #171 serial CW key input
 #include "cat/CatServer.h"
@@ -104,13 +107,17 @@
 #include <QQuickItem>
 #include <QQuickItemGrabResult>
 #include <QScreen>
+#include <vector>
+#include <QRandomGenerator>
 #include <QSettings>
 #include <QVariant>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <algorithm>
+#include <cmath>
 #include <QStyle>
 #include <QToolBar>
 #include <QStatusBar>
@@ -748,7 +755,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         prefs_, qobject_cast<lyra::ipc::HL2Stream *>(stream_), this);
 
     xvtr_ = new XvtrSlots(
-        qobject_cast<lyra::ipc::HL2Stream *>(stream_), this);
+        qobject_cast<lyra::ipc::HL2Stream *>(stream_), prefs_, this);
     xvtr_->setAttApply([this](int db) {
         if (p2Bridge_)
             p2Bridge_->setRxAttenuationDb(db);
@@ -829,6 +836,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             if (doc.isObject()) eqModel_->loadState(doc.object());
         }
         auto save = [this]() {
+            if (lyra::deskApplyQuiet()) return;
             QSettings st;
             st.setValue(QStringLiteral("txeq/state"),
                         QString::fromUtf8(QJsonDocument(eqModel_->saveState())
@@ -944,6 +952,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             if (doc.isObject()) speechModel_->loadState(doc.object());
         }
         connect(speechModel_, &SpeechModel::changed, this, [this]() {
+            if (lyra::deskApplyQuiet()) return;
             QSettings st;
             st.setValue(QStringLiteral("txspeech/state"),
                         QString::fromUtf8(QJsonDocument(speechModel_->saveState())
@@ -966,6 +975,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             if (doc.isObject()) combinatorModel_->loadState(doc.object());
         }
         auto save = [this]() {
+            if (lyra::deskApplyQuiet()) return;
             QSettings st;
             st.setValue(QStringLiteral("txcombinator/state"),
                         QString::fromUtf8(QJsonDocument(combinatorModel_->saveState())
@@ -988,6 +998,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             if (doc.isObject()) plateModel_->loadState(doc.object());
         }
         auto save = [this]() {
+            if (lyra::deskApplyQuiet()) return;
             QSettings st;
             st.setValue(QStringLiteral("txplate/state"),
                         QString::fromUtf8(QJsonDocument(plateModel_->saveState())
@@ -1048,6 +1059,922 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
     // contact row (CwMacros, created above) with a linked logger.  Same
     // lifetime story — both parented to this window.
     tci_->setCwMacros(cwMacros_);
+    desk_ = new DeskLink(this);
+    tci_->setDeskLink(desk_);
+    desk_->setRxTap([this](const qint16 *pcm, int n) {
+        if (tci_) tci_->offerDeskRx(pcm, n);
+    });
+    desk_->setMicSink([this](const qint16 *pcm, int n) {
+        if (!pcm || n <= 0 || !tci_ || !tci_->deskOwnsVoice()) return;
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !st->moxActive()) return;
+        // The laptop applies its own mic gain before packing MIC1.
+        // These samples enter the modulator at unity. The host Mic
+        // slider, Leveler, and Drive stay on the rack after this.
+        std::vector<float> mono(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            const float s = pcm[i] / 32768.0f;
+            mono[static_cast<size_t>(i)] = std::clamp(s, -1.0f, 1.0f);
+        }
+        lyra::tci::TciTxBridge::instance().pushMono(mono);
+    });
+    connect(desk_, &DeskLink::statusMessage, this,
+            [this](const QString &msg) {
+                if (!msg.isEmpty()) statusBar()->showMessage(msg, 6000);
+            });
+    connect(desk_, &DeskLink::changed, this, &MainWindow::updateConnState);
+    if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
+        rx->setDeskAudioTap([this](const double *lr, int nframes) {
+            if (desk_) desk_->offerRxAudio(lr, nframes);
+        });
+        auto syncDeskLevel = [this, rx]() {
+            if (!desk_ || !desk_->attached() || desk_->isHost()) return;
+            desk_->setPlayPos(rx->volume());
+            desk_->setPlayMuted(rx->muted());
+        };
+        connect(rx, &lyra::dsp::WdspEngine::volumeChanged, this, syncDeskLevel);
+        connect(rx, &lyra::dsp::WdspEngine::mutedChanged, this, syncDeskLevel);
+        connect(desk_, &DeskLink::changed, this, syncDeskLevel);
+        desk_->setSpectrumSource([this](float *dst, int maxN, int *center, int *span) {
+            auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            if (!engine || !st || !center || !span) return 0;
+            *center = int(st->rx1FreqHz());
+            return engine->copyHostSpectrumForDesk(dst, maxN, span);
+        });
+        connect(desk_, &DeskLink::spectrumFrame, this, [this](int span) {
+            if (auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+                engine->postDeskSpectrum(desk_->spectrumDb(),
+                                         desk_->spectrumCount(), span);
+        });
+    }
+    connect(desk_, &DeskLink::remoteFreq, this, [this](quint32 hz) {
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setRx1FreqHz(hz);
+    });
+    connect(desk_, &DeskLink::remoteMode, this, [this](const QString &mode) {
+        if (prefs_) prefs_->setMode(mode);
+    });
+    connect(desk_, &DeskLink::remoteBandwidth, this, [this](int hz) {
+        if (!prefs_) return;
+        if (desk_ && desk_->isHost()) {
+            if (prefs_->rxBandwidth() != hz) noteDeskFilters();
+            lyra::setDeskApplyQuiet(true);
+            prefs_->setRxBandwidth(hz);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        prefs_->setRxBandwidth(hz);
+    });
+    connect(desk_, &DeskLink::remoteRit, this, [this](bool on, int offset) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st) return;
+        if (desk_ && desk_->isHost()) {
+            if (st->ritEnabled() != on) noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            st->setRitEnabled(on);
+            lyra::setDeskApplyQuiet(false);
+            st->setRitOffsetHz(offset);
+            return;
+        }
+        st->setRitEnabled(on);
+        st->setRitOffsetHz(offset);
+    });
+    connect(desk_, &DeskLink::remoteSplit, this, [this](bool on) {
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setSplitEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteAgc, this, [this](const QString &mode) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        const QString m = mode.toLower();
+        if (desk_ && desk_->isHost()) {
+            if (rx->agcMode() == m) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setAgcMode(m);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setAgcMode(m);
+    });
+    connect(desk_, &DeskLink::remoteNr, this, [this](bool on) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            if (rx->nrEnabled() == on) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setNrEnabled(on);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setNrEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteNnr, this, [this](bool on) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            if (rx->nnrEnabled() == on) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setNnrEnabled(on);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setNnrEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteNb, this, [this](bool on, double strength) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            const bool same = rx->nbEnabled() == on
+                && std::lround(rx->nbStrength() * 1000.0)
+                       == std::lround(strength * 1000.0);
+            if (same) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setNbEnabled(on);
+            rx->setNbStrength(strength);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setNbEnabled(on);
+        rx->setNbStrength(strength);
+    });
+    connect(desk_, &DeskLink::remoteBin, this, [this](bool on, double depth) {
+        if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
+            rx->setBinEnabled(on);
+            rx->setBinDepth(depth);
+        }
+    });
+    connect(desk_, &DeskLink::remoteAnf, this, [this](bool on) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            if (rx->anfEnabled() == on) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setAnfEnabled(on);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setAnfEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteLms, this, [this](bool on, double strength) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            const bool same = rx->lmsEnabled() == on
+                && std::lround(rx->lmsStrength() * 1000.0)
+                       == std::lround(strength * 1000.0);
+            if (same) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setLmsEnabled(on);
+            rx->setLmsStrength(strength);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setLmsEnabled(on);
+        rx->setLmsStrength(strength);
+    });
+    connect(desk_, &DeskLink::remoteApf, this, [this](bool on, double gainDb) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            const bool same = rx->apfEnabled() == on
+                && std::lround(rx->apfGainDb() * 10.0)
+                       == std::lround(gainDb * 10.0);
+            if (same) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setApfEnabled(on);
+            rx->setApfGainDb(gainDb);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setApfEnabled(on);
+        rx->setApfGainDb(gainDb);
+    });
+    connect(desk_, &DeskLink::remoteTxBandwidth, this, [this](int hz) {
+        if (!prefs_) return;
+        if (desk_ && desk_->isHost()) {
+            if (prefs_->txBandwidth() != hz) noteDeskFilters();
+            lyra::setDeskApplyQuiet(true);
+            prefs_->setTxBandwidth(hz);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        prefs_->setTxBandwidth(hz);
+    });
+    connect(desk_, &DeskLink::remoteTxLow, this, [this](int hz) {
+        if (!prefs_) return;
+        if (desk_ && desk_->isHost()) {
+            if (prefs_->txFilterLow() != hz) noteDeskFilters();
+            lyra::setDeskApplyQuiet(true);
+            prefs_->setTxFilterLow(hz);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        prefs_->setTxFilterLow(hz);
+    });
+    connect(desk_, &DeskLink::remoteRxLow, this, [this](int hz) {
+        if (!prefs_) return;
+        if (desk_ && desk_->isHost()) {
+            if (prefs_->filterLow() != hz) noteDeskFilters();
+            lyra::setDeskApplyQuiet(true);
+            prefs_->setFilterLow(hz);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        prefs_->setFilterLow(hz);
+    });
+    connect(desk_, &DeskLink::remoteDeskProfile, this, [this](const QByteArray &json) {
+        applyDeskProfile(json);
+    });
+    connect(desk_, &DeskLink::remotePs, this,
+            [this](int live, int fb, int att, int correcting, int cal, int fsm,
+                   int d0, int d1, int spr) {
+        if (!desk_ || desk_->isHost()) return;
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->postDeskPureSignal(live != 0, fb, att, correcting != 0,
+                                   cal, fsm, d0, d1, spr);
+    });
+    connect(desk_, &DeskLink::remotePsPlot, this, [this](const QByteArray &raw) {
+        if (!desk_ || desk_->isHost()) return;
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || raw.size() != 64 * 4 * 2) return;
+        const auto unpack = [&raw](int off) {
+            QVariantList out;
+            const auto *p = reinterpret_cast<const qint16 *>(raw.constData() + off);
+            out.reserve(64);
+            for (int i = 0; i < 64; ++i)
+                out.append(double(p[i]) / 1000.0);
+            return out;
+        };
+        st->postDeskPsPlot(unpack(0), unpack(128), unpack(256), unpack(384));
+    });
+    connect(desk_, &DeskLink::remotePsReset, this, [this]() {
+        if (!desk_ || !desk_->isHost()) return;
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->resetPureSignal();
+    });
+    connect(desk_, &DeskLink::remotePsArm, this, [this](bool on) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_ || !desk_->isHost()) return;
+        if (on) {
+            const bool radioUp = st->isRunning()
+                || (p2Bridge_ && p2Bridge_->isRunning());
+            if (!st->psAttestation() || st->txInhibit() || !radioUp
+                || st->psDigitalLockout()) {
+                deskPsMs_ = 0;
+                pushDeskPs();
+                return;
+            }
+        }
+        st->setPsArmed(on);
+        deskPsMs_ = 0;
+        pushDeskPs();
+    });
+    connect(desk_, &DeskLink::sessionEnded, this, [this](bool wasHost) {
+        if (wasHost) {
+            restoreDeskSession();
+            // The desk key path can latch the Brick TX transport. That
+            // latch is in memory and survives Drop / Detach. Re-prime
+            // once the unkey has finished so the shack can key locally.
+            QTimer::singleShot(500, this, [this]() {
+                if (p2Bridge_)
+                    p2Bridge_->recoverLocalTx();
+            });
+            return;
+        }
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->clearDeskPureSignal();
+    });
+    connect(desk_, &DeskLink::remoteRig, this, [this](int protocol, const QString &) {
+        if (frontEnd_) frontEnd_->setDeskProtocol(protocol);
+        if (p2Bridge_ && protocol != 2 && !p2Bridge_->isRunning())
+            p2Bridge_->postDeskAntenna(false, 0, 0, {});
+        updateConnState();
+    });
+    connect(desk_, &DeskLink::remoteAntenna, this,
+            [this](bool alex, int count, int mask, int trx, int rx,
+                   const QString &ext) {
+        if (!p2Bridge_) return;
+        if (p2Bridge_->isRunning()) {
+            if (!alex) return;
+            p2Bridge_->setTrxAntenna(trx);
+            p2Bridge_->setRxInput(rx);
+            return;
+        }
+        p2Bridge_->postDeskAntenna(alex, count, mask, ext);
+        if (!alex) return;
+        p2Bridge_->setTrxAntenna(trx);
+        p2Bridge_->setRxInput(rx);
+    });
+    connect(desk_, &DeskLink::remoteBandAntenna, this,
+            [this](const QString &band, int ant, int rx) {
+        if (!p2Bridge_) return;
+        p2Bridge_->setAntennaForBand(band, ant);
+        p2Bridge_->setRxInputForBand(band, rx);
+    });
+    connect(desk_, &DeskLink::remoteSub, this, [this](bool on) {
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setSubEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteRx2, this, [this](quint32 hz) {
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setRx2FreqHz(hz);
+    });
+    auto deskTxLimit = [this]() {
+        const QString mode = prefs_ ? prefs_->mode().toUpper() : QString();
+        if (mode == QLatin1String("CWU") || mode == QLatin1String("CWL")
+            || mode == QLatin1String("CW"))
+            return 150;
+        return 200;
+    };
+    auto deskTxRefuse = [this, deskTxLimit]() -> QString {
+        if (!desk_ || !desk_->voiceHeld()) return QStringLiteral("voice");
+        if (tci_ && tci_->browserOwnsVoice()) return QStringLiteral("busy");
+        const QString mode = prefs_ ? prefs_->mode().toUpper() : QString();
+        if (mode == QLatin1String("DIGU") || mode == QLatin1String("DIGL")
+            || mode == QLatin1String("DRM"))
+            return QStringLiteral("mode");
+        const int rtt = desk_->rttMs();
+        if (rtt < 0 || rtt >= deskTxLimit()) return QStringLiteral("rtt");
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+            if (st->txInhibit()) return QStringLiteral("inhibit");
+        }
+        return {};
+    };
+    auto unkeyDesk = [this]() {
+        if (desk_) {
+            if (desk_->digitalWanted()) {
+                desk_->setDigitalWanted(false);
+                desk_->sendDigitalState(false);
+            }
+            desk_->setKeying(false);
+        }
+        if (tci_) tci_->releaseDeskDigitalInput();
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+            st->setTuneEnabled(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+        }
+    };
+    connect(desk_, &DeskLink::voiceRequested, this, [this, deskTxLimit]() {
+        if (!desk_ || !desk_->isHost()) return;
+        if (tci_ && tci_->browserOwnsVoice()) {
+            desk_->sendVoiceDeny(QStringLiteral("busy"));
+            return;
+        }
+        if (!prefs_ || !prefs_->remotePasswordSet()) {
+            desk_->sendVoiceDeny(QStringLiteral("no_password"));
+            return;
+        }
+        if (desk_->rttMs() < 0 || desk_->rttMs() >= deskTxLimit()) {
+            desk_->sendVoiceDeny(QStringLiteral("rtt"));
+            return;
+        }
+        QString word;
+        int sec = 0;
+        if (!desk_->voiceGateOpen(&word, &sec)) {
+            desk_->sendVoiceHold(word, sec);
+            return;
+        }
+        QByteArray nonce(32, 0);
+        auto *rng = QRandomGenerator::system();
+        for (int i = 0; i < nonce.size(); ++i)
+            nonce[i] = char(rng->generate() & 0xff);
+        QByteArray salt;
+        int iters = 0;
+        prefs_->remotePasswordChallenge(&salt, &iters);
+        desk_->sendVoiceChallenge(nonce, salt, iters);
+    });
+    connect(desk_, &DeskLink::voiceProof, this, [this](const QByteArray &mac) {
+        if (!desk_ || !prefs_) return;
+        const QByteArray nonce = desk_->takeVoiceNonce();
+        if (nonce.isEmpty() || !prefs_->remoteVoiceProofMatches(nonce, mac)) {
+            desk_->noteVoiceFail();
+            return;
+        }
+        if (tci_ && !tci_->setDeskOwnsVoice(true)) {
+            desk_->sendVoiceDeny(QStringLiteral("busy"));
+            return;
+        }
+        desk_->noteVoiceGrant();
+    });
+    connect(desk_, &DeskLink::voiceEnded, this, [this]() {
+        if (desk_) {
+            desk_->setDigitalWanted(false);
+            desk_->dropVoiceHold();
+            desk_->setKeying(false);
+        }
+        if (tci_) tci_->setDeskOwnsVoice(false);
+        if (tci_) tci_->releaseDeskDigitalInput();
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+            st->setTuneEnabled(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+        }
+        restoreDeskSession();
+    });
+    connect(desk_, &DeskLink::forceUnkey, this, unkeyDesk);
+    connect(desk_, &DeskLink::remoteMox, this, [this, deskTxRefuse](bool on) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_) return;
+        if (!on) {
+            if (!desk_->keying()) return;
+            desk_->setKeying(false);
+            st->setTuneEnabled(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+            return;
+        }
+        const QString why = deskTxRefuse();
+        if (!why.isEmpty()) {
+            if (why != QLatin1String("voice"))
+                desk_->sendVoiceDeny(why);
+            desk_->sendMox(st->moxActive(), false);
+            return;
+        }
+        desk_->setKeying(true);
+        // Voice power is the Drive slider. Drop a leftover Tune-only
+        // override so this key cannot go out at the Tune level, or at
+        // 0 if that override was cleared without rewriting the slider.
+        if (!st->tuneEnabled())
+            st->setTuneDriveOverride(-1);
+        st->requestMox(true);
+    });
+    connect(desk_, &DeskLink::remoteTune, this, [this, deskTxRefuse](bool on) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_) return;
+        if (!on) {
+            if (!desk_->keying() && !st->tuneEnabled()) return;
+            desk_->setKeying(false);
+            st->setTuneEnabled(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+            return;
+        }
+        const QString why = deskTxRefuse();
+        if (!why.isEmpty()) {
+            if (why != QLatin1String("voice"))
+                desk_->sendVoiceDeny(why);
+            return;
+        }
+        desk_->setKeying(true);
+        st->setTuneEnabled(true);
+        st->requestMox(true);
+    });
+    connect(desk_, &DeskLink::remoteTwoTone, this, [this, deskTxRefuse](bool on) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_) return;
+        if (!on) {
+            if (!desk_->keying() && !st->twoToneEnabled()) return;
+            desk_->setKeying(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+            return;
+        }
+        const QString why = deskTxRefuse();
+        if (!why.isEmpty()) {
+            if (why != QLatin1String("voice"))
+                desk_->sendVoiceDeny(why);
+            desk_->sendTwoToneOn(false);
+            return;
+        }
+        desk_->setKeying(true);
+        st->setTwoToneEnabled(true);
+        st->requestMox(true);
+    });
+    connect(desk_, &DeskLink::remoteDigital, this, [this, deskTxLimit](bool on) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_) return;
+        if (!on) {
+            desk_->setDigitalWanted(false);
+            if (tci_) tci_->releaseDeskDigitalInput();
+            if (!desk_->keying()) return;
+            desk_->setKeying(false);
+            st->setTuneEnabled(false);
+            st->setTwoToneEnabled(false);
+            st->requestMox(false);
+            return;
+        }
+        // Same voice, busy, RTT, and inhibit gates as MOX. The DIGU
+        // block stays on the laptop microphone. Digital audio uses
+        // deskTxLimit: 150 ms in CW/CWU/CWL, 200 ms otherwise.
+        QString why;
+        if (!desk_->voiceHeld())
+            why = QStringLiteral("voice");
+        else if (tci_ && tci_->browserOwnsVoice())
+            why = QStringLiteral("busy");
+        else if (desk_->rttMs() < 0 || desk_->rttMs() >= deskTxLimit())
+            why = QStringLiteral("rtt");
+        else if (st->txInhibit())
+            why = QStringLiteral("inhibit");
+        if (!why.isEmpty()) {
+            if (why != QLatin1String("voice"))
+                desk_->sendVoiceDeny(why);
+            desk_->sendDigitalState(false);
+            return;
+        }
+        desk_->setDigitalWanted(true);
+        desk_->setKeying(true);
+        if (tci_) tci_->armDeskDigitalInput();
+        if (!st->tuneEnabled())
+            st->setTuneDriveOverride(-1);
+        st->requestMox(true);
+        if (st->moxActive())
+            desk_->sendDigitalState(true);
+    });
+    connect(desk_, &DeskLink::changed, this, [this, deskTxLimit]() {
+        if (!desk_ || !desk_->isHost() || !desk_->keying()) return;
+        const int rtt = desk_->rttMs();
+        if (rtt >= deskTxLimit()) {
+            if (desk_->digitalWanted()) {
+                desk_->setDigitalWanted(false);
+                desk_->sendDigitalState(false);
+                if (tci_) tci_->releaseDeskDigitalInput();
+            }
+            desk_->setKeying(false);
+            if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+                st->setTuneEnabled(false);
+                st->setTwoToneEnabled(false);
+                st->requestMox(false);
+            }
+            desk_->sendVoiceDeny(QStringLiteral("rtt"));
+        }
+    });
+    connect(desk_, &DeskLink::remoteFrontEnd, this, [this](int value, bool autoOn, int adc) {
+        if (!frontEnd_) return;
+        frontEnd_->setValue(value);
+        frontEnd_->setAutoEnabled(autoOn);
+        if (frontEnd_->p2Active()) frontEnd_->setAdcIndex(adc);
+    });
+    connect(desk_, &DeskLink::remoteSquelch, this, [this](bool on, double th) {
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (!rx) return;
+        if (desk_ && desk_->isHost()) {
+            const bool same = rx->squelchEnabled() == on
+                && std::lround(rx->squelchThreshold() * 1000.0)
+                       == std::lround(th * 1000.0);
+            if (same) return;
+            noteDeskRx();
+            lyra::setDeskApplyQuiet(true);
+            rx->setSquelchEnabled(on);
+            rx->setSquelchThreshold(th);
+            lyra::setDeskApplyQuiet(false);
+            return;
+        }
+        rx->setSquelchEnabled(on);
+        rx->setSquelchThreshold(th);
+    });
+    connect(desk_, &DeskLink::remoteDrive, this, [this](int level) {
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setTxDriveLevel(level);
+    });
+    connect(desk_, &DeskLink::remoteTuneDrive, this,
+            [this](int mode, int tunePct, int fixedPct) {
+        if (!prefs_ || !desk_) return;
+        if (desk_->isHost()) {
+            const bool differ = prefs_->tuneDriveMode() != mode
+                || prefs_->tuneDrivePct() != tunePct
+                || prefs_->fixedTuneDrivePct() != fixedPct;
+            if (differ && !deskUndoTuneDrive_) {
+                deskUndoTuneMode_ = prefs_->tuneDriveMode();
+                deskUndoTunePct_ = prefs_->tuneDrivePct();
+                deskUndoFixedTune_ = prefs_->fixedTuneDrivePct();
+                deskUndoTuneDrive_ = true;
+            }
+            lyra::setDeskApplyQuiet(true);
+            prefs_->setTuneDriveMode(mode);
+            prefs_->setTuneDrivePct(tunePct);
+            prefs_->setFixedTuneDrivePct(fixedPct);
+            lyra::setDeskApplyQuiet(false);
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            if (!st || !st->tuneEnabled()) return;
+            int pct = -1;
+            if (mode == lyra::ui::Prefs::TuneDriveTune) pct = tunePct;
+            else if (mode == lyra::ui::Prefs::TuneDriveFixed) pct = fixedPct;
+            if (pct < 0)
+                st->setTuneDriveOverride(-1);
+            else
+                st->setTuneDriveOverride(std::clamp(
+                    int(std::lround(pct * 255.0 / 100.0)), 0, 255));
+            return;
+        }
+        prefs_->setTuneDriveMode(mode);
+        prefs_->setTuneDrivePct(tunePct);
+        prefs_->setFixedTuneDrivePct(fixedPct);
+    });
+    connect(desk_, &DeskLink::remoteMeters, this, [this](double dbm, double fwd, double rev) {
+        if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+            rx->postDeskMeter(dbm);
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->postDeskPower(fwd, rev);
+    });
+    connect(desk_, &DeskLink::peerReady, this, [this]() {
+        if (!desk_ || !desk_->isHost()) return;
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        if (st) desk_->sendTune(st->rx1FreqHz());
+        if (prefs_) {
+            desk_->sendTuneDrive(prefs_->tuneDriveMode(),
+                                 prefs_->tuneDrivePct(),
+                                 prefs_->fixedTuneDrivePct());
+            desk_->sendMode(prefs_->mode());
+            desk_->sendBandwidth(prefs_->rxBandwidth());
+            desk_->sendTxBandwidth(prefs_->txBandwidth());
+            desk_->sendTxLow(prefs_->txFilterLow());
+            desk_->sendRxLow(prefs_->filterLow());
+        }
+        if (st) {
+            desk_->sendRit(st->ritEnabled(), st->ritOffsetHz());
+            desk_->sendSplit(st->splitEnabled());
+            desk_->sendSub(st->subEnabled());
+            desk_->sendRx2(st->rx2FreqHz());
+            desk_->sendDrive(st->txDriveLevel());
+            desk_->sendMox(st->moxActive(), false);
+            desk_->sendTuneOn(st->tuneEnabled());
+            desk_->sendTwoToneOn(st->twoToneEnabled());
+        }
+        if (rx) {
+            desk_->sendAgc(rx->agcMode());
+            desk_->sendNr(rx->nrEnabled());
+            desk_->sendNnr(rx->nnrEnabled());
+            desk_->sendNb(rx->nbEnabled(), rx->nbStrength());
+            desk_->sendBin(rx->binEnabled(), rx->binDepth());
+            desk_->sendAnf(rx->anfEnabled());
+            desk_->sendLms(rx->lmsEnabled(), rx->lmsStrength());
+            desk_->sendApf(rx->apfEnabled(), rx->apfGainDb());
+            desk_->sendSquelch(rx->squelchEnabled(), rx->squelchThreshold());
+        }
+        if (p2Bridge_ && p2Bridge_->isRunning()) {
+            const QString label = p2Bridge_->modelLabel().isEmpty()
+                ? QStringLiteral("Protocol 2") : p2Bridge_->modelLabel();
+            desk_->sendRig(2, label);
+            desk_->sendFrontEnd(p2Bridge_->rxAttenuationDb(),
+                                p2Bridge_->autoStep(), p2Bridge_->ddcAdc());
+            if (p2Bridge_->hasAlexAntennaSelect())
+                desk_->sendAntenna(true, p2Bridge_->trxAntennaCount(),
+                                   p2Bridge_->rxJackMask(),
+                                   p2Bridge_->trxAntenna(),
+                                   p2Bridge_->rxInput(),
+                                   p2Bridge_->rxExt1Label());
+            else
+                desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        } else if (st && st->isRunning()) {
+            const auto rp = lyra::rig::registry::rig(
+                lyra::rig::registry::activeRigId());
+            const QString label = rp.label.isEmpty()
+                ? lyra::rig::capabilitiesFor(rp.family).familyName : rp.label;
+            desk_->sendRig(1, label.isEmpty() ? QStringLiteral("Protocol 1") : label);
+            desk_->sendFrontEnd(st->lnaGainDb(), st->autoLna(), 0);
+            desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        } else {
+            desk_->sendRig(0, {});
+            desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        }
+        deskPsMs_ = 0;
+        deskPlotMs_ = 0;
+        pushDeskPs();
+        pushDeskPlot();
+    });
+    connect(desk_, &DeskLink::metersTick, this, [this]() {
+        if (!desk_ || !desk_->isHost()) return;
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        const double dbm = meter_ ? meter_->rxSMeterDbm()
+                                  : (rx ? rx->sMeterDbm() : -200.0);
+        const double fwd = st ? st->fwdPowerCalW() : 0.0;
+        const double rev = st ? st->revPowerW() : 0.0;
+        desk_->sendMeters(dbm, fwd, rev);
+    });
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+        connect(st, &lyra::ipc::HL2Stream::rx1FreqChanged, this, [this, st]() {
+            if (desk_ && desk_->attached())
+                desk_->sendTune(st->rx1FreqHz());
+        });
+        connect(st, &lyra::ipc::HL2Stream::ritChanged, this, [this, st]() {
+            if (desk_ && desk_->attached())
+                desk_->sendRit(st->ritEnabled(), st->ritOffsetHz());
+        });
+        connect(st, &lyra::ipc::HL2Stream::splitEnabledChanged, this, [this, st]() {
+            if (desk_ && desk_->attached())
+                desk_->sendSplit(st->splitEnabled());
+        });
+        connect(st, &lyra::ipc::HL2Stream::txDriveLevelChanged, this,
+                [this, st](int) {
+            if (desk_ && desk_->attached())
+                desk_->sendDrive(st->txDriveLevel());
+        });
+    }
+    if (prefs_) {
+        connect(prefs_, &Prefs::modeChanged, this, [this]() {
+            if (desk_ && desk_->attached())
+                desk_->sendMode(prefs_->mode());
+        });
+        auto pushTuneDrive = [this]() {
+            if (!desk_ || !desk_->attached() || !prefs_) return;
+            desk_->sendTuneDrive(prefs_->tuneDriveMode(),
+                                 prefs_->tuneDrivePct(),
+                                 prefs_->fixedTuneDrivePct());
+        };
+        connect(prefs_, &Prefs::tuneDriveModeChanged, this, pushTuneDrive);
+        connect(prefs_, &Prefs::tuneDrivePctChanged, this, pushTuneDrive);
+        connect(prefs_, &Prefs::fixedTuneDrivePctChanged, this, pushTuneDrive);
+        connect(prefs_, &Prefs::rxBandwidthChanged, this, [this]() {
+            if (desk_ && desk_->attached())
+                desk_->sendBandwidth(prefs_->rxBandwidth());
+        });
+        connect(prefs_, &Prefs::txBandwidthChanged, this, [this]() {
+            if (desk_ && desk_->attached())
+                desk_->sendTxBandwidth(prefs_->txBandwidth());
+        });
+        connect(prefs_, &Prefs::txFilterLowChanged, this, [this]() {
+            if (desk_ && desk_->attached())
+                desk_->sendTxLow(prefs_->txFilterLow());
+        });
+        connect(prefs_, &Prefs::filterLowChanged, this, [this]() {
+            if (desk_ && desk_->attached())
+                desk_->sendRxLow(prefs_->filterLow());
+        });
+    }
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+        const auto push = [this]() { pushDeskPs(); };
+        connect(st, &lyra::ipc::HL2Stream::psLiveArmedChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psFeedbackLevelChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psAutoAttDbChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psCorrectingChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psCalCountChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psFsmStateChanged, this, push);
+        connect(st, &lyra::ipc::HL2Stream::psAmpPlotChanged, this, [this]() {
+            pushDeskPlot();
+        });
+    }
+    if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
+        connect(rx, &lyra::dsp::WdspEngine::agcModeChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendAgc(rx->agcMode());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::nrChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached()) {
+                desk_->sendNr(rx->nrEnabled());
+                desk_->sendNnr(rx->nnrEnabled());
+            }
+        });
+        connect(rx, &lyra::dsp::WdspEngine::nbChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendNb(rx->nbEnabled(), rx->nbStrength());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::binChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendBin(rx->binEnabled(), rx->binDepth());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::anfChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendAnf(rx->anfEnabled());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::lmsChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendLms(rx->lmsEnabled(), rx->lmsStrength());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::apfChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendApf(rx->apfEnabled(), rx->apfGainDb());
+        });
+        connect(rx, &lyra::dsp::WdspEngine::squelchChanged, this, [this, rx]() {
+            if (desk_ && desk_->attached())
+                desk_->sendSquelch(rx->squelchEnabled(), rx->squelchThreshold());
+        });
+    }
+    auto pushDeskRig = [this]() {
+        if (!desk_ || !desk_->attached() || !desk_->isHost()) return;
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (p2Bridge_ && p2Bridge_->isRunning()) {
+            const QString label = p2Bridge_->modelLabel().isEmpty()
+                ? QStringLiteral("Protocol 2") : p2Bridge_->modelLabel();
+            desk_->sendRig(2, label);
+            desk_->sendFrontEnd(p2Bridge_->rxAttenuationDb(),
+                                p2Bridge_->autoStep(), p2Bridge_->ddcAdc());
+            if (p2Bridge_->hasAlexAntennaSelect())
+                desk_->sendAntenna(true, p2Bridge_->trxAntennaCount(),
+                                   p2Bridge_->rxJackMask(),
+                                   p2Bridge_->trxAntenna(),
+                                   p2Bridge_->rxInput(),
+                                   p2Bridge_->rxExt1Label());
+            else
+                desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        } else if (st && st->isRunning()) {
+            const auto rp = lyra::rig::registry::rig(
+                lyra::rig::registry::activeRigId());
+            const QString label = rp.label.isEmpty()
+                ? lyra::rig::capabilitiesFor(rp.family).familyName : rp.label;
+            desk_->sendRig(1, label.isEmpty() ? QStringLiteral("Protocol 1") : label);
+            desk_->sendFrontEnd(st->lnaGainDb(), st->autoLna(), 0);
+            desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        } else {
+            desk_->sendRig(0, {});
+            desk_->sendAntenna(false, 0, 0, 1, 0, {});
+        }
+    };
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+        connect(st, &lyra::ipc::HL2Stream::runningChanged, this, pushDeskRig);
+        connect(st, &lyra::ipc::HL2Stream::subEnabledChanged, this, [this, st]() {
+            if (desk_ && desk_->attached()) desk_->sendSub(st->subEnabled());
+        });
+        connect(st, &lyra::ipc::HL2Stream::rx2FreqChanged, this, [this, st]() {
+            if (desk_ && desk_->attached()) desk_->sendRx2(st->rx2FreqHz());
+        });
+        connect(st, &lyra::ipc::HL2Stream::moxActiveChanged, this, [this, st](bool on) {
+            if (!desk_ || !desk_->attached() || !desk_->isHost()) return;
+            if (!on) {
+                const bool dig = desk_->digitalWanted();
+                desk_->setKeying(false);
+                if (dig) {
+                    desk_->setDigitalWanted(false);
+                    desk_->sendDigitalState(false);
+                    if (tci_) tci_->releaseDeskDigitalInput();
+                }
+            } else if (desk_->digitalWanted()) {
+                desk_->sendDigitalState(true);
+            }
+            desk_->sendMox(on, on && desk_->keying());
+        });
+        connect(st, &lyra::ipc::HL2Stream::tuneEnabledChanged, this, [this, st](bool on) {
+            if (!desk_ || !desk_->attached() || !desk_->isHost()) return;
+            if (!on && !st->moxActive())
+                desk_->setKeying(false);
+            desk_->sendTuneOn(on);
+        });
+        connect(st, &lyra::ipc::HL2Stream::twoToneEnabledChanged, this, [this, st](bool on) {
+            if (!desk_ || !desk_->attached() || !desk_->isHost()) return;
+            if (!on && !st->moxActive())
+                desk_->setKeying(false);
+            desk_->sendTwoToneOn(on);
+        });
+        connect(st, &lyra::ipc::HL2Stream::lnaGainChanged, this, [this, st]() {
+            if (!desk_ || !desk_->attached()) return;
+            if (desk_->isHost()) {
+                if ((p2Bridge_ && p2Bridge_->isRunning()) || !st->isRunning()) return;
+                desk_->sendFrontEnd(st->lnaGainDb(), st->autoLna(), 0);
+                return;
+            }
+            if (frontEnd_ && !frontEnd_->p2Active())
+                desk_->sendFrontEnd(frontEnd_->value(), frontEnd_->autoEnabled(), 0);
+        });
+        connect(st, &lyra::ipc::HL2Stream::autoLnaChanged, this, [this, st]() {
+            if (!desk_ || !desk_->attached()) return;
+            if (desk_->isHost()) {
+                if ((p2Bridge_ && p2Bridge_->isRunning()) || !st->isRunning()) return;
+                desk_->sendFrontEnd(st->lnaGainDb(), st->autoLna(), 0);
+                return;
+            }
+            if (frontEnd_ && !frontEnd_->p2Active())
+                desk_->sendFrontEnd(frontEnd_->value(), frontEnd_->autoEnabled(), 0);
+        });
+    }
+    if (p2Bridge_) {
+        connect(p2Bridge_, &lyra::wire::P2RxBridge::runningChanged, this, pushDeskRig);
+        connect(p2Bridge_, &lyra::wire::P2RxBridge::frontEndChanged, this, [this]() {
+            if (!desk_ || !desk_->attached() || !p2Bridge_) return;
+            if (desk_->isHost()) {
+                if (!p2Bridge_->isRunning()) return;
+                desk_->sendFrontEnd(p2Bridge_->rxAttenuationDb(),
+                                    p2Bridge_->autoStep(), p2Bridge_->ddcAdc());
+                if (p2Bridge_->hasAlexAntennaSelect())
+                    desk_->sendAntenna(true, p2Bridge_->trxAntennaCount(),
+                                       p2Bridge_->rxJackMask(),
+                                       p2Bridge_->trxAntenna(),
+                                       p2Bridge_->rxInput(),
+                                       p2Bridge_->rxExt1Label());
+                return;
+            }
+            if (frontEnd_ && frontEnd_->p2Active()) {
+                desk_->sendFrontEnd(frontEnd_->value(), frontEnd_->autoEnabled(),
+                                    frontEnd_->adcIndex());
+                if (desk_->hostProtocol() == 2 && p2Bridge_->hasAlexAntennaSelect())
+                    desk_->sendAntenna(true, p2Bridge_->trxAntennaCount(),
+                                       p2Bridge_->rxJackMask(),
+                                       p2Bridge_->trxAntenna(),
+                                       p2Bridge_->rxInput(),
+                                       p2Bridge_->rxExt1Label());
+            }
+        });
+        connect(p2Bridge_, &lyra::wire::P2RxBridge::bandAntennaEdited, this,
+                [this](const QString &band, int ant, int rx) {
+            if (!desk_ || !desk_->attached() || !p2Bridge_) return;
+            if (desk_->isHost()) {
+                if (p2Bridge_->isRunning())
+                    desk_->sendBandAntenna(band, ant, rx);
+                return;
+            }
+            if (desk_->hostProtocol() == 2)
+                desk_->sendBandAntenna(band, ant, rx);
+        });
+    }
     connect(tci_, &TciServer::remoteLockChanged, this,
             [this](const QString &text) {
                 if (!text.isEmpty())
@@ -1349,6 +2276,8 @@ QQuickWidget *MainWindow::makeQuick(const QString &qmlFile) {
         QStringLiteral("Discovery"), discovery_);
     qw->rootContext()->setContextProperty(
         QStringLiteral("Stream"), stream_);
+    qw->rootContext()->setContextProperty(
+        QStringLiteral("DeskLink"), desk_);
     qw->rootContext()->setContextProperty(
         QStringLiteral("FrontEnd"), frontEnd_);
     qw->rootContext()->setContextProperty(
@@ -2442,7 +3371,7 @@ void MainWindow::ensureSettingsDialog() {
             wx_, memory_, eibi_, tci_, spots_, spotHole_, dxCluster_, meter_, tuner_,
             voiceKeyer_, recorder_, converter_,
             profiles_, companion_, serialPtt_, serialCwKey_, catServers_,
-            p2Bridge_, this);
+            p2Bridge_, desk_, this);
         // Opening a radio whose per-rig profile differs from the active rig
         // offers to switch to it.  QUEUED so switchRig's modal (and its
         // "Restart now" teardown) runs AFTER the Settings Open click handler
@@ -2467,6 +3396,487 @@ void MainWindow::showHelp(const QString &topic) {
         helpDlg_ = new HelpDialog(this);
     }
     helpDlg_->showTopic(topic);
+}
+
+namespace {
+
+bool nearMilli(double a, double b)
+{
+    return std::lround(a * 1000.0) == std::lround(b * 1000.0);
+}
+
+bool jsonSubsetDiffers(const QJsonValue &incoming, const QJsonValue &current)
+{
+    if (incoming.isDouble() && current.isDouble())
+        return !nearMilli(incoming.toDouble(), current.toDouble());
+    if (incoming.isBool() && current.isBool())
+        return incoming.toBool() != current.toBool();
+    if (incoming.isDouble() && current.isBool())
+        return (incoming.toInt() != 0) != current.toBool();
+    if (incoming.isArray() && current.isArray()) {
+        const QJsonArray a = incoming.toArray();
+        const QJsonArray b = current.toArray();
+        if (a.size() != b.size()) return true;
+        for (int i = 0; i < a.size(); ++i)
+            if (jsonSubsetDiffers(a.at(i), b.at(i))) return true;
+        return false;
+    }
+    if (incoming.isObject() && current.isObject()) {
+        const QJsonObject in = incoming.toObject();
+        const QJsonObject cur = current.toObject();
+        for (auto it = in.constBegin(); it != in.constEnd(); ++it) {
+            if (!cur.contains(it.key())
+                || jsonSubsetDiffers(it.value(), cur.value(it.key())))
+                return true;
+        }
+        return false;
+    }
+    return incoming != current;
+}
+
+bool bandsDiffer(const QJsonArray &bands, const QJsonArray &cur, int from)
+{
+    for (int i = 0; i < bands.size(); ++i) {
+        const int idx = from + i;
+        if (idx < 0 || idx >= cur.size()) return true;
+        if (jsonSubsetDiffers(bands.at(i), cur.at(idx))) return true;
+    }
+    return false;
+}
+
+bool flagOf(const QJsonValue &v)
+{
+    return v.isBool() ? v.toBool() : v.toInt() != 0;
+}
+
+} // namespace
+
+void MainWindow::noteDeskFilters()
+{
+    if (deskUndoFilters_ || !prefs_ || !desk_ || !desk_->isHost()) return;
+    deskUndoRxBw_ = prefs_->rxBandwidth();
+    deskUndoTxBw_ = prefs_->txBandwidth();
+    deskUndoRxLo_ = prefs_->filterLow();
+    deskUndoTxLo_ = prefs_->txFilterLow();
+    deskUndoFilters_ = true;
+}
+
+void MainWindow::noteDeskRack()
+{
+    if (deskUndoRack_ || !desk_ || !desk_->isHost()) return;
+    const auto pack = [](const QJsonObject &o) {
+        return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+    };
+    if (eqModel_) deskUndoEq_ = pack(eqModel_->saveState());
+    if (speechModel_) deskUndoSpeech_ = pack(speechModel_->saveState());
+    if (combinatorModel_) deskUndoComb_ = pack(combinatorModel_->saveState());
+    if (plateModel_) deskUndoPlate_ = pack(plateModel_->saveState());
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+        deskUndoLevelerOn_ = st->levelerOn();
+        deskUndoLevelerMax_ = st->levelerMaxGainLinear();
+        deskUndoLevelerDecay_ = st->levelerDecayMs();
+    }
+    deskUndoRack_ = true;
+}
+
+void MainWindow::noteDeskRx()
+{
+    if (deskUndoRx_ || !desk_ || !desk_->isHost()) return;
+    if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
+        deskUndoAgc_ = rx->agcMode();
+        deskUndoNr_ = rx->nrEnabled();
+        deskUndoNrMode_ = rx->nrMode();
+        deskUndoAepf_ = rx->aepfEnabled();
+        deskUndoNpe_ = rx->npeMethod();
+        deskUndoNnr_ = rx->nnrEnabled();
+        deskUndoNnrModel_ = rx->nnrModel();
+        deskUndoNnrMask_ = rx->nnrMaskFloorDb();
+        deskUndoNb_ = rx->nbEnabled();
+        deskUndoNbSt_ = rx->nbStrength();
+        deskUndoAnf_ = rx->anfEnabled();
+        deskUndoLms_ = rx->lmsEnabled();
+        deskUndoLmsSt_ = rx->lmsStrength();
+        deskUndoApf_ = rx->apfEnabled();
+        deskUndoApfDb_ = rx->apfGainDb();
+        deskUndoSq_ = rx->squelchEnabled();
+        deskUndoSqTh_ = rx->squelchThreshold();
+        deskUndoCw_ = rx->cwPitchHz();
+    }
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+        deskUndoRitOn_ = st->ritEnabled();
+    deskUndoRx_ = true;
+}
+
+void MainWindow::restoreDeskSession()
+{
+    if (!deskUndoFilters_ && !deskUndoRack_ && !deskUndoTuneDrive_
+        && !deskUndoRx_) return;
+    lyra::setDeskApplyQuiet(true);
+    if (deskUndoFilters_ && prefs_) {
+        prefs_->setRxBandwidth(deskUndoRxBw_);
+        prefs_->setTxBandwidth(deskUndoTxBw_);
+        prefs_->setFilterLow(deskUndoRxLo_);
+        prefs_->setTxFilterLow(deskUndoTxLo_);
+    }
+    if (deskUndoRack_) {
+        const auto load = [](const QString &js) {
+            const auto doc = QJsonDocument::fromJson(js.toUtf8());
+            return doc.isObject() ? doc.object() : QJsonObject();
+        };
+        if (eqModel_) eqModel_->loadState(load(deskUndoEq_));
+        if (speechModel_) speechModel_->loadState(load(deskUndoSpeech_));
+        if (combinatorModel_) combinatorModel_->loadState(load(deskUndoComb_));
+        if (plateModel_) plateModel_->loadState(load(deskUndoPlate_));
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+            st->setLevelerDecayMs(deskUndoLevelerDecay_);
+            st->setLevelerMaxGainLinear(deskUndoLevelerMax_);
+            st->setLevelerOn(deskUndoLevelerOn_);
+        }
+    }
+    if (deskUndoTuneDrive_ && prefs_) {
+        prefs_->setTuneDriveMode(deskUndoTuneMode_);
+        prefs_->setTuneDrivePct(deskUndoTunePct_);
+        prefs_->setFixedTuneDrivePct(deskUndoFixedTune_);
+    }
+    if (deskUndoRx_) {
+        if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
+            rx->setAgcMode(deskUndoAgc_);
+            rx->setNrEnabled(false);
+            rx->setNnrEnabled(false);
+            if (deskUndoNr_) rx->setNrEnabled(true);
+            else if (deskUndoNnr_) rx->setNnrEnabled(true);
+            rx->setNrMode(deskUndoNrMode_);
+            rx->setAepfEnabled(deskUndoAepf_);
+            rx->setNpeMethod(deskUndoNpe_);
+            rx->setNnrModel(deskUndoNnrModel_);
+            rx->setNnrMaskFloorDb(deskUndoNnrMask_);
+            rx->setNbEnabled(deskUndoNb_);
+            rx->setNbStrength(deskUndoNbSt_);
+            rx->setAnfEnabled(deskUndoAnf_);
+            rx->setLmsEnabled(deskUndoLms_);
+            rx->setLmsStrength(deskUndoLmsSt_);
+            rx->setApfEnabled(deskUndoApf_);
+            rx->setApfGainDb(deskUndoApfDb_);
+            rx->setSquelchEnabled(deskUndoSq_);
+            rx->setSquelchThreshold(deskUndoSqTh_);
+            rx->setCwPitchHz(deskUndoCw_);
+        }
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+            st->setRitEnabled(deskUndoRitOn_);
+    }
+    lyra::setDeskApplyQuiet(false);
+    deskUndoFilters_ = false;
+    deskUndoRack_ = false;
+    deskUndoTuneDrive_ = false;
+    deskUndoRx_ = false;
+}
+
+void MainWindow::applyDeskProfile(const QByteArray &json)
+{
+    if (!desk_ || !desk_->isHost()) return;
+    const auto doc = QJsonDocument::fromJson(json);
+    if (!doc.isObject()) return;
+    const QJsonObject o = doc.object();
+    const bool filtersDiffer = prefs_ && (
+        (o.contains(QStringLiteral("rxBw"))
+            && o.value(QStringLiteral("rxBw")).toInt() != prefs_->rxBandwidth())
+        || (o.contains(QStringLiteral("txBw"))
+            && o.value(QStringLiteral("txBw")).toInt() != prefs_->txBandwidth())
+        || (o.contains(QStringLiteral("rxLo"))
+            && o.value(QStringLiteral("rxLo")).toInt() != prefs_->filterLow())
+        || (o.contains(QStringLiteral("txLo"))
+            && o.value(QStringLiteral("txLo")).toInt() != prefs_->txFilterLow()));
+    if (filtersDiffer) noteDeskFilters();
+    auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+    auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+    bool rackDiffer = false;
+    if (st) {
+        if (o.contains(QStringLiteral("levelerOn"))
+            && o.value(QStringLiteral("levelerOn")).toBool() != st->levelerOn())
+            rackDiffer = true;
+        if (o.contains(QStringLiteral("levelerMax"))
+            && !nearMilli(o.value(QStringLiteral("levelerMax")).toDouble(),
+                          st->levelerMaxGainLinear()))
+            rackDiffer = true;
+        if (o.contains(QStringLiteral("levelerDecay"))
+            && o.value(QStringLiteral("levelerDecay")).toInt() != st->levelerDecayMs())
+            rackDiffer = true;
+    }
+    const auto objectDiffers = [](const QJsonObject &in, const QJsonObject &cur,
+                                   const QString &fromKey, const QJsonObject &wrap) {
+        if (wrap.contains(fromKey)) {
+            const QJsonArray bands = in.value(QStringLiteral("bands")).toArray();
+            const QJsonArray curBands = cur.value(QStringLiteral("bands")).toArray();
+            if (bandsDiffer(bands, curBands, wrap.value(fromKey).toInt()))
+                return true;
+            QJsonObject scalars = in;
+            scalars.remove(QStringLiteral("bands"));
+            return jsonSubsetDiffers(scalars, cur);
+        }
+        return jsonSubsetDiffers(in, cur);
+    };
+    if (eqModel_ && o.contains(QStringLiteral("eq"))
+        && objectDiffers(o.value(QStringLiteral("eq")).toObject(),
+                         eqModel_->saveState(), QStringLiteral("eqFrom"), o))
+        rackDiffer = true;
+    if (speechModel_ && o.contains(QStringLiteral("speech"))
+        && jsonSubsetDiffers(o.value(QStringLiteral("speech")),
+                             speechModel_->saveState()))
+        rackDiffer = true;
+    if (combinatorModel_ && o.contains(QStringLiteral("combinator"))
+        && objectDiffers(o.value(QStringLiteral("combinator")).toObject(),
+                         combinatorModel_->saveState(),
+                         QStringLiteral("combinatorFrom"), o))
+        rackDiffer = true;
+    if (plateModel_ && o.contains(QStringLiteral("plate"))
+        && jsonSubsetDiffers(o.value(QStringLiteral("plate")),
+                             plateModel_->saveState()))
+        rackDiffer = true;
+    if (rackDiffer) noteDeskRack();
+    bool rxDiffer = false;
+    if (rx) {
+        if (o.contains(QStringLiteral("agc"))
+            && o.value(QStringLiteral("agc")).toString().toLower() != rx->agcMode())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nr"))
+            && flagOf(o.value(QStringLiteral("nr"))) != rx->nrEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nrm"))
+            && o.value(QStringLiteral("nrm")).toInt() != rx->nrMode())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("aepf"))
+            && flagOf(o.value(QStringLiteral("aepf"))) != rx->aepfEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("npe"))
+            && o.value(QStringLiteral("npe")).toInt() != rx->npeMethod())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nnr"))
+            && flagOf(o.value(QStringLiteral("nnr"))) != rx->nnrEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nnm"))
+            && o.value(QStringLiteral("nnm")).toInt() != rx->nnrModel())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nnf"))
+            && std::lround(o.value(QStringLiteral("nnf")).toDouble())
+                   != std::lround(rx->nnrMaskFloorDb()))
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nb"))
+            && flagOf(o.value(QStringLiteral("nb"))) != rx->nbEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("nbs"))
+            && o.value(QStringLiteral("nbs")).toInt()
+                   != int(std::lround(rx->nbStrength() * 1000.0)))
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("anf"))
+            && flagOf(o.value(QStringLiteral("anf"))) != rx->anfEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("lms"))
+            && flagOf(o.value(QStringLiteral("lms"))) != rx->lmsEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("lmsv"))
+            && o.value(QStringLiteral("lmsv")).toInt()
+                   != int(std::lround(rx->lmsStrength() * 1000.0)))
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("apf"))
+            && flagOf(o.value(QStringLiteral("apf"))) != rx->apfEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("apfv"))
+            && o.value(QStringLiteral("apfv")).toInt()
+                   != int(std::lround(rx->apfGainDb() * 10.0)))
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("sq"))
+            && flagOf(o.value(QStringLiteral("sq"))) != rx->squelchEnabled())
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("sqv"))
+            && o.value(QStringLiteral("sqv")).toInt()
+                   != int(std::lround(rx->squelchThreshold() * 1000.0)))
+            rxDiffer = true;
+        if (o.contains(QStringLiteral("cw"))
+            && o.value(QStringLiteral("cw")).toInt() != rx->cwPitchHz())
+            rxDiffer = true;
+    }
+    if (st && o.contains(QStringLiteral("rit"))
+        && flagOf(o.value(QStringLiteral("rit"))) != st->ritEnabled())
+        rxDiffer = true;
+    if (rxDiffer) noteDeskRx();
+    lyra::setDeskApplyQuiet(true);
+    if (prefs_) {
+        if (o.contains(QStringLiteral("rxBw")))
+            prefs_->setRxBandwidth(o.value(QStringLiteral("rxBw")).toInt());
+        if (o.contains(QStringLiteral("txBw")))
+            prefs_->setTxBandwidth(o.value(QStringLiteral("txBw")).toInt());
+        if (o.contains(QStringLiteral("rxLo")))
+            prefs_->setFilterLow(o.value(QStringLiteral("rxLo")).toInt());
+        if (o.contains(QStringLiteral("txLo")))
+            prefs_->setTxFilterLow(o.value(QStringLiteral("txLo")).toInt());
+    }
+    if (st) {
+        if (o.contains(QStringLiteral("levelerDecay")))
+            st->setLevelerDecayMs(o.value(QStringLiteral("levelerDecay")).toInt());
+        if (o.contains(QStringLiteral("levelerMax")))
+            st->setLevelerMaxGainLinear(o.value(QStringLiteral("levelerMax")).toDouble());
+        if (o.contains(QStringLiteral("levelerOn")))
+            st->setLevelerOn(o.value(QStringLiteral("levelerOn")).toBool());
+        if (o.contains(QStringLiteral("rit")))
+            st->setRitEnabled(flagOf(o.value(QStringLiteral("rit"))));
+    }
+    if (eqModel_ && o.contains(QStringLiteral("eq"))) {
+        const QJsonObject eq = o.value(QStringLiteral("eq")).toObject();
+        if (o.contains(QStringLiteral("eqFrom"))) {
+            if (eq.contains(QStringLiteral("bypass")))
+                eqModel_->setBypass(eq.value(QStringLiteral("bypass")).toBool());
+            if (eq.contains(QStringLiteral("makeupDb")))
+                eqModel_->setMakeupDb(eq.value(QStringLiteral("makeupDb")).toDouble());
+            const int from = o.value(QStringLiteral("eqFrom")).toInt();
+            const QJsonArray bands = eq.value(QStringLiteral("bands")).toArray();
+            for (int i = 0; i < bands.size(); ++i) {
+                const QJsonObject b = bands.at(i).toObject();
+                const int idx = from + i;
+                if (b.contains(QStringLiteral("type")))
+                    eqModel_->setBandType(idx, b.value(QStringLiteral("type")).toInt());
+                if (b.contains(QStringLiteral("f")))
+                    eqModel_->setBandFreq(idx, b.value(QStringLiteral("f")).toDouble());
+                if (b.contains(QStringLiteral("g")))
+                    eqModel_->setBandGain(idx, b.value(QStringLiteral("g")).toDouble());
+                if (b.contains(QStringLiteral("q")))
+                    eqModel_->setBandQ(idx, b.value(QStringLiteral("q")).toDouble());
+                if (b.contains(QStringLiteral("en")))
+                    eqModel_->setBandEnabled(idx, b.value(QStringLiteral("en")).toBool());
+            }
+        } else {
+            eqModel_->loadState(eq);
+        }
+    }
+    if (speechModel_ && o.contains(QStringLiteral("speech")))
+        speechModel_->loadState(o.value(QStringLiteral("speech")).toObject());
+    if (combinatorModel_ && o.contains(QStringLiteral("combinator"))) {
+        const QJsonObject cmb = o.value(QStringLiteral("combinator")).toObject();
+        if (o.contains(QStringLiteral("combinatorFrom"))) {
+            if (cmb.contains(QStringLiteral("bypass")))
+                combinatorModel_->setBypass(cmb.value(QStringLiteral("bypass")).toBool());
+            if (cmb.contains(QStringLiteral("mix")))
+                combinatorModel_->setMix(cmb.value(QStringLiteral("mix")).toDouble());
+            if (cmb.contains(QStringLiteral("attackMs")))
+                combinatorModel_->setAttackMs(cmb.value(QStringLiteral("attackMs")).toDouble());
+            if (cmb.contains(QStringLiteral("releaseMs")))
+                combinatorModel_->setReleaseMs(cmb.value(QStringLiteral("releaseMs")).toDouble());
+            if (cmb.contains(QStringLiteral("ratio")))
+                combinatorModel_->setRatio(cmb.value(QStringLiteral("ratio")).toDouble());
+            if (cmb.contains(QStringLiteral("threshDb")))
+                combinatorModel_->setThreshDb(cmb.value(QStringLiteral("threshDb")).toDouble());
+            if (cmb.contains(QStringLiteral("makeupDb")))
+                combinatorModel_->setMakeupDb(cmb.value(QStringLiteral("makeupDb")).toDouble());
+            if (cmb.contains(QStringLiteral("xover")))
+                combinatorModel_->setXover(cmb.value(QStringLiteral("xover")).toDouble());
+            if (cmb.contains(QStringLiteral("sbcSpeed")))
+                combinatorModel_->setSbcSpeed(cmb.value(QStringLiteral("sbcSpeed")).toDouble());
+            if (cmb.contains(QStringLiteral("sbcOn")))
+                combinatorModel_->setSbcEnabled(cmb.value(QStringLiteral("sbcOn")).toBool());
+            const int from = o.value(QStringLiteral("combinatorFrom")).toInt();
+            const QJsonArray bands = cmb.value(QStringLiteral("bands")).toArray();
+            for (int i = 0; i < bands.size(); ++i) {
+                const QJsonObject b = bands.at(i).toObject();
+                const int idx = from + i;
+                if (b.contains(QStringLiteral("thr")))
+                    combinatorModel_->setBandThreshDb(idx, b.value(QStringLiteral("thr")).toDouble());
+                if (b.contains(QStringLiteral("gain")))
+                    combinatorModel_->setBandGainDb(idx, b.value(QStringLiteral("gain")).toDouble());
+                if (b.contains(QStringLiteral("en")))
+                    combinatorModel_->setBandEnabled(idx, b.value(QStringLiteral("en")).toBool());
+            }
+        } else {
+            combinatorModel_->loadState(cmb);
+        }
+    }
+    if (plateModel_ && o.contains(QStringLiteral("plate")))
+        plateModel_->loadState(o.value(QStringLiteral("plate")).toObject());
+    if (rx) {
+        if (o.contains(QStringLiteral("agc")))
+            rx->setAgcMode(o.value(QStringLiteral("agc")).toString());
+        if (o.contains(QStringLiteral("nr")) || o.contains(QStringLiteral("nnr"))) {
+            const bool nr = o.contains(QStringLiteral("nr"))
+                ? flagOf(o.value(QStringLiteral("nr"))) : rx->nrEnabled();
+            const bool nnr = o.contains(QStringLiteral("nnr"))
+                ? flagOf(o.value(QStringLiteral("nnr"))) : rx->nnrEnabled();
+            rx->setNrEnabled(false);
+            rx->setNnrEnabled(false);
+            if (nr) rx->setNrEnabled(true);
+            else if (nnr) rx->setNnrEnabled(true);
+        }
+        if (o.contains(QStringLiteral("nrm")))
+            rx->setNrMode(o.value(QStringLiteral("nrm")).toInt());
+        if (o.contains(QStringLiteral("aepf")))
+            rx->setAepfEnabled(flagOf(o.value(QStringLiteral("aepf"))));
+        if (o.contains(QStringLiteral("npe")))
+            rx->setNpeMethod(o.value(QStringLiteral("npe")).toInt());
+        if (o.contains(QStringLiteral("nnm")))
+            rx->setNnrModel(o.value(QStringLiteral("nnm")).toInt());
+        if (o.contains(QStringLiteral("nnf")))
+            rx->setNnrMaskFloorDb(o.value(QStringLiteral("nnf")).toDouble());
+        if (o.contains(QStringLiteral("nb")))
+            rx->setNbEnabled(flagOf(o.value(QStringLiteral("nb"))));
+        if (o.contains(QStringLiteral("nbs")))
+            rx->setNbStrength(o.value(QStringLiteral("nbs")).toInt() / 1000.0);
+        if (o.contains(QStringLiteral("anf")))
+            rx->setAnfEnabled(flagOf(o.value(QStringLiteral("anf"))));
+        if (o.contains(QStringLiteral("lms")))
+            rx->setLmsEnabled(flagOf(o.value(QStringLiteral("lms"))));
+        if (o.contains(QStringLiteral("lmsv")))
+            rx->setLmsStrength(o.value(QStringLiteral("lmsv")).toInt() / 1000.0);
+        if (o.contains(QStringLiteral("apf")))
+            rx->setApfEnabled(flagOf(o.value(QStringLiteral("apf"))));
+        if (o.contains(QStringLiteral("apfv")))
+            rx->setApfGainDb(o.value(QStringLiteral("apfv")).toInt() / 10.0);
+        if (o.contains(QStringLiteral("sq")))
+            rx->setSquelchEnabled(flagOf(o.value(QStringLiteral("sq"))));
+        if (o.contains(QStringLiteral("sqv")))
+            rx->setSquelchThreshold(o.value(QStringLiteral("sqv")).toInt() / 1000.0);
+        if (o.contains(QStringLiteral("cw")))
+            rx->setCwPitchHz(o.value(QStringLiteral("cw")).toInt());
+    }
+    lyra::setDeskApplyQuiet(false);
+}
+
+void MainWindow::pushDeskPs()
+{
+    auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+    if (!st || !desk_ || !desk_->isHost() || !desk_->attached()) return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (deskPsMs_ != 0 && now - deskPsMs_ < 200) return;
+    deskPsMs_ = now;
+    desk_->sendPs(st->psLiveArmed() ? 1 : 0, st->psFeedbackLevel(),
+                  st->psAutoAttDb(), st->psCorrecting() ? 1 : 0,
+                  st->psCalCount(), st->psFsmState(),
+                  st->psDdc0Dbfs(), st->psDdc1Dbfs(), st->psFeedSpr());
+}
+
+void MainWindow::pushDeskPlot()
+{
+    auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+    if (!st || !desk_ || !desk_->isHost() || !desk_->attached()) return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (deskPlotMs_ != 0 && now - deskPlotMs_ < 200) return;
+    deskPlotMs_ = now;
+    const auto pack = [](const QVariantList &xs) {
+        QByteArray out(64 * static_cast<int>(sizeof(qint16)), '\0');
+        auto *p = reinterpret_cast<qint16 *>(out.data());
+        const int src = xs.size();
+        for (int i = 0; i < 64; ++i) {
+            double v = 0.0;
+            if (src > 0) {
+                const int j = (src == 1) ? 0 : (i * (src - 1)) / 63;
+                v = xs.at(j).toDouble();
+            }
+            int q = qRound(v * 1000.0);
+            if (q < 0) q = 0;
+            if (q > 2000) q = 2000;
+            p[i] = static_cast<qint16>(q);
+        }
+        return out;
+    };
+    const QByteArray raw = pack(st->psAmpMagX()) + pack(st->psAmpMagY())
+                         + pack(st->psAmpCorrX()) + pack(st->psAmpCorrY());
+    desk_->sendPsPlot(raw);
 }
 
 // ── Multi-rig: the "Rig" menu ──────────────────────────────────────────────
@@ -2512,6 +3922,10 @@ void MainWindow::rebuildRigMenu() {
                             &MainWindow::renameActiveRig);
     rigMenu_->addAction(tr("Manage rigs (Settings → Hardware)…"),
                         this, &MainWindow::openSettings);
+    rigMenu_->addSeparator();
+    rigMenu_->addAction(tr("Remote…"), this, [this]() {
+        openSettingsTopic(QStringLiteral("remote"));
+    });
 }
 
 void MainWindow::switchRig(const QString &rigId) {
@@ -3502,6 +4916,22 @@ void MainWindow::onStartStop() {
 void MainWindow::beginConnect(const QString &preferIp) {
     auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
     if (!st || st->isRunning() || connectInFlight_) return;
+    if (desk_ && desk_->attached() && !desk_->isHost()) {
+        const QString who = desk_->peerName().isEmpty()
+            ? desk_->savedHostName() : desk_->peerName();
+        if (connStatus_) {
+            const QString rig = desk_->hostRigLabel();
+            connStatus_->setText(rig.isEmpty()
+                ? tr("Host rig · %1").arg(who)
+                : tr("Host rig · %1 · %2").arg(who, rig));
+            connStatus_->setStyleSheet(
+                QStringLiteral("QLabel{color:#7ec8e3;font-weight:bold;}"));
+        }
+        statusBar()->showMessage(
+            tr("This desk uses the shack radio. Start that radio on the shack computer."),
+            6000);
+        return;
+    }
     // FFTW / WDSP init calls create_rnet() after ensureWisdom(). A TCI
     // START (or lastRadio) during that nested loop used to open() with
     // prn still null.
@@ -3712,9 +5142,16 @@ void MainWindow::updateConnState() {
         startStopAction_->setText(anyRunning ? tr("■  Stop")
                                              : tr("▶  Start"));
     }
+    const bool deskRole = desk_ && desk_->attached() && !desk_->isHost();
+    if (startStopAction_)
+        startStopAction_->setEnabled(!deskRole || anyRunning);
     if (startStopBtn_) {
         // Green when stopped (the button says "Start"); red when running
         // (it says "Stop") — the colour signals the ACTION the click does.
+        startStopBtn_->setEnabled(!deskRole || anyRunning);
+        startStopBtn_->setToolTip(deskRole
+            ? tr("This desk uses the shack radio. Detach to start a radio here.")
+            : QString());
         startStopBtn_->setStyleSheet(
             anyRunning
                 ? QStringLiteral("QToolButton{color:#e53935;font-weight:bold;}")
@@ -3734,13 +5171,23 @@ void MainWindow::updateConnState() {
                 ? tr("Connected to %1 (P2)").arg(p2Bridge_->targetIp())
                 : tr("Connected to %1 (%2, P2)").arg(p2Bridge_->targetIp(), m));
         }
+        else if (deskRole) {
+            const QString who = desk_->peerName().isEmpty()
+                ? desk_->savedHostName() : desk_->peerName();
+            const QString rig = desk_->hostRigLabel();
+            connStatus_->setText(rig.isEmpty()
+                ? tr("Host rig · %1").arg(who)
+                : tr("Host rig · %1 · %2").arg(who, rig));
+        }
         else
             connStatus_->setText(tr("Disconnected"));
-        // Green = connected, red = disconnected.
+        // Green = connected, cyan = the shack's radio, red = disconnected.
         connStatus_->setStyleSheet(
             (running || p2Running)
                 ? QStringLiteral("QLabel{color:#4caf50;font-weight:bold;}")
-                : QStringLiteral("QLabel{color:#e53935;font-weight:bold;}"));
+                : deskRole
+                    ? QStringLiteral("QLabel{color:#7ec8e3;font-weight:bold;}")
+                    : QStringLiteral("QLabel{color:#e53935;font-weight:bold;}"));
     }
 }
 
@@ -5019,6 +6466,21 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event) {
             }
             // First (non-repeat) press: toggle MOX exactly as the MOX button
             // does — flip the one shared wire-MOX truth.
+            if (desk_ && desk_->deskSide()) {
+                if (desk_->voiceHeld() && desk_->moxLit() && desk_->deskOwnsKey()) {
+                    desk_->requestRemoteMox(false);
+                    spaceConsumedPress_ = true;
+                    return true;
+                }
+                QWidget *fw = QApplication::focusWidget();
+                const bool inDialog = fw && qobject_cast<QDialog *>(fw->window());
+                if (desk_->voiceHeld() && !isEditableFocus(fw) && !inDialog
+                    && !QApplication::activePopupWidget()) {
+                    desk_->requestRemoteMox(true);
+                    spaceConsumedPress_ = true;
+                    return true;
+                }
+            }
             if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
                 if (st->moxActive()) {
                     st->requestMox(false);       // un-key: ALWAYS allowed

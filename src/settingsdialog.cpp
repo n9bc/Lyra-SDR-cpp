@@ -2,6 +2,11 @@
 
 #include "settingsdialog.h"
 
+#include "desk_link.h"
+#include "eqmodel.h"
+#include "speechmodel.h"
+#include "combinatormodel.h"
+#include "platemodel.h"
 #include "bands.h"
 #include "hl2_discovery.h"
 #include "mainwindow.h"   // Share-a-layout buttons call MainWindow export/import
@@ -28,7 +33,13 @@
 #include "wdsp_native.h"
 
 #include <QApplication>
+#include <QAudioDevice>
+#include <QGuiApplication>
+#include <QMediaDevices>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -285,10 +296,11 @@ SettingsDialog::SettingsDialog(Prefs *prefs, lyra::ipc::HL2Stream *stream,
                                lyra::cat::SerialCwKey *serialCwKey,
                                const QList<lyra::cat::CatServer *> &catServers,
                                lyra::wire::P2RxBridge *p2,
+                               DeskLink *desk,
                                QWidget *parent)
     : QDialog(parent), prefs_(prefs), stream_(stream),
       discovery_(discovery), p2_(p2), bcd_(bcd), engine_(engine), wx_(wx),
-      memory_(memory), eibi_(eibi), tci_(tci), spots_(spots),
+      memory_(memory), eibi_(eibi), tci_(tci), desk_(desk), spots_(spots),
       spotHole_(spotHole), dxCluster_(dxCluster),
       meter_(meter), tuner_(tuner), voiceKeyer_(voiceKeyer),
       recorder_(recorder), converter_(converter),
@@ -2511,6 +2523,312 @@ QWidget *SettingsDialog::buildRemoteTab() {
     intro->setWordWrap(true);
     intro->setStyleSheet(QStringLiteral("color:#8fa6ba;"));
     v->addWidget(intro);
+
+    if (desk_) {
+        auto *lyra = new QGroupBox(tr("Lyra to Lyra"), page);
+        auto *lyLay = new QVBoxLayout(lyra);
+        lyLay->setSpacing(10);
+        auto *lyNote = new QLabel(
+            tr("This is the desk link between two Lyras over Tailscale. "
+               "It is not the browser page below, and it does not open a "
+               "port on the router.\n\n"
+               "On the shack, copy the name and turn Allow desk on. "
+               "On the laptop, paste that name and choose Attach to host. "
+               "The laptop does not start its own radio. The shack radio "
+               "is the host rig, and the laptop plays that receiver. "
+               "The shack volume stays on the shack. The laptop volume "
+               "and mute control only the laptop. "
+               "The laptop shows the shack spectrum. Band, frequency, "
+               "mode, filter, RIT, Split, AGC, NR, squelch, and drive "
+               "on the laptop move the shack radio. NB, BIN, NR, NNR, "
+               "ANF, LMS, APF, and the transmit filter follow the shack "
+               "too. The laptop meters follow "
+               "the shack. The laptop shows LNA or ATT for the radio "
+               "the shack has open. ANT and RX on the band row follow "
+               "a Protocol 2 radio, and the second receiver shows when "
+               "the shack has SUB on. "
+               "Start voice asks for the Remote password. MOX and Tune "
+               "key the shack after that. The laptop microphone goes to "
+               "the shack transmitter. A slow path can listen and cannot "
+               "key. CW needs a round trip under 150 ms. Other transmit "
+               "needs under 200 ms. Listening continues above that. "
+               "The status shows the worst ping, held for about 3 seconds, "
+               "and RX, CW, and Voice lamps for the latest ping. "
+               "Save desk profile keeps the laptop filters and transmit "
+               "rack on this computer. Recall on host applies that set "
+               "on the shack for this session, and also AGC, NR, NNR, "
+               "NB, ANF, LMS, APF, squelch, RIT on or off, and CW pitch. "
+               "The shack does not store it. End voice, Detach, and "
+               "Drop desk put the shack filters, rack, and those "
+               "receiver settings back. The Mic slider level is part of "
+               "the laptop profile and stays on the laptop. "
+               "PureSignal ON and 2-tone ask the shack. Voice-cal noise "
+               "stays on the shack. PureSignal and Amp View on the "
+               "laptop show the correction the shack calculated. "
+               "Windows may ask to allow Lyra the first time, and again "
+               "for the audio port. Allow it on private networks. "
+               "Do not forward a port."),
+            lyra);
+        lyNote->setWordWrap(true);
+        lyNote->setStyleSheet(QStringLiteral("color:#8fa6ba;"));
+        lyLay->addWidget(lyNote);
+
+        auto *hostRow = new QHBoxLayout();
+        auto *hostName = new QLineEdit(lyra);
+        hostName->setReadOnly(true);
+        hostName->setPlaceholderText(tr("Tailscale name appears here"));
+        auto *copy = new QPushButton(tr("Copy"), lyra);
+        auto *allow = new QCheckBox(tr("Allow desk"), lyra);
+        allow->setChecked(desk_->allowDesk());
+        hostRow->addWidget(hostName, 1);
+        hostRow->addWidget(copy);
+        hostRow->addWidget(allow);
+        lyLay->addLayout(hostRow);
+
+        auto *drop = new QPushButton(tr("Drop desk"), lyra);
+        lyLay->addWidget(drop, 0, Qt::AlignLeft);
+
+        auto *deskRow = new QHBoxLayout();
+        auto *deskName = new QLineEdit(desk_->savedHostName(), lyra);
+        deskName->setPlaceholderText(tr("Paste the shack Tailscale name"));
+        auto *attach = new QPushButton(tr("Attach to host"), lyra);
+        auto *detach = new QPushButton(tr("Detach"), lyra);
+        deskRow->addWidget(deskName, 1);
+        deskRow->addWidget(attach);
+        deskRow->addWidget(detach);
+        lyLay->addLayout(deskRow);
+
+        auto *statusRow = new QHBoxLayout();
+        auto *lamp = new QLabel(lyra);
+        lamp->setWordWrap(true);
+        lamp->setStyleSheet(QStringLiteral("color:#cdd9e5;"));
+        auto *rxLamp = new QLabel(tr("RX"), lyra);
+        auto *cwLamp = new QLabel(tr("CW"), lyra);
+        auto *voiceLamp = new QLabel(tr("Voice"), lyra);
+        rxLamp->setAlignment(Qt::AlignCenter);
+        cwLamp->setAlignment(Qt::AlignCenter);
+        voiceLamp->setAlignment(Qt::AlignCenter);
+        rxLamp->setMinimumWidth(44);
+        cwLamp->setMinimumWidth(44);
+        voiceLamp->setMinimumWidth(56);
+        rxLamp->setToolTip(tr("Lit while this desk is attached and pings are arriving. Listening stays up past the transmit gates."));
+        cwLamp->setToolTip(tr("Lit when the latest ping is under 150 ms."));
+        voiceLamp->setToolTip(tr("Lit when the latest ping is under 200 ms."));
+        auto paintPathLamp = [](QLabel *w, bool on) {
+            w->setStyleSheet(on
+                ? QStringLiteral("color:#00e5ff; border:1px solid #00e5ff; "
+                                 "border-radius:3px; padding:1px 6px;")
+                : QStringLiteral("color:#6a7a8a; border:1px solid #3d4a58; "
+                                 "border-radius:3px; padding:1px 6px;"));
+        };
+        statusRow->addWidget(lamp, 1);
+        statusRow->addWidget(rxLamp);
+        statusRow->addWidget(cwLamp);
+        statusRow->addWidget(voiceLamp);
+        lyLay->addLayout(statusRow);
+
+        auto *pathLegend = new QLabel(
+            tr("RX: lit while this desk is attached. Listening stays up. "
+               "CW: lit when the latest ping is under 150 ms. "
+               "Voice: lit when the latest ping is under 200 ms. "
+               "Dim is out of range."),
+            lyra);
+        pathLegend->setWordWrap(true);
+        pathLegend->setStyleSheet(QStringLiteral("color:#8fa6ba;"));
+        lyLay->addWidget(pathLegend);
+
+        auto *micRow = new QHBoxLayout();
+        auto *micPick = new QComboBox(lyra);
+        micPick->setToolTip(tr(
+            "The microphone on this laptop that is sent to the shack "
+            "when you key. The transmit panel's Mic source is the "
+            "radio's own input, so a High Definition device on this "
+            "PC is chosen here."));
+        {
+            const QString saved = QSettings().value(
+                QStringLiteral("deskRemote/micDevice")).toString();
+            const QString vac = QSettings().value(
+                QStringLiteral("vac1/inputDevice")).toString();
+            const QString cur = !saved.isEmpty() ? saved : vac;
+            micPick->addItem(tr("Windows default"), QString());
+            int pick = 0;
+            const auto inputs = QMediaDevices::audioInputs();
+            for (const QAudioDevice &d : inputs) {
+                micPick->addItem(d.description(), d.description());
+                if (!cur.isEmpty()
+                    && d.description().compare(cur, Qt::CaseInsensitive) == 0)
+                    pick = micPick->count() - 1;
+            }
+            micPick->setCurrentIndex(pick);
+        }
+        connect(micPick, &QComboBox::activated, lyra, [micPick](int) {
+            QSettings().setValue(QStringLiteral("deskRemote/micDevice"),
+                                 micPick->currentData().toString());
+        });
+        micRow->addWidget(new QLabel(tr("Laptop microphone"), lyra));
+        micRow->addWidget(micPick, 1);
+        lyLay->addLayout(micRow);
+
+        auto *voiceRow = new QHBoxLayout();
+        auto *voicePw = new QLineEdit(lyra);
+        voicePw->setEchoMode(QLineEdit::Password);
+        voicePw->setPlaceholderText(tr("Remote password"));
+        auto *voiceStart = new QPushButton(tr("Start voice"), lyra);
+        auto *voiceEnd = new QPushButton(tr("End voice"), lyra);
+        voiceRow->addWidget(voicePw, 1);
+        voiceRow->addWidget(voiceStart);
+        voiceRow->addWidget(voiceEnd);
+        lyLay->addLayout(voiceRow);
+
+        auto *profNote = new QLabel(
+            tr("The desk profile is stored on this laptop. It holds the "
+               "receive and transmit filters, the leveler, the transmit "
+               "rack (EQ, speech, combinator, and plate), AGC, NR, NNR, "
+               "NB, ANF, LMS, APF, squelch, RIT on or off, CW pitch, and "
+               "the Mic slider. Recall applies the radio settings on the "
+               "shack for this session and sets the Mic slider on this "
+               "laptop. The shack profile store is left as it was."),
+            lyra);
+        profNote->setWordWrap(true);
+        profNote->setStyleSheet(QStringLiteral("color:#8fa6ba;"));
+        lyLay->addWidget(profNote);
+        auto *profRow = new QHBoxLayout();
+        auto *saveProf = new QPushButton(tr("Save desk profile"), lyra);
+        auto *recallProf = new QPushButton(tr("Recall on host"), lyra);
+        profRow->addWidget(saveProf);
+        profRow->addWidget(recallProf);
+        profRow->addStretch(1);
+        lyLay->addLayout(profRow);
+
+        // Enter in the password box must start voice. A dialog button
+        // left as the default (Detach, after Attach disables itself)
+        // would drop the desk instead.
+        for (QPushButton *b : {copy, drop, attach, detach, voiceStart, voiceEnd,
+                               saveProf, recallProf}) {
+            b->setAutoDefault(false);
+            b->setDefault(false);
+        }
+        connect(voicePw, &QLineEdit::returnPressed, lyra, [voiceStart]() {
+            if (voiceStart->isEnabled())
+                voiceStart->click();
+        });
+
+        auto refresh = [desk = desk_, hostName, copy, allow, drop,
+                        deskName, attach, detach, lamp,
+                        rxLamp, cwLamp, voiceLamp, paintPathLamp,
+                        voicePw, voiceStart, voiceEnd,
+                        saveProf, recallProf]() {
+            hostName->setText(desk->selfName());
+            copy->setEnabled(!desk->selfName().isEmpty());
+            if (allow->isChecked() != desk->allowDesk())
+                allow->setChecked(desk->allowDesk());
+            allow->setEnabled(desk->tailscaleUp() || desk->allowDesk());
+            if (desk->attached() && !desk->allowDesk())
+                allow->setEnabled(false);
+            drop->setEnabled(desk->allowDesk() && desk->attached());
+            attach->setEnabled(!desk->allowDesk() && !desk->attached() && !desk->attaching());
+            detach->setEnabled(desk->attached() && !desk->allowDesk());
+            deskName->setReadOnly(desk->attached() || desk->attaching());
+            lamp->setText(desk->lamp());
+            const bool live = desk->attached() && desk->rttMs() >= 0;
+            const int rtt = desk->rttMs();
+            paintPathLamp(rxLamp, live);
+            paintPathLamp(cwLamp, live && rtt < 150);
+            paintPathLamp(voiceLamp, live && rtt < 200);
+            const bool deskSide = desk->attached() && !desk->allowDesk();
+            voicePw->setEnabled(deskSide && !desk->voiceHeld());
+            voiceStart->setEnabled(deskSide && !desk->voiceHeld());
+            voiceEnd->setEnabled(deskSide && desk->voiceHeld());
+            saveProf->setEnabled(deskSide);
+            recallProf->setEnabled(deskSide
+                && QSettings().contains(QStringLiteral("deskRemote/profile")));
+        };
+        refresh();
+        connect(desk_, &DeskLink::changed, lyra, refresh);
+        connect(copy, &QPushButton::clicked, lyra, [desk = desk_]() {
+            QGuiApplication::clipboard()->setText(desk->selfName());
+        });
+        connect(allow, &QCheckBox::toggled, lyra, [desk = desk_](bool on) {
+            desk->setAllowDesk(on);
+        });
+        connect(drop, &QPushButton::clicked, desk_, &DeskLink::dropDesk);
+        connect(attach, &QPushButton::clicked, lyra, [desk = desk_, deskName]() {
+            desk->attachToHost(deskName->text());
+        });
+        connect(detach, &QPushButton::clicked, desk_, &DeskLink::detach);
+        connect(voiceStart, &QPushButton::clicked, lyra, [desk = desk_, voicePw]() {
+            desk->stageVoicePassword(voicePw->text());
+            voicePw->clear();
+            desk->askVoice();
+        });
+        connect(voiceEnd, &QPushButton::clicked, desk_, &DeskLink::endVoice);
+        connect(saveProf, &QPushButton::clicked, lyra, [this, desk = desk_, recallProf]() {
+            if (!desk->deskSide() || !prefs_) return;
+            QJsonObject o;
+            o.insert(QStringLiteral("rxBw"), prefs_->rxBandwidth());
+            o.insert(QStringLiteral("txBw"), prefs_->txBandwidth());
+            o.insert(QStringLiteral("rxLo"), prefs_->filterLow());
+            o.insert(QStringLiteral("txLo"), prefs_->txFilterLow());
+            if (stream_) {
+                o.insert(QStringLiteral("levelerOn"), stream_->levelerOn());
+                o.insert(QStringLiteral("levelerMax"), stream_->levelerMaxGainLinear());
+                o.insert(QStringLiteral("levelerDecay"), stream_->levelerDecayMs());
+            }
+            if (auto *m = EqModel::instance())
+                o.insert(QStringLiteral("eq"), m->saveState());
+            if (auto *m = SpeechModel::instance())
+                o.insert(QStringLiteral("speech"), m->saveState());
+            if (auto *m = CombinatorModel::instance())
+                o.insert(QStringLiteral("combinator"), m->saveState());
+            if (auto *m = PlateModel::instance())
+                o.insert(QStringLiteral("plate"), m->saveState());
+            if (engine_) {
+                o.insert(QStringLiteral("agc"), engine_->agcMode());
+                o.insert(QStringLiteral("nr"), engine_->nrEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("nrm"), engine_->nrMode());
+                o.insert(QStringLiteral("aepf"), engine_->aepfEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("npe"), engine_->npeMethod());
+                o.insert(QStringLiteral("nnr"), engine_->nnrEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("nnm"), engine_->nnrModel());
+                o.insert(QStringLiteral("nnf"), qRound(engine_->nnrMaskFloorDb()));
+                o.insert(QStringLiteral("nb"), engine_->nbEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("nbs"), qRound(engine_->nbStrength() * 1000.0));
+                o.insert(QStringLiteral("anf"), engine_->anfEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("lms"), engine_->lmsEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("lmsv"), qRound(engine_->lmsStrength() * 1000.0));
+                o.insert(QStringLiteral("apf"), engine_->apfEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("apfv"), qRound(engine_->apfGainDb() * 10.0));
+                o.insert(QStringLiteral("sq"), engine_->squelchEnabled() ? 1 : 0);
+                o.insert(QStringLiteral("sqv"), qRound(engine_->squelchThreshold() * 1000.0));
+                o.insert(QStringLiteral("cw"), engine_->cwPitchHz());
+            }
+            if (stream_)
+                o.insert(QStringLiteral("rit"), stream_->ritEnabled() ? 1 : 0);
+            o.insert(QStringLiteral("mic"), desk->micGainDb());
+            QSettings().setValue(
+                QStringLiteral("deskRemote/profile"),
+                QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+            recallProf->setEnabled(true);
+        });
+        connect(recallProf, &QPushButton::clicked, lyra, [desk = desk_]() {
+            if (!desk->deskSide()) return;
+            QByteArray json = QSettings()
+                .value(QStringLiteral("deskRemote/profile")).toString().toUtf8();
+            if (json.isEmpty()) return;
+            const QJsonDocument doc = QJsonDocument::fromJson(json);
+            if (doc.isObject()) {
+                QJsonObject o = doc.object();
+                if (o.contains(QStringLiteral("mic"))) {
+                    desk->setMicGainDb(o.value(QStringLiteral("mic")).toInt());
+                    o.remove(QStringLiteral("mic"));
+                    json = QJsonDocument(o).toJson(QJsonDocument::Compact);
+                }
+            }
+            if (!json.isEmpty())
+                desk->sendDeskProfile(json);
+        });
+        v->addWidget(lyra);
+    }
 
     const int tciPort = QSettings().value(QStringLiteral("tci/port"), 40001).toInt();
     QStringList lanAddrs;

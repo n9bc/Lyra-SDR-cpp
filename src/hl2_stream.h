@@ -195,6 +195,10 @@ class HL2Stream : public QObject {
     Q_PROPERTY(bool filterBoardEnabled READ filterBoardEnabled
                WRITE setFilterBoardEnabled NOTIFY filterBoardChanged)
     Q_PROPERTY(int  ocBits             READ ocBits NOTIFY ocBitsChanged)
+    // HL2 / HL2+ IO-board RX SMA.  0 = RF1, 2 = Alt RX (Thetis
+    // REG_RF_INPUTS).  Protocol 1 only.  Does not write analog BYTE0–4.
+    Q_PROPERTY(int hl2RxPort READ hl2RxPort WRITE setHl2RxPort
+               NOTIFY hl2RxPortChanged)
     // TX-0a — HL2 telemetry decoded from the EP6 status rotation
     // (C0&0xF8 address field).  RF-SAFE: pure read of the radio→host
     // stream, zero effect on what we transmit.  Temp + supply are
@@ -922,6 +926,8 @@ public:
     // UI thread (lock-free atomics).
     void    setPowerTelemetry(double fwdW, double revW);
     void    clearPowerTelemetry();   // P2 session teardown → fall back to prn
+    // Lyra-to-Lyra desk: show the shack's watts without a local radio.
+    void    postDeskPower(double fwdW, double revW);
     // TX-0c-fsm — true while the radio is wire-level keyed (post-keydown
     // settle, pre-keyup-clear).  Read by the UI red-on-air indicator.
     bool    moxActive()  const { return moxActive_; }
@@ -1237,10 +1243,12 @@ public slots:
     void setFreqCorrection(double factor);
     double freqCorrection() const;
 
-    // Auto-LNA controls (main thread).  setAutoLna(false) restores the
-    // operator's persisted manual gain; setAutoLna(true) hands the LNA
-    // to the overload-protection loop.  Undo + hold time are persisted.
-    void setAutoLna(bool on);
+    // Auto-LNA controls (main thread).  setAutoLna(false) leaves the
+    // gain where it is; setAutoLna(true) hands the LNA to the
+    // overload-protection loop.  armAcquire (default true) starts the
+    // post-band-change fast climb; band/slot restore passes false so a
+    // stored LNA is not walked away on the next 100 ms tick.
+    void setAutoLna(bool on, bool armAcquire = true);
     void setAutoLnaUndo(bool on);
     void setAutoLnaHoldSec(int sec);
 
@@ -1256,6 +1264,13 @@ public slots:
     // not gated here — Thetis/Quisk send it whenever streaming.  Default
     // ON.  Persisted as hw/filterBoard.  J3 Band Volts is a separate box.
     void setFilterBoardEnabled(bool on);
+
+    // HL2 IO-board RX jack.  0 = RF1, 2 = Alt RX.  Other values → RF1.
+    // I2C2 0x1D register 11 only — never registers 0..4 (GPA100 analog).
+    int  hl2RxPort() const {
+        return hl2RxPort_.load(std::memory_order_relaxed);
+    }
+    Q_INVOKABLE void setHl2RxPort(int port);
 
     // ---- TX-state C&C registers (TX-0b foundation) -----------------
     // Operator / PTT-FSM RF-transmit state.  Each setter clamps + stores
@@ -1327,6 +1342,10 @@ public slots:
     void setCtuneDisplaySpanHz(double hz);
     void setCtuneFilterEdges(int lowHz, int highHz);
     void setTxDriveLevel(int level);
+    // While Tune is armed and a separate tune level is selected, the
+    // carrier uses this raw 0..255 instead of the Drive slider. -1
+    // means Tune follows the Drive slider. Does not move or save Drive.
+    void setTuneDriveOverride(int raw);
     void setTxStepAttnDb(int db);
     // HL2: TX step-att. Brick/Hermes P2: ADC0 coupler pad (0..31, seed 0).
     void bindPsAttnWriter(std::function<void(int)> fn,
@@ -1369,6 +1388,13 @@ public slots:
     void setPsAttestation(bool on);
     void setPsArmed(bool on);
     Q_INVOKABLE void resetPureSignal();
+    // Desk display of the shack's PureSignal readout. Does not arm
+    // this process and does not write settings.
+    void postDeskPureSignal(bool live, int fb, int att, bool correcting,
+                            int cal, int fsm, int d0, int d1, int spr);
+    void postDeskPsPlot(const QVariantList &magX, const QVariantList &magY,
+                        const QVariantList &corrX, const QVariantList &corrY);
+    void clearDeskPureSignal();
     Q_INVOKABLE void capturePsGetPk();
     Q_INVOKABLE void setPsAmpPlotHeld(bool on);
     void setPsHwPeak(double peak);
@@ -1537,6 +1563,9 @@ public slots:
     // Live run flag only. The desk checkbox and tx/levelerOn stay put,
     // so a crash still comes up on the saved profile.
     void pushLevelerRun(bool on);
+    // Live panel gain only. The saved Mic slider and tx/micGainDb stay
+    // put. Digital TCI audio is already at the level the app sent.
+    void holdMicGainUnity(bool hold);
     void setLevelerMaxGainLinear(double linear);
     void setLevelerDecayMs(int decay_ms);
     void setPhrotEnabled(bool on);   // #109 phase rotator on/off
@@ -1721,6 +1750,7 @@ signals:
     // capturing an auto-roamed value.
     void lnaSetByOperator(int db);
     void autoLnaChanged();
+    void hl2RxPortChanged();
     void adcOverloadChanged();
     void filterBoardChanged(bool on);
     void ocBitsChanged(int pattern);
@@ -1773,6 +1803,7 @@ signals:
     // TX-0c-tune — tune-tone armed state changed (via TX panel button,
     // operator unarm, or the moxActiveChanged(false) safety auto-clear).
     void tuneEnabledChanged(bool on);
+    void tuneDriveOverrideChanged();
     void twoToneEnabledChanged(bool on);
     void noiseEnabledChanged(bool on);
     void psNoiseLevelDbChanged(int db);
@@ -1995,6 +2026,9 @@ private:
     // then is written twice.  Skipped on Protocol 2.  force is accepted
     // so startup / P1-return call sites stay source-compatible.
     void pushIoboardTxFreq(bool force = false);
+    // I2C2 0x1D register 11 (RF1 vs Alt RX).  Independent of analog
+    // BYTE0–4.  Skipped on Protocol 2.
+    void pushHl2RxPort();
     // While keyed: refuse a VFO write (dial, wheel, CAT, …) that would
     // change amateur-band region (filters / OC / PA band under RF) and
     // un-key through stopTxForBlockedJump — the backstop for writes the
@@ -2120,6 +2154,10 @@ private:
     std::atomic<bool>    p2PowerActive_{false};
     std::atomic<double>  pushedFwdW_{std::numeric_limits<double>::quiet_NaN()};
     std::atomic<double>  pushedRevW_{std::numeric_limits<double>::quiet_NaN()};
+    std::atomic<double>  deskFwdW_{0};
+    std::atomic<double>  deskRevW_{0};
+    std::atomic<qint64>  deskPowerMs_{0};
+    bool deskPowerFresh() const;
     // Stage 2b2: txSeq_ retired — metis_write_frame() owns the wire
     // sequence counter via the TU-scope MetisOutBoundSeqNum, shared
     // with the priming path for PureSignal-correct posture.
@@ -2266,6 +2304,7 @@ private:
     std::atomic<int>     ctuneFiltLoHz_{0};   // #174 CTUNE Stage2 — signed RX filter low edge (Hz)
     std::atomic<int>     ctuneFiltHiHz_{3000};// #174 CTUNE Stage2 — signed RX filter high edge (Hz)
     std::atomic<int>     txDriveLevel_{0};      // 0..255 operator setpoint
+    std::atomic<int>     tuneDriveOverrideRaw_{-1}; // -1 = Tune uses Drive
     std::atomic<int>     txEmittedDriveByte_{0}; // applyTxPower_ output (wire)
     std::atomic<bool>    p2DrivePath_{false};   // P2 analog drive vs HL2 P1
     QString              txCalRigId_;           // empty = active-rig PA cal
@@ -2333,6 +2372,7 @@ private:
     // until some other frequency was written (#17).
     QTimer               ioboardSettleTimer_;
     int                  ioboardEpoch_ = 0;
+    std::atomic<int>     hl2RxPort_{0};  // 0 RF1, 2 Alt RX; P1 IO-board only
     std::atomic<int>     txStepAttnDb_{0};      // 0..31 dB; 0x1C C3 (31-db)
     std::atomic<int>     txMode_{1};            // 0=LSB 1=USB; mirror of the WDSP TXA mode, for the TUN DDS-offset sign (txDdsHzForTune)
     std::atomic<bool>    psUiDigital_{false};   // focused RX DIG/DRM/CW/FM lock-out
@@ -2354,6 +2394,20 @@ private:
     int                  psNoiseLevelDb_{0};
     bool                 psAttestation_{false};
     bool                 psArmed_{false};
+    bool                 deskPs_{false};
+    bool                 deskPsLive_{false};
+    int                  deskPsFb_{0};
+    int                  deskPsAtt_{0};
+    bool                 deskPsCorr_{false};
+    int                  deskPsCal_{0};
+    int                  deskPsFsm_{0};
+    int                  deskPsD0_{-999};
+    int                  deskPsD1_{-999};
+    int                  deskPsSpr_{0};
+    QVariantList         deskMagX_;
+    QVariantList         deskMagY_;
+    QVariantList         deskCorrX_;
+    QVariantList         deskCorrY_;
     bool                 subPausedForPs_{false};
     std::unique_ptr<lyra::ps::PsFsm> psFsm_;
     QString              psAttBand_;
@@ -2688,6 +2742,10 @@ private:
     double alcMaxGainLinear_       = kDefaultAlcMaxGainLinear;
     int    alcDecayMs_             = kDefaultAlcDecayMs;
     bool   levelerOn_              = kDefaultLevelerOn;
+    // Digital key: panel mic gain held at unity, leveler run held off.
+    // The checkbox values above are not rewritten.
+    bool   micGainParked_          = false;
+    bool   levelerRunHeldOff_      = false;
     double levelerMaxGainLinear_   = kDefaultLevelerMaxGainLinear;
     int    levelerDecayMs_         = kDefaultLevelerDecayMs;
     // #109 — PHROT (phase rotator) enable.  Default ON = WDSP create-time

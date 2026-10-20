@@ -69,6 +69,7 @@ class SpotStore;
 class SpotHoleFeeder;
 class DxClusterFeeder;
 class TciServer;
+class DeskLink;
 class MeterModel;
 class UsbBcd;
 class UpdateChecker;
@@ -283,6 +284,13 @@ private:
     // registry on open; switch = set active rig + restart-to-load.
     void rebuildRigMenu();
     void switchRig(const QString &rigId);
+    void noteDeskFilters();
+    void noteDeskRack();
+    void noteDeskRx();
+    void restoreDeskSession();
+    void applyDeskProfile(const QByteArray &json);
+    void pushDeskPs();
+    void pushDeskPlot();
     void addRigInteractive();
     void renameActiveRig();
     QMenu *rigMenu_ = nullptr;
@@ -445,6 +453,46 @@ private:
     SpotHoleFeeder             *spotHole_ = nullptr;  // SpotHole REST spot source
     DxClusterFeeder            *dxCluster_ = nullptr; // DX-cluster telnet spot source
     TciServer                  *tci_   = nullptr;     // TCI server (logger/cluster)
+    DeskLink                   *desk_  = nullptr;     // Lyra-to-Lyra control link
+    bool                        deskUndoFilters_ = false;
+    bool                        deskUndoTuneDrive_ = false;
+    int                         deskUndoTuneMode_ = 0;
+    int                         deskUndoTunePct_ = 25;
+    int                         deskUndoFixedTune_ = 25;
+    bool                        deskUndoRack_ = false;
+    bool                        deskUndoRx_ = false;
+    QString                     deskUndoAgc_;
+    bool                        deskUndoNr_ = false;
+    int                         deskUndoNrMode_ = 3;
+    bool                        deskUndoAepf_ = true;
+    int                         deskUndoNpe_ = 0;
+    bool                        deskUndoNnr_ = false;
+    int                         deskUndoNnrModel_ = 0;
+    double                      deskUndoNnrMask_ = -40.0;
+    bool                        deskUndoNb_ = false;
+    double                      deskUndoNbSt_ = 0.5;
+    bool                        deskUndoAnf_ = false;
+    bool                        deskUndoLms_ = false;
+    double                      deskUndoLmsSt_ = 0.5;
+    bool                        deskUndoApf_ = false;
+    double                      deskUndoApfDb_ = 6.0;
+    bool                        deskUndoSq_ = false;
+    double                      deskUndoSqTh_ = 0.2;
+    bool                        deskUndoRitOn_ = false;
+    int                         deskUndoCw_ = 600;
+    int                         deskUndoRxBw_ = 0;
+    int                         deskUndoTxBw_ = 0;
+    int                         deskUndoRxLo_ = 0;
+    int                         deskUndoTxLo_ = 0;
+    bool                        deskUndoLevelerOn_ = false;
+    double                      deskUndoLevelerMax_ = 15.0;
+    int                         deskUndoLevelerDecay_ = 100;
+    QString                     deskUndoEq_;
+    QString                     deskUndoSpeech_;
+    QString                     deskUndoComb_;
+    QString                     deskUndoPlate_;
+    qint64                      deskPsMs_ = 0;
+    qint64                      deskPlotMs_ = 0;
     lyra::cat::SerialPtt       *serialPtt_ = nullptr; // serial PTT input (WSJT-X/VarAC keys Lyra)
     lyra::cat::SerialCwKey     *serialCwKey_ = nullptr; // #171 serial CW key input
     QList<lyra::cat::CatServer *> catServers_;        // Kenwood CAT serial servers (cat1..catN)

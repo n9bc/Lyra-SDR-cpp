@@ -4,9 +4,8 @@
 //   1. AMATEUR  — 160m … 6m amateur bands
 //   2. BC       — shortwave broadcast meter bands (120m … 13m)
 //   3. GEN      — GEN1/2/3 general-coverage slots (TIME + Mem join here)
-//   4. XVTR     — transverter slots (RF on the dial; radio IF = RF − LO)
-//   5. ANT      — Alex ANT 1/2/3 + RX jack (P2 radios with a front-end
-//                 ladder only; hidden on HL2 and Hermes-class BrickSDR)
+//   4. XVTR     — transverter slots, then HL2 IO-board RF1 / Alt RX
+//                 (Protocol 1) or Alex ANT / RX chips (P2)
 // All built from the shared C++ band tables (Bands context property),
 // so the lists never drift from the protocol/DSP side.
 //
@@ -570,17 +569,41 @@ Rectangle {
                 }
             }
             Item { Layout.fillWidth: true }
-        }
-
-        // ── Row 5: Alex antenna / RX jack (P2 only) ──────────────────
-        // Remembered per band. TX dock is too tight for this; Band already
-        // has chip rows and the selection is band-scoped.
-        RowLayout {
-            visible: P2Bridge.running && P2Bridge.hasAlexAntennaSelect
-            spacing: 4
-            RowLabel { text: qsTr("Ant") }
+            RowLabel {
+                visible: !FrontEnd.p2Active
+                text: qsTr("RX")
+            }
             ChipButton {
-                visible: P2Bridge.trxAntennaCount >= 1
+                visible: !FrontEnd.p2Active
+                text: qsTr("RF1")
+                Layout.preferredWidth: 44
+                chipActive: Stream.hl2RxPort === 0
+                onClicked: Stream.setHl2RxPort(0)
+                ToolTip.visible: hovered && Prefs.tooltipsEnabled
+                ToolTip.text: qsTr("RF1 — HL2 antenna / PA / N2ADR jack (default).\nLeave this for a basic radio or a transverter on that SMA.\nDoes not change J4 band voltage (GPA100). Band Help: Which Hermes Lite station.")
+            }
+            ChipButton {
+                visible: !FrontEnd.p2Active
+                text: qsTr("Alt")
+                Layout.preferredWidth: 44
+                chipActive: Stream.hl2RxPort === 2
+                onClicked: Stream.setHl2RxPort(2)
+                ToolTip.visible: hovered && Prefs.tooltipsEnabled
+                ToolTip.text: qsTr("Alt RX — IO-board SMA only. Click once on the Xvtr chip\nwhose IF is on Alt RX (remembered). Do not use with one SMA.\nDoes not change J4 band voltage. Band Help: Which Hermes Lite station.")
+            }
+            Item {
+                visible: !FrontEnd.p2Active
+                Layout.preferredWidth: 10
+            }
+            // Alex ANT / RX sit on this row so a short Band dock does not
+            // clip them. Shown for a live P2 radio and for a desk whose
+            // host radio has the ladder.
+            RowLabel {
+                visible: P2Bridge.hasAlexAntennaSelect
+                text: qsTr("Ant")
+            }
+            ChipButton {
+                visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 1
                 text: "1"
                 chipActive: P2Bridge.trxAntenna === 1
                 onClicked: P2Bridge.trxAntenna = 1
@@ -588,7 +611,7 @@ Rectangle {
                 ToolTip.text: qsTr("ANT 1 — shared TX/RX jack 1 (per band)")
             }
             ChipButton {
-                visible: P2Bridge.trxAntennaCount >= 2
+                visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 2
                 text: "2"
                 chipActive: P2Bridge.trxAntenna === 2
                 onClicked: P2Bridge.trxAntenna = 2
@@ -596,17 +619,23 @@ Rectangle {
                 ToolTip.text: qsTr("ANT 2 — shared TX/RX jack 2 (per band)")
             }
             ChipButton {
-                visible: P2Bridge.trxAntennaCount >= 3
+                visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 3
                 text: "3"
                 chipActive: P2Bridge.trxAntenna === 3
                 onClicked: P2Bridge.trxAntenna = 3
                 ToolTip.visible: hovered && Prefs.tooltipsEnabled
                 ToolTip.text: qsTr("ANT 3 — shared TX/RX jack 3 (per band)")
             }
-            Item { Layout.preferredWidth: 10 }
-            RowLabel { text: qsTr("RX") }
+            Item {
+                visible: P2Bridge.hasAlexAntennaSelect
+                Layout.preferredWidth: 10
+            }
+            RowLabel {
+                visible: P2Bridge.hasAlexAntennaSelect
+                text: qsTr("RX")
+            }
             ChipButton {
-                visible: (P2Bridge.rxJackMask & 1) !== 0
+                visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 1) !== 0
                 text: qsTr("TRX")
                 Layout.preferredWidth: 44
                 chipActive: P2Bridge.rxInput === 0
@@ -615,7 +644,7 @@ Rectangle {
                 ToolTip.text: qsTr("Receive on the selected ANT jack")
             }
             ChipButton {
-                visible: (P2Bridge.rxJackMask & 2) !== 0
+                visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 2) !== 0
                 text: qsTr("BYPS")
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 1
@@ -624,7 +653,7 @@ Rectangle {
                 ToolTip.text: qsTr("RX Bypass jack (RX-only, front-end bypassed)")
             }
             ChipButton {
-                visible: (P2Bridge.rxJackMask & 4) !== 0
+                visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 4) !== 0
                 text: P2Bridge.rxExt1Label
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 2
@@ -635,7 +664,7 @@ Rectangle {
                         : qsTr("EXT1 RX-only jack")
             }
             ChipButton {
-                visible: (P2Bridge.rxJackMask & 8) !== 0
+                visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 8) !== 0
                 text: qsTr("XVTR")
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 3
@@ -644,6 +673,7 @@ Rectangle {
                 ToolTip.text: qsTr("Transverter RX jack")
             }
             ChipButton {
+                visible: P2Bridge.hasAlexAntennaSelect
                 text: qsTr("MAP")
                 Layout.preferredWidth: 48
                 chipActive: antMapPopup.visible
@@ -651,7 +681,6 @@ Rectangle {
                 ToolTip.visible: hovered && Prefs.tooltipsEnabled
                 ToolTip.text: qsTr("Assign ANT and RX jack for every amateur band")
             }
-            Item { Layout.fillWidth: true }
         }
     }
 
@@ -692,7 +721,7 @@ Rectangle {
                 font.pixelSize: 11
             }
             Repeater {
-                model: P2Bridge.running ? P2Bridge.mapBandNames() : []
+                model: P2Bridge.hasAlexAntennaSelect ? P2Bridge.mapBandNames() : []
                 delegate: RowLayout {
                     required property string modelData
                     Layout.fillWidth: true

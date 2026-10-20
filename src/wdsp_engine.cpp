@@ -2,6 +2,7 @@
 // See wdsp_engine.h for the locked scope + the §14.2 gotcha list.
 
 #include "wdsp_engine.h"
+#include "desk_session.h"
 
 #include "capturedprofile.h"
 #include "noisereducer.h"
@@ -299,6 +300,12 @@ int modeToWdsp(const QString &m) {
     if (m == QLatin1String("DIGL")) return 9;
     if (m == QLatin1String("SAM"))  return 10;   // synchronous AM detector
     return 1;   // USB
+}
+
+void keepShack(const QString &key, const QVariant &value)
+{
+    if (lyra::deskApplyQuiet()) return;
+    QSettings().setValue(key, value);
 }
 
 } // namespace
@@ -2722,7 +2729,7 @@ void WdspEngine::setCwPitchHz(int hz)
     cwPitchHz_ = static_cast<double>(hz);
     cwDecoder_.setToneHz(cwPitchHz_);   // #173 — bind decoder AFC centre to the pitch
     zbMarkerHz_.store(cwMarkerOffsetForMode(mode_), std::memory_order_relaxed);
-    QSettings().setValue(QStringLiteral("dsp/cwPitchHz"), hz);
+    keepShack(QStringLiteral("dsp/cwPitchHz"), hz);
     recomputePassband();   // CW filter recentres on the new pitch
     applyModeFilter();
     recomputePassbandRx2();
@@ -3033,14 +3040,14 @@ double WdspEngine::txAnalyzerOffBins() const noexcept
 }
 
 void WdspEngine::cropSpectrum(const float *full, float *dst, int n,
-                              double offBins) const noexcept
+                              double offBins, double zoom) const noexcept
 {
     // Centre the displayed window on (analyzer DC − offBins) bins.  With
     // offBins==0 this is the legacy centred zoom crop.  During TUN
     // offBins = (NCO−dial) in bins, so the gen1 carrier (at −cw_pitch
     // baseband relative to the NCO, i.e. AT the dial on air) lands at the
     // display centre — on the SSB marker — instead of NCO-relative.
-    const double z    = displayZoom();
+    const double z    = zoom > 0.0 ? zoom : displayZoom();
     const double keep = (z <= 1.0) ? static_cast<double>(kAnPixels)
                                    : static_cast<double>(kAnPixels) / z;
     const double lo    = (kAnPixels - keep) * 0.5 - offBins;
@@ -3057,10 +3064,80 @@ void WdspEngine::cropSpectrum(const float *full, float *dst, int n,
     }
 }
 
+int WdspEngine::copyHostSpectrumForDesk(float *dst, int maxN, int *spanHz)
+{
+    if (!dst || !spanHz) return 0;
+    const bool tx = txOwnsAnalyzer_.load(std::memory_order_acquire);
+    if (tx) {
+        const int full = txSpanHz_.load(std::memory_order_relaxed);
+        *spanHz = full > 0 ? full : 96000;
+    } else {
+        *spanHz = iqRateHz();
+    }
+    const int n = copySpectrumCache(dst, maxN);
+    if (!tx || n < kAnPixels) return n;
+    const double off = txAnalyzerOffBins();
+    if (off == 0.0) return n;
+    // Full TX span, shifted the way the host panadapter shifts Tune.
+    // Zoom stays 1 here — the desk applies its own zoom on top.
+    std::vector<float> full(dst, dst + n);
+    cropSpectrum(full.data(), dst, n, off, 1.0);
+    return n;
+}
+
+int WdspEngine::copySpectrumCache(float *dst, int maxN)
+{
+    if (!dst) return 0;
+    const int n = std::min(maxN, kAnPixels);
+    if (n <= 0) return 0;
+    std::unique_lock<std::mutex> lk(analyzerMtx_, std::try_to_lock);
+    if (!lk.owns_lock() || static_cast<int>(specCache_.size()) < n)
+        return 0;
+    std::memcpy(dst, specCache_.data(), static_cast<size_t>(n) * sizeof(float));
+    const float cal = static_cast<float>(
+        rxDisplayCalibrationDb_.load(std::memory_order_relaxed));
+    if (cal != 0.0f)
+        for (int i = 0; i < n; ++i) dst[i] += cal;
+    return n;
+}
+
+void WdspEngine::postDeskSpectrum(const float *db, int n, int fullSpanHz)
+{
+    if (!db || n < 2 || fullSpanHz <= 0) return;
+    {
+        std::lock_guard<std::mutex> lk(deskSpecMtx_);
+        deskSpec_.assign(db, db + n);
+        if (static_cast<int>(deskSpec_.size()) < kAnPixels)
+            deskSpec_.resize(kAnPixels, -200.0f);
+    }
+    const int prev = deskFullSpan_.exchange(fullSpanHz, std::memory_order_relaxed);
+    deskSpecMs_.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count(),
+        std::memory_order_relaxed);
+    if (prev != fullSpanHz) emit spanChanged();
+}
+
 int WdspEngine::copySpectrum(float *dst, int maxN)
 {
     if (dst == nullptr) {
         return 0;
+    }
+    const qint64 specNow = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (deskFullSpan_.load(std::memory_order_relaxed) > 0
+        && (specNow - deskSpecMs_.load(std::memory_order_relaxed)) < 500) {
+        std::lock_guard<std::mutex> lk(deskSpecMtx_);
+        if (static_cast<int>(deskSpec_.size()) >= kAnPixels) {
+            const int n = std::min(maxN, kAnPixels);
+            const double z = displayZoom();
+            if (z <= 1.0) {
+                std::memcpy(dst, deskSpec_.data(),
+                            static_cast<size_t>(n) * sizeof(float));
+            } else {
+                cropSpectrum(deskSpec_.data(), dst, n, 0.0);
+            }
+            return n;
+        }
     }
     const WdspApi &api = wdsp_->api();
     if (!api.GetPixels) {
@@ -3122,6 +3199,13 @@ int WdspEngine::copySpectrum(float *dst, int maxN)
 
 int WdspEngine::copySpectrumRx2(float *dst, int maxN)
 {
+    // A desk session only has the host's main picture. Focusing the
+    // second receiver must not blank that panadapter.
+    const qint64 specNow = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (deskFullSpan_.load(std::memory_order_relaxed) > 0
+        && (specNow - deskSpecMs_.load(std::memory_order_relaxed)) < 500)
+        return copySpectrum(dst, maxN);
     // Full converter span. No zoom crop and no tune-carrier shift —
     // those belong to the first receiver's panadapter.
     if (!dst || !wdsp_)
@@ -3312,8 +3396,28 @@ double WdspEngine::volumeDb() const
     return posToDb(volume_.load(std::memory_order_relaxed));
 }
 
+void WdspEngine::postDeskMeter(double dbm)
+{
+    if (std::isnan(dbm)) dbm = -200.0;
+    deskSmeter_.store(dbm, std::memory_order_relaxed);
+    deskMeterMs_.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count(),
+        std::memory_order_relaxed);
+}
+
+bool WdspEngine::deskMeterFresh() const
+{
+    const qint64 ms = deskMeterMs_.load(std::memory_order_relaxed);
+    if (ms <= 0) return false;
+    const qint64 now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    return (now - ms) < 1000;
+}
+
 double WdspEngine::sMeterDbm() const
 {
+    if (deskMeterFresh())
+        return deskSmeter_.load(std::memory_order_relaxed);
     if (!running_ || !wdsp_) return -200.0;
     const WdspApi &api = wdsp_->api();
     if (!api.GetRXAMeter) return -200.0;
@@ -3621,10 +3725,10 @@ void WdspEngine::setNrEnabled(bool on)
 {
     if (nrEnabled_ == on) return;
     nrEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/nrEnabled"), on);
+    keepShack(QStringLiteral("dsp/nrEnabled"), on);
     if (on && nnrEnabled_) {
         nnrEnabled_ = false;
-        QSettings().setValue(QStringLiteral("dsp/nnrEnabled"), false);
+        keepShack(QStringLiteral("dsp/nnrEnabled"), false);
     }
     pushNrState();
     emit nrChanged();
@@ -3638,7 +3742,7 @@ void WdspEngine::setNrMode(int mode)
     mode = std::clamp(mode, 1, 4);
     if (nrMode_ == mode) return;
     nrMode_ = mode;
-    QSettings().setValue(QStringLiteral("dsp/nrMode"), mode);
+    keepShack(QStringLiteral("dsp/nrMode"), mode);
     pushNrState();
     emit nrChanged();
 }
@@ -3647,7 +3751,7 @@ void WdspEngine::setAepfEnabled(bool on)
 {
     if (aepfEnabled_ == on) return;
     aepfEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/aepf"), on);
+    keepShack(QStringLiteral("dsp/aepf"), on);
     pushNrState();
     emit nrChanged();
 }
@@ -3657,7 +3761,7 @@ void WdspEngine::setNpeMethod(int method)
     method = std::clamp(method, 0, 1);
     if (npeMethod_ == method) return;
     npeMethod_ = method;
-    QSettings().setValue(QStringLiteral("dsp/npeMethod"), method);
+    keepShack(QStringLiteral("dsp/npeMethod"), method);
     pushNrState();
     emit nrChanged();
 }
@@ -3670,10 +3774,10 @@ void WdspEngine::setNnrEnabled(bool on)
         return;
     }
     nnrEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/nnrEnabled"), on);
+    keepShack(QStringLiteral("dsp/nnrEnabled"), on);
     if (on && nrEnabled_) {
         nrEnabled_ = false;
-        QSettings().setValue(QStringLiteral("dsp/nrEnabled"), false);
+        keepShack(QStringLiteral("dsp/nrEnabled"), false);
     }
     pushNrState();
     emit nrChanged();
@@ -3689,7 +3793,7 @@ void WdspEngine::setNnrModel(int slot)
     slot = std::clamp(slot, 0, 1);
     if (nnrModel_ == slot) return;
     nnrModel_ = slot;
-    QSettings().setValue(QStringLiteral("dsp/nnrModel"), slot);
+    keepShack(QStringLiteral("dsp/nnrModel"), slot);
     pushNrState();
     emit nrChanged();
     emitLog(QStringLiteral("[wdsp] NNR model %1")
@@ -3702,7 +3806,7 @@ void WdspEngine::setNnrMaskFloorDb(double db)
     db = std::clamp(std::round(db), kNnrMaskFloorMinDb, kNnrMaskFloorMaxDb);
     if (nnrMaskFloorDb_ == db) return;
     nnrMaskFloorDb_ = db;
-    QSettings().setValue(QStringLiteral("dsp/nnrMaskFloorDb"), db);
+    keepShack(QStringLiteral("dsp/nnrMaskFloorDb"), db);
     pushNrState();
     emit nrChanged();
     emitLog(QStringLiteral("[wdsp] NNR mask floor %1 dB")
@@ -3884,7 +3988,7 @@ void WdspEngine::setAgcMode(const QString &mode)
         return;   // ignore unknown values
     if (agcMode_ == m) return;
     agcMode_ = m;
-    QSettings().setValue(QStringLiteral("dsp/agcMode"), m);
+    keepShack(QStringLiteral("dsp/agcMode"), m);
     pushAgcMode();
     emit agcModeChanged();
     emitLog(QStringLiteral("[wdsp] AGC mode %1").arg(m));
@@ -3926,7 +4030,7 @@ void WdspEngine::setAnfEnabled(bool on)
 {
     if (anfEnabled_ == on) return;
     anfEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/anfEnabled"), on);
+    keepShack(QStringLiteral("dsp/anfEnabled"), on);
     pushAnfState();
     emit anfChanged();
     emitLog(QStringLiteral("[wdsp] ANF %1")
@@ -3937,7 +4041,7 @@ void WdspEngine::setLmsEnabled(bool on)
 {
     if (lmsEnabled_ == on) return;
     lmsEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/lmsEnabled"), on);
+    keepShack(QStringLiteral("dsp/lmsEnabled"), on);
     pushLmsState();
     emit lmsChanged();
     emitLog(QStringLiteral("[wdsp] LMS %1 (strength %2%)")
@@ -3950,7 +4054,7 @@ void WdspEngine::setLmsStrength(double s)
     s = std::clamp(s, 0.0, 1.0);
     if (std::abs(s - lmsStrength_) < 1e-6) return;
     lmsStrength_ = s;
-    QSettings().setValue(QStringLiteral("dsp/lmsStrength"), s);
+    keepShack(QStringLiteral("dsp/lmsStrength"), s);
     pushLmsState();   // re-push taps/gain even while enabled (live tune)
     emit lmsChanged();
 }
@@ -4122,7 +4226,7 @@ void WdspEngine::setSquelchEnabled(bool on)
 {
     if (squelchEnabled_ == on) return;
     squelchEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/squelchEnabled"), on);
+    keepShack(QStringLiteral("dsp/squelchEnabled"), on);
     pushSquelchState();
     emit squelchChanged();
     emitLog(QStringLiteral("[wdsp] squelch %1")
@@ -4134,7 +4238,7 @@ void WdspEngine::setSquelchThreshold(double t)
     t = std::clamp(t, 0.0, 1.0);
     if (std::abs(t - squelchThreshold_) < 1e-6) return;
     squelchThreshold_ = t;
-    QSettings().setValue(QStringLiteral("dsp/squelchThreshold"), t);
+    keepShack(QStringLiteral("dsp/squelchThreshold"), t);
     pushSquelchState();
     emit squelchChanged();
 }
@@ -4169,7 +4273,7 @@ void WdspEngine::setNbEnabled(bool on)
         nbEnabled_.store(on, std::memory_order_relaxed);
         pushNbState();
     }
-    QSettings().setValue(QStringLiteral("dsp/nbEnabled"), on);
+    keepShack(QStringLiteral("dsp/nbEnabled"), on);
     emit nbChanged();
     emitLog(QStringLiteral("[wdsp] NB %1 (strength %2%)")
                 .arg(on ? QStringLiteral("on") : QStringLiteral("off"))
@@ -4187,7 +4291,7 @@ void WdspEngine::setNbStrength(double s)
         nbStrength_.store(s, std::memory_order_relaxed);
         pushNbState();
     }
-    QSettings().setValue(QStringLiteral("dsp/nbStrength"), s);
+    keepShack(QStringLiteral("dsp/nbStrength"), s);
     emit nbChanged();
 }
 
@@ -4216,7 +4320,7 @@ void WdspEngine::setApfEnabled(bool on)
 {
     if (apfEnabled_ == on) return;
     apfEnabled_ = on;
-    QSettings().setValue(QStringLiteral("dsp/apfEnabled"), on);
+    keepShack(QStringLiteral("dsp/apfEnabled"), on);
     pushApfState();
     emit apfChanged();
     emitLog(QStringLiteral("[wdsp] APF %1")
@@ -4228,7 +4332,7 @@ void WdspEngine::setApfGainDb(double db)
     db = std::clamp(db, 0.0, 24.0);
     if (std::abs(db - apfGainDb_) < 1e-6) return;
     apfGainDb_ = db;
-    QSettings().setValue(QStringLiteral("dsp/apfGainDb"), db);
+    keepShack(QStringLiteral("dsp/apfGainDb"), db);
     pushApfState();   // re-apply the biquad gain live
     emit apfChanged();
 }
@@ -4760,6 +4864,13 @@ void WdspEngine::setRadioAudioSink(
 {
     std::lock_guard<std::mutex> lk(radioSinkMtx_);
     radioSink_ = std::move(sink);
+}
+
+void WdspEngine::setDeskAudioTap(
+    std::function<void(const double *lr, int nframes)> tap)
+{
+    std::lock_guard<std::mutex> lk(deskAudioMtx_);
+    deskAudioTap_ = std::move(tap);
 }
 
 void WdspEngine::applyAudioRouteTransient(bool hl2,
@@ -5325,6 +5436,17 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
         }
     }
 
+    // Desk hears this block before volume, mute, balance, and the
+    // HL2 jack pad, so the shack speaker level stays local.  try_lock:
+    // a busy tap must not stall the speakers on this computer.
+    {
+        std::function<void(const double *, int)> tap;
+        if (deskAudioMtx_.try_lock()) {
+            tap = deskAudioTap_;
+            deskAudioMtx_.unlock();
+            if (tap && audio) tap(audio, nframes);
+        }
+    }
     // Two mute paths OR together: the operator's manual mute_
     // (Audio panel) AND the auto-mute-on-TX gate (live wire MOX
     // bit, gated by autoMuteOnTx_ pref).  Either silences audio

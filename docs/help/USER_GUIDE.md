@@ -22,18 +22,47 @@ not programmers — if you can click a menu, you can use this.
 
 ## Current build
 
-**v0.25.22 Sheliak.** See [What's new in 0.25.22](#whats-new-in-02522).
+**v0.25.24 Sheliak.** See [What's new in 0.25.24](#whats-new-in-02524).
+
+## What's new in 0.25.24
+
+- **HL2 RF1 / Alt RX.** Protocol 1 Xvtr (and ham-band) chips pick the
+  IO-board RX jack: **RF1** is the PA / N2ADR antenna SMA; **Alt** is the
+  Pico / IO **Alt RX** SMA. Remembered per chip. Thetis-style I2C 0x1D
+  **register 11** only — analog BYTE0–4 (GPA100 band voltage) is unchanged.
+  Protocol 2 hides these chips (use Ant / MAP). Station table:
+  [Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine).
+- **Protocol 2 TX clock.** DUC I/Q (UDP 1029) runs on its own native
+  writer, not the radio session thread. Aimed at the occasional
+  “keyed, relay clicks, no RF” stall after a long digital session.
+  Dummy-load first key on Brick after install.
+- **Lyra to Lyra** from 0.25.23 is still in this build. Both PCs need
+  the same version. If that beta is not for you, reinstall **v0.25.22**.
+
+## What's new in 0.25.23
+
+- **Lyra to Lyra (beta).** One Lyra on the shack, one Lyra on the laptop,
+  over Tailscale. The shack is the host and stays on the radio. The
+  laptop is the desk and does not open a local radio. Install this same
+  version on both PCs. See [Lyra to Lyra](#lyra-to-lyra).
+- If this beta misbehaves, reinstall the GitHub **v0.25.22** installer.
+  Settings stay. That build has no Lyra to Lyra.
 
 ## What's new in 0.25.22
 
-- **Helios meter face.** A sun-and-planets look (S9 = Jupiter; TX watts
-  plus MIC / ALC / GAIN), in the meter's style chip next to Sonar and
-  Cluster. Same calibration as Arc. See [Meter panel](#meter-panel).
+- **Meter faces.** Header **Arc | Bar | Ladder | Sonar | Sol | Clus**.
+  **Helios** is the sun-and-planets look (S9 = Jupiter; TX watts plus
+  MIC / ALC / GAIN). **Sonar** is the PPI with a compass ring (replaces
+  Radar). **Cluster** is the cockpit arc plus segmented bars. Same
+  calibration as Arc. See [Meter panel](#meter-panel).
 - **Band change while transmitting.** Tuning across a band edge while
   keyed (dial, wheel, any VFO write) is refused like a one-click band
   jump: transmit stops. Status bar: *Band change blocked — transmit
   stopped.*
-- **Xvtr.** Each transverter chip remembers its LNA (HL2) or ATT (P2).
+- **Xvtr.** Each transverter chip remembers its LNA (HL2) or ATT (P2),
+  last mode, and Auto on/off (Auto defaults **off** on the chip).
+  HF Auto-LNA is per amateur band. **RF1 / Alt RX** on the wire lands in
+  0.25.24.
 - **Password required to listen** is disabled until a listen lock can
   run without breaking a receiver page or a digital program on another
   computer. **Start voice** still uses the password.
@@ -366,6 +395,8 @@ Dummy load first.
 
 ## Contents
 
+- [What's new in 0.25.24](#whats-new-in-02524)
+- [What's new in 0.25.23](#whats-new-in-02523)
 - [What's new in 0.25.22](#whats-new-in-02522)
 - [What's new in 0.25.21](#whats-new-in-02521)
 - [What's new in 0.25.20](#whats-new-in-02520)
@@ -407,6 +438,7 @@ Dummy load first.
 - [Filters panel](#filters-panel)
 - [Band panel](#band-panel)
   - [Xvtr (transverters)](#xvtr-transverters)
+  - [Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine)
 - [Audio panel](#audio-panel)
 - [Setting up audio output](#setting-up-audio-output)
 - [Setting up your mic input](#setting-up-your-mic-input)
@@ -460,6 +492,8 @@ Dummy load first.
   - [SDRLogger+ Combo link](#sdrlogger-combo-link)
   - [CW keying over TCI](#cw-keying-over-tci)
 - [Settings → Remote](#settings--remote)
+  - [Lyra to Lyra](#lyra-to-lyra)
+  - [The browser desk](#the-browser-desk)
   - [A direct connection](#a-direct-connection)
   - [Who may connect](#who-may-connect)
   - [Password and the voice session](#password-and-the-voice-session)
@@ -697,6 +731,10 @@ the machine is already busy (dual receive, a high waterfall rate).
   updated HL2+ gateware). Adds on-board audio routing and a microphone
   input. The HL2's own headphone jack is the default, lowest-latency audio
   path.
+- **Filter board, transverter, Pico / IO board, or band-voltage amp** —
+  you do **not** pick a “station type” in Settings. Defaults already match
+  a basic radio. See
+  [Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine).
 - **BrickSDR2** — Protocol **2** only. See [Supported radios](#supported-radios)
   if Discover shows a Protocol 1 Hermes row that will not Open.
 
@@ -1534,7 +1572,9 @@ Quick band switching, in four rows:
 - **Gen** — the GEN1/2/3 general-coverage slots (below).
 - **Xvtr** — four transverter chips (defaults **2m / 70cm / 23cm** plus a
   spare). Click a chip to tune RX1 to that slot’s last RF. Full detail:
-  [Xvtr (transverters)](#xvtr-transverters).
+  [Xvtr (transverters)](#xvtr-transverters). On Protocol 1 the same row
+  has **RF1** / **Alt** (HL2 RX jack). Most stations leave **RF1**. See
+  [Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine).
 - **Ant** — Protocol 2 radios with an Alex-style front-end (ANAN-100D
   class, Brick3SDR, G2 / Saturn — **not** Hermes-class BrickSDR and
   **not** HL2). ANT chips pick the **shared TX/RX jack** (Brick3SDR:
@@ -1577,10 +1617,12 @@ display cap, not the slot editor. ~2.147 GHz is the signed-int ceiling
 (MHz), LO (MHz), error (Hz), Disable PA, RX-only. Disable PA defaults
 **on** so the Hermes Lite onboard PA stays off with a transverter in
 circuit. Clicking a chip (or QSYing into its RF range) also recalls that
-slot’s last **LNA** (Hermes Lite PGA) or **ATT** (Protocol 2 pad). Auto-LNA /
-Auto Step stay the global switch; the **number** they last left on that
-chip is what comes back. 20 m vs **2m** vs **70cm** are separate. First
-visit to a slot keeps the live value until you move the slider. PA-gain and USB-BCD follow **displayed RF**. The N2ADR / OC
+slot’s last **mode**, **LNA** (Hermes Lite PGA) or **ATT** (Protocol 2 pad),
+and whether **Auto** was on. Auto-LNA is **per HF band and per Xvtr chip**,
+not one switch for the whole radio. Xvtr chips default Auto **off**, so a
+20 m Auto-on hop onto **2m** keeps the stored 2 m LNA instead of walking
+it. Turn Auto on on 2 m if you want it there. First visit to a slot keeps
+the live mode until you change it; LNA stays live until you move the slider. PA-gain and USB-BCD follow **displayed RF**. The N2ADR / OC
 filter map uses the **IF of that slot’s RF-low** (not the live IF as
 you QSY). Otherwise a 2 m hop such as 145.675 ↔ 145.775 with a 116 MHz
 LO would cross the 10 m amateur edge at **29.7 MHz IF** and chatter the
@@ -1591,9 +1633,19 @@ an automatic TX/RX switch). The split RX/TX ports are **on that box**, not
 an extra HL2 antenna. Right-click the **2m** (or matching) chip: uncheck
 **Disable radio PA**, set **Error** about **−200…−300 Hz** (re-trim if the
 LO drifts). Turn **Enable PA** on in Settings when you want the HL2 PA into
-the pad. **Auto** on the DSP+Audio strip is Auto-LNA (lit = on, the default).
-Click Auto off for a fixed LNA, then use the LNA slider. Each Xvtr chip
-remembers its last LNA number; Auto stays one global switch.
+the pad. **Auto** on the DSP+Audio strip is Auto-LNA (lit = on). It is
+remembered **per band / per Xvtr chip**. HF bands default on; Xvtr chips
+default off. Click Auto off for a fixed LNA, then use the LNA slider.
+Each chip remembers its last LNA **and** last mode. IF on the HL2
+antenna SMA → leave **RF1**. IF on IO-board **Alt RX** → click **Alt**
+on that chip ([station types](#which-hermes-lite-station-is-mine)).
+
+**HL2 RX jack.** Protocol 1 shows **RF1** and **Alt** on this row.
+Default is **RF1** (the PA / N2ADR antenna SMA). Click **Alt** only if
+that transverter’s IF is plugged into the IO-board **Alt RX** jack.
+Pick once per chip; it is remembered. Not Protocol 2 Alex. Which chips
+to touch for your hardware:
+[Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine).
 
 **IF window.** The HL2 ADC/NCO is HF (~DC–30.72 MHz). Example: RF
 144–146 MHz with LO 116 MHz → IF 28–30 MHz (inside). RF **148** MHz at
@@ -1610,6 +1662,31 @@ IARU R3 / none) does **not** rewrite Xvtr slots. Factory defaults are US-style
 so Lyra does **not** flash “transmitting out of band” merely because you
 are on an enabled Xvtr slot. It still warns if your occupied bandwidth
 walks past that slot’s **RF low / RF high**.
+
+### Which Hermes Lite station is mine?
+
+Lyra does **not** have a Thetis-style “I2C board” checkbox that you must
+set before the radio works. Protocol 1 defaults are a **basic Hermes Lite
+2 / 2+**: main antenna SMA (**RF1**), N2ADR OC if you leave that box on,
+band voltage for a GPA100-class amp already going out on J4. You only
+click something extra if your **coax** uses a second RX jack.
+
+Find **RF1** / **Alt** on the Band dock, Xvtr row (Protocol 1 only). Find
+N2ADR and band volts in **Settings → Filters / BCD**. Band **?** → Help
+guide opens this Band chapter.
+
+| What you have | What to click in Lyra |
+|---|---|
+| **Basic HL2 or HL2+.** One antenna SMA. PureSignal or not. No Pico, no IO board, no transverter. | Nothing extra. Leave **RF1**. **Enable N2ADR / IO board** on if you have the filter board, off if you do not. PureSignal is its own panel; this jack choice does not move the PS tap. |
+| **N2ADR (and maybe PS) plus a basic transverter** on the antenna jack — IF in/out of **HF** on the transverter, that box does T/R (6 m Mini with VHF / TRX / HF / PTT). No Pico / IO board. | **Xvtr** chip for the LO (so the VFO shows 50 MHz while the radio sits on 10 m IF). Leave **RF1**. Do **not** click **Alt**. Disable PA in the slot editor unless you intentionally drive the pad with the HL2 PA. |
+| **N2ADR + Pico + IO board**, transverter IF on the rear **Alt RX** SMA, HF antenna still on **RF1** (Volker-style Mini). | HF bands: leave **RF1**. On the **2 m** (or matching) Xvtr chip, click **Alt** once. That chip remembers it. Hopping HF ↔ VHF then switches the IO-board mux the same way Thetis does. |
+| **Band voltage / BCD to an amp or antenna switch** (GPA100 on J4 pin 8, USB-BCD cable, or J3 Band Volts). Pico analog, with or without a transverter. | Nothing on **RF1** / **Alt** unless you also have station 3. Analog TX-Hz on J4 is always sent on Protocol 1 — it is **not** the N2ADR checkbox and **not** the Alt chip. **Do not** tick **HL2 Band Volts on J3** for J4 / GPA100. USB-BCD is a separate picker on the same Settings tab. |
+
+**Do not click Alt** if you have only one SMA. It does nothing useful without an IO board, and with an IO board it listens to an empty jack.
+
+Protocol 2 (Brick / ANAN) hides **RF1** / **Alt**. Use **Ant** / **RX** / **MAP** on the same row.
+
+More pin detail: [Settings → Filters / BCD](#settings--filters--bcd).
 
 **GEN1 / GEN2 / GEN3** (to the right of the band buttons) are
 **general-coverage slots** for listening outside the ham bands —
@@ -1723,12 +1800,17 @@ laid out in old Lyra's three-row arrangement:
   goes — the **HL2 jack or selected output device** (the **Out** picker), and,
   when enabled, a **VAC** PC device **and** your **TCI** clients — all from the
   single MON TX toggle (matching the reference's monitor routing).
-- **Auto / Step · Out** — on Hermes Lite 2, **Auto** is Auto-LNA (PGA).
-  On Protocol 2 the same slot is **Step** (Auto Step 0–31): confirmed
-  ADC clip → ATT **+3 dB** (cap 31); when the band clears, ATT **−1 dB**
-  toward 0, frozen while transmitting. Turning it off leaves the pad
-  where it settled. Hold / Undo knobs in **Settings → Hardware** are
-  shared. **Out** is a live output-device quick switch: click it for a
+- **Auto / Step · Out** — on Hermes Lite 2, **Auto** is Auto-LNA (PGA),
+  remembered per amateur band and per Xvtr chip (lit = on). HF defaults
+  on; a transverter chip defaults off so 20 m Auto does not follow you
+  onto 2 m and overwrite that chip’s LNA. Manual: click Auto off, then
+  the LNA slider or mouse-wheel (−12…+48 dB). The S-meter compensates,
+  so moving LNA should not jump the S-reading (extremes can differ a
+  little). On Protocol 2 the same slot is **Step** (Auto Step 0–31):
+  confirmed ADC clip → ATT **+3 dB** (cap 31); when the band clears, ATT
+  **−1 dB** toward 0, frozen while transmitting. Turning it off leaves
+  the pad where it settled. Hold / Undo knobs in **Settings → Hardware**
+  are shared. **Out** is a live output-device quick switch: click it for a
   pop-up list of the **HL2 audio jack** + your **PC output devices** (the
   current one marked), and pick one to move RX audio — and the monitor — there
   live. The full audio setup (host API, exclusive mode, VAC) still lives in
@@ -4171,6 +4253,11 @@ tuning** lives here. On an **HL2 / HL2+** there are **two analog-voltage
 paths** plus OC filters — they are not the same pin. Protocol 2 radios
 (Brick SDR, ANAN) do not use the Pico I2C analog path.
 
+If you only need “what do I turn on for *my* Hermes Lite,” start at
+[Which Hermes Lite station is mine?](#which-hermes-lite-station-is-mine)
+(Band dock **RF1** / **Alt**, N2ADR, GPA100 / J4, basic vs IO-board
+transverter). This tab is the pin-level detail.
+
 | Path | Pin | How Lyra turns it on | Same as |
 |------|-----|----------------------|---------|
 | Gateware Band Volts | **J3** (fan PWM / GPIO04_Fan) | **HL2 Band Volts on J3** checkbox | DeskHPSDR RX → *HL2 Band Volts / Dither Bit*; MI0BOT Thetis *HL2 Band Volts* |
@@ -5449,6 +5536,192 @@ of whichever colour mode you choose.
 ---
 
 ## Settings → Remote
+
+This tab holds two desks. **[Lyra to Lyra](#lyra-to-lyra)** is a second
+copy of Lyra on the laptop. The
+**[browser desk](#the-browser-desk)** is the separate page.
+
+### Lyra to Lyra
+
+Both computers run this same version of Lyra. This 0.25.24 build is
+a beta of that link. The shack PC is the **host** and stays on the
+radio. The laptop is the **desk** and does not open a local radio.
+The host stays **Open**. HPSDR UDP stays on the shack LAN. The shack
+panel stays live. Host unkey, TX inhibit, and TX timeout win. The
+host can **Drop desk**.
+
+On the laptop, the header reads **Host rig**, the MagicDNS name, and
+the rig label. Toolbar **Start** stays disabled while this computer
+is attached as the desk. The laptop leaves **Discover** and
+**Add-by-IP** alone, and it sends no UDP to the radio.
+
+#### Tailscale
+
+Reachability is Tailscale Personal. Create an account and install it
+on both PCs from
+[tailscale.com/download](https://tailscale.com/download). The account
+step is also at
+[login.tailscale.com/start](https://login.tailscale.com/start). Sign
+both computers in to the same personal account (a personal email such
+as Gmail). An address on your own domain starts an Enterprise trial.
+Leave Tailscale running. Both machines should show in the Tailscale
+machines list. Lyra leaves the Tailscale Windows service alone.
+
+On the shack, the read-only name on **Settings → Remote** is the
+MagicDNS name. Use **Copy**, then paste that name on the laptop. A
+public IP is refused. A blank name is refused. Lyra listens only on
+the Tailscale IPv4 address (100.64.0.0/10). Leave Tailscale Funnel
+off. Do not port-forward. Lyra does not listen on the open internet.
+
+#### Where to click
+
+Open **Settings → Remote**, group **Lyra to Lyra**. **Rig → Remote…**
+opens that page.
+
+On the shack: the read-only Tailscale name, **Copy**, **Allow desk**,
+and **Drop desk**. Turn **Allow desk** on after you copy the name.
+Until then, Lyra is waiting with the name ready to copy.
+
+On the laptop: paste the shack name into the box whose placeholder is
+*Paste the shack Tailscale name*, then **Attach to host**. **Detach**
+is the way off. The name in the two boxes is the shack's name.
+
+The password is shared with the browser Lyra Remote. Save it once on
+the shack: **Settings → Remote → Password**, then **Password**,
+**Confirm**, and **Save password**. The phrase rules are in
+[Password and the voice session](#password-and-the-voice-session).
+
+On the laptop, type that phrase only after **Attach to host**, in the
+box whose placeholder is **Remote password**, on the same row as
+**Start voice** and **End voice**. Lyra clears that box when voice
+starts. The phrase is not kept on the laptop. The password stays off
+the wire.
+
+**Start voice** stays grey until the laptop is attached. On the shack,
+**Start voice** stays grey.
+
+#### The three connections
+
+Three connections, all on the Tailscale address:
+
+- **Control**, port **40111**. This is the path that unkeys.
+- **Receiver and microphone audio**, port **40112**.
+- **Spectrum**, port **40113**.
+
+One desk at a time. A second laptop is told the shack is busy.
+
+Windows may ask to allow Lyra on private networks for the audio and
+spectrum ports. Allow private. Do not port-forward.
+
+#### From the shack to the laptop
+
+On attach the host sends its current radio state, and the laptop
+follows it. Frequency, band, antenna, and drive stay the shack's at
+connect.
+
+Receiver audio is a mono tap taken before the shack volume and before
+binaural, so the shack **Vol** and **MUTE** leave the laptop level
+alone. The laptop's own volume sets the laptop level.
+
+The spectrum is the host picture, full span. The laptop zooms on its
+own screen. **60 Hz** is the supported picture. A 120 Hz picture and
+the RX2 spectrum come later.
+
+S-meter, forward power, and SWR come from the host.
+
+#### From the laptop, while you listen
+
+While attached, these follow the laptop onto the host: band,
+frequency, mode, filter, RIT, Split, AGC, NR, squelch, drive, NB,
+BIN, ANF, NNR, LMS, APF, TX bandwidth, antenna, and SUB.
+
+**BIN** affects the shack speakers only.
+
+#### Voice
+
+Choose the laptop microphone on **Settings → Remote → Laptop
+microphone**: **Windows default**, or a named input such as
+Microphone High Definition. While this computer is attached as the
+desk, the TX panel **Mic** control sets the laptop microphone level.
+Type the password, then **Start voice**.
+Microphone audio goes to the host and passes through the host TX rack
+(EQ, leveler, speech, combinator, plate). The TX panel **Mic** control
+is the laptop microphone level. PureSignal math stays on the shack.
+The laptop **PureSignal** and **Amp View** panels show the shack
+correction. From the desk, **PureSignal ON** and **2-tone** ask the
+host. Start voice before **2-tone**. Voice-cal noise and the coupler
+attestation stay on the shack (**Settings → TX**).
+
+During transmit, the laptop panadapter is that host transmit picture,
+after the rack and before the **Drive** slider. The **Drive** slider
+sets voice power. **Tune** uses the host Tune setting: **Use TX Drive
+slider**, **Use Tune slider**, or **Use fixed drive**.
+
+A silent link unkeys in about 300 ms. The number on the status line
+is the worst ping, held about 3 seconds. Listening stays up past the
+transmit gates.
+
+**RX**, **CW**, and **Voice** sit beside that number. **RX** stays lit
+while the desk is attached. **CW** lights when the latest ping is under
+150 ms. **Voice** lights when the latest ping is under 200 ms. Dim
+means out of range.
+
+*The path is too slow to transmit.* means a ping crossed that gate.
+*The link went quiet.* means the session dropped.
+
+#### Digital apps on the desk
+
+JTDX, MSHV, and Open SSTV on the laptop connect to TCI on this desk,
+at `127.0.0.1` port `40001`. Receiver audio flows while the desk is
+attached. Start voice before the app transmits. The host keys the
+radio. The TX panel **Mic** slider is not applied to that app audio.
+WSJT-X is not this path, and a virtual audio cable is not required.
+The port stays on this computer. It is not opened to the internet,
+and Tailscale Funnel stays off.
+
+#### The path you need
+
+The picture and the receiver audio travel shack to laptop, so the
+number that matters is the shack's **upload** and the laptop's
+**download**.
+
+- **Preferred:** 100 Mbps in that direction, and a round trip under
+  40 ms.
+- **Supported for listening:** 25 Mbps in that direction, and a round
+  trip under 100 ms. That holds the 60 Hz picture and the receiver
+  audio.
+- **Under 25 Mbps** is not supported. A phone tether sits under
+  that floor. CW transmit wants a round trip under 150 ms. Other
+  transmit wants under 200 ms. Listening continues above that. A
+  silent link unkeys in about 300 ms. The desk shows a short
+  peak-held ping and **RX**, **CW**, and **Voice** lamps for the
+  latest ping.
+
+Lyra watches the round trip and whether the picture is arriving
+whole.
+
+#### Desk profile
+
+**Save desk profile** and **Recall on host** sit on this tab. They
+work while you are attached as the desk.
+
+**Save desk profile** keeps the laptop's filters and transmit rack on
+the laptop. **Recall on host** applies that set on the shack for this
+session, and also applies AGC, NR, NNR, NB, ANF, LMS, APF, squelch,
+RIT on/off, and CW pitch for the session. The shack's saved profile
+stays as it was. **End voice**, **Detach**, or **Drop desk** puts the
+shack's own filters, rack, and those receiver settings back. The
+**Mic** slider level is part of the laptop profile and is applied on
+the laptop.
+
+Browser Lyra Remote (TCI) is a separate path, in
+[The browser desk](#the-browser-desk). One transmit owner: a browser
+voice session and this link take the microphone one at a time.
+
+If this beta misbehaves, reinstall the GitHub **v0.25.22** installer.
+Settings stay. That build has no Lyra to Lyra.
+
+### The browser desk
 
 The browser desk is a separate package, [Lyra Remote](https://github.com/N8SDR1/Lyra-Remote). Download it from [Lyra Remote releases](https://github.com/N8SDR1/Lyra-Remote/releases). How the page works is in the [Lyra Remote wiki](https://github.com/N8SDR1/Lyra-Remote/wiki). Lyra does not host the page. On the computer you are sitting at, double-click **Open Lyra Remote.cmd**. The browser opens `http://127.0.0.1:4173/`. That address is the page. The box at the top of the page is Lyra, `ws://` plus the radio computer and the TCI port from **Settings → Network** (default `40001`).
 
