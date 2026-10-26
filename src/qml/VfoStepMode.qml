@@ -30,6 +30,9 @@ RowLayout {
         id: stepBox
         Layout.preferredWidth: sm.compact ? 84 : 92
         model: sm.panel.vfoStepLabels
+        helpTitle: sm.isB ? qsTr("Step B") : qsTr("Step")
+        helpText: sm.isB ? qsTr("Click/wheel VFO B step for this mode.")
+                         : qsTr("Click/wheel VFO step for this mode. Remembered per mode.")
         currentIndex: sm.panel.vfoStepIndex(sm.isB
             ? Prefs.vfoStepHzRx2(Prefs.modeRx2)
             : Prefs.vfoStepHz(Prefs.mode))
@@ -53,6 +56,10 @@ RowLayout {
         visible: sm.showMode
         Layout.preferredWidth: sm.compact ? 70 : 78
         model: sm.panel.modeList
+        helpTitle: sm.isB ? qsTr("Mode B") : qsTr("Mode")
+        helpText: sm.isB
+            ? qsTr("Demod mode for VFO B. Filter bandwidths are remembered per mode.")
+            : qsTr("Demod mode for VFO A. Filter bandwidths are remembered per mode.")
         currentIndex: Math.max(0, sm.panel.modeList.indexOf(sm.isB ? Prefs.modeRx2 : Prefs.mode))
         onActivated: {
             if (sm.isB) Prefs.modeRx2 = sm.panel.modeList[currentIndex]

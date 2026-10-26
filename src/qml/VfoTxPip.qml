@@ -29,8 +29,10 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         onClicked: pip.assign()
-        ToolTip.visible: containsMouse && Prefs.tooltipsEnabled
-        ToolTip.delay: 400
-        ToolTip.text: pip.tipText
+        LyraHoverHelp {
+            title: qsTr("TX")
+            text: pip.tipText
+            hovered: parent.containsMouse
+        }
     }
 }

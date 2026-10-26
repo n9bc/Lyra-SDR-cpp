@@ -33,6 +33,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    void tipBelow(QWidget *w);
     QWidget *makeValueBox(const QString &key, QLabel **valueOut);
     void buildFollowButton();
     void refreshFollowLabel();

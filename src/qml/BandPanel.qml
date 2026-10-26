@@ -126,10 +126,17 @@ Rectangle {
         property color activeFill:   "#260808"
         property color activeBorder: "#ff3344"
         property color activeText:   "#ffcc88"
+        property string helpText: root.bandTip
+        LyraHoverHelp {
+            title: cb.text
+            text: cb.helpText
+            hovered: cb.hovered && cb.helpText.length > 0
+        }
         Layout.preferredWidth: 44
         Layout.preferredHeight: 22
         padding: 0
         focusPolicy: Qt.NoFocus
+        ToolTip.visible: false
         background: Rectangle {
             radius: 4
             color: cb.chipActive ? cb.activeFill
@@ -168,10 +175,17 @@ Rectangle {
     }
 
     component RowLabel : Label {
+        property string tip: ""
         color: "#8fa6ba"
         font.bold: true
         Layout.preferredWidth: 34
         Layout.alignment: Qt.AlignVCenter
+        HoverHandler { id: rowTipHov }
+        LyraHoverHelp {
+            title: text
+            text: tip
+            hovered: tip.length > 0 && rowTipHov.hovered
+        }
     }
 
     ColumnLayout {
@@ -183,18 +197,23 @@ Rectangle {
         // ── Row 1: amateur bands ──────────────────────────────────────
         RowLayout {
             spacing: 4
-            RowLabel { text: qsTr("Ham") }
+            RowLabel {
+                text: qsTr("Ham")
+                tip: root.bandTip
+            }
             Repeater {
                 model: Bands.amateur()
                 delegate: ChipButton {
                     required property var modelData
                     required property int index
                     text: modelData.name
+                    // HL2 / HL2+ (Protocol 1) has no native 6 m — that is
+                    // an Xvtr chip.  Brick / ANAN (P2) keep the Ham 6 m
+                    // button.  GitHub #24.
+                    visible: modelData.name !== "6m" || FrontEnd.p2Active
                     bandKey: modelData.name
                     chipActive: index === root.activeBand
                     chipSub: Stream.subEnabled && index === root.activeBandRx2
-                    ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                    ToolTip.text: root.bandTip
                     onClicked: root.goBand(modelData.name, modelData.hz, false)
                     MouseArea {
                         anchors.fill: parent
@@ -232,6 +251,7 @@ Rectangle {
                 text: qsTr("CB")
                 visible: Prefs.cbBandEnabled
                 Layout.preferredWidth: 22
+                tip: root.bandTip
             }
             Repeater {
                 model: Bands.cb()
@@ -243,8 +263,6 @@ Rectangle {
                     bandKey: "cb_" + modelData.name
                     chipActive: index === root.activeCb
                     chipSub: Stream.subEnabled && index === root.activeCbRx2
-                    ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                    ToolTip.text: root.bandTip
                     onClicked: root.goBand("cb_" + modelData.name,
                                            modelData.hz, false)
                     MouseArea {
@@ -278,7 +296,10 @@ Rectangle {
         // ── Row 2: broadcast (SW) bands ───────────────────────────────
         RowLayout {
             spacing: 4
-            RowLabel { text: qsTr("BC") }
+            RowLabel {
+                text: qsTr("BC")
+                tip: root.bandTip
+            }
             Repeater {
                 model: Bands.broadcast()
                 delegate: ChipButton {
@@ -288,8 +309,6 @@ Rectangle {
                     bandKey: "bc_" + modelData.name
                     chipActive: index === root.activeBc
                     chipSub: Stream.subEnabled && index === root.activeBcRx2
-                    ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                    ToolTip.text: root.bandTip
                     onClicked: root.goBand("bc_" + modelData.name,
                                            modelData.hz, false)
                     MouseArea {
@@ -326,7 +345,10 @@ Rectangle {
         // when those features are built.)
         RowLayout {
             spacing: 4
-            RowLabel { text: qsTr("Gen") }
+            RowLabel {
+                text: qsTr("Gen")
+                tip: qsTr("GEN1–3 recall that slot. Right-click a GEN chip to reset it. TIME cycles WWV / WWVH / CHU (right-click for the list).")
+            }
             Repeater {
                 model: 3
                 delegate: ChipButton {
@@ -339,13 +361,6 @@ Rectangle {
                     activeBorder: "#7ff7ff"
                     activeText:   "#d8fbff"
                     onClicked: Gen.recall(slot)
-                    ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
-                    ToolTip.text: "GEN" + slot + ":  "
-                        + (Gen.slotFreq(slot) / 1.0e6).toFixed(3) + " MHz "
-                        + Gen.slotMode(slot)
-                        + (Gen.slotLabel(slot) !== ""
-                           ? "  — " + Gen.slotLabel(slot) : "")
-                        + qsTr("\n(right-click to reset)")
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.RightButton
@@ -372,12 +387,15 @@ Rectangle {
                 Layout.preferredWidth: 50
                 chipActive: false
                 onClicked: {
+                    Gen.deactivate()
                     var msg = Time.cycleNext()
                     if (msg !== "") Status.show(msg, 2500)
                 }
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("HF time stations\n"
-                    + "Click to cycle · right-click for the full list")
+                LyraHoverHelp {
+                    title: qsTr("TIME")
+                    text: qsTr("HF time stations. Click to cycle · right-click for the full list.")
+                    hovered: timeBtn.hovered
+                }
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.RightButton
@@ -520,7 +538,10 @@ Rectangle {
         // ── Row 4: transverter slots (RF dial, IF on the radio) ──────
         RowLayout {
             spacing: 4
-            RowLabel { text: qsTr("Xvtr") }
+            RowLabel {
+                text: qsTr("Xvtr")
+                tip: qsTr("Click: tune RX1 to this transverter. Shift+click: SUB. Right-click: edit the slot.")
+            }
             Repeater {
                 model: 4
                 delegate: ChipButton {
@@ -539,9 +560,6 @@ Rectangle {
                     activeFill: "#082026"
                     activeBorder: "#34d0ff"
                     activeText: "#b8f0ff"
-                    ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                    ToolTip.text: qsTr("Click: tune RX1 to this transverter\n"
-                                     + "Shift+click: SUB · right-click: edit slot")
                     onClicked: {
                         if (!Xvtr.slotEnabled(index)) {
                             xvtrEditor.openFor(index)
@@ -572,6 +590,7 @@ Rectangle {
             RowLabel {
                 visible: !FrontEnd.p2Active
                 text: qsTr("RX")
+                tip: qsTr("RF1 — HL2 antenna / PA / N2ADR SMA (default). Alt — IO-board RX SMA only (split IF). Does not change J4 band voltage.")
             }
             ChipButton {
                 visible: !FrontEnd.p2Active
@@ -579,8 +598,6 @@ Rectangle {
                 Layout.preferredWidth: 44
                 chipActive: Stream.hl2RxPort === 0
                 onClicked: Stream.setHl2RxPort(0)
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("RF1 — HL2 antenna / PA / N2ADR jack (default).\nLeave this for a basic radio or a transverter on that SMA.\nDoes not change J4 band voltage (GPA100). Band Help: Which Hermes Lite station.")
             }
             ChipButton {
                 visible: !FrontEnd.p2Active
@@ -588,8 +605,6 @@ Rectangle {
                 Layout.preferredWidth: 44
                 chipActive: Stream.hl2RxPort === 2
                 onClicked: Stream.setHl2RxPort(2)
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("Alt RX — IO-board SMA only. Click once on the Xvtr chip\nwhose IF is on Alt RX (remembered). Do not use with one SMA.\nDoes not change J4 band voltage. Band Help: Which Hermes Lite station.")
             }
             Item {
                 visible: !FrontEnd.p2Active
@@ -601,30 +616,25 @@ Rectangle {
             RowLabel {
                 visible: P2Bridge.hasAlexAntennaSelect
                 text: qsTr("Ant")
+                tip: qsTr("ANT 1 / 2 / 3 — shared TX/RX jack, remembered per band.")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 1
                 text: "1"
                 chipActive: P2Bridge.trxAntenna === 1
                 onClicked: P2Bridge.trxAntenna = 1
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("ANT 1 — shared TX/RX jack 1 (per band)")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 2
                 text: "2"
                 chipActive: P2Bridge.trxAntenna === 2
                 onClicked: P2Bridge.trxAntenna = 2
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("ANT 2 — shared TX/RX jack 2 (per band)")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && P2Bridge.trxAntennaCount >= 3
                 text: "3"
                 chipActive: P2Bridge.trxAntenna === 3
                 onClicked: P2Bridge.trxAntenna = 3
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("ANT 3 — shared TX/RX jack 3 (per band)")
             }
             Item {
                 visible: P2Bridge.hasAlexAntennaSelect
@@ -633,6 +643,7 @@ Rectangle {
             RowLabel {
                 visible: P2Bridge.hasAlexAntennaSelect
                 text: qsTr("RX")
+                tip: qsTr("TRX = selected ANT. BYPS = bypass. Ext/RX2 = RX-only. XVTR = transverter RX. MAP assigns ANT/RX per amateur band.")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 1) !== 0
@@ -640,8 +651,6 @@ Rectangle {
                 Layout.preferredWidth: 44
                 chipActive: P2Bridge.rxInput === 0
                 onClicked: P2Bridge.rxInput = 0
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("Receive on the selected ANT jack")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 2) !== 0
@@ -649,8 +658,6 @@ Rectangle {
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 1
                 onClicked: P2Bridge.rxInput = 1
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("RX Bypass jack (RX-only, front-end bypassed)")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 4) !== 0
@@ -658,10 +665,6 @@ Rectangle {
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 2
                 onClicked: P2Bridge.rxInput = 2
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: P2Bridge.rxExt1Label === "RX2"
-                        ? qsTr("RX2 RX-only jack (rear panel)")
-                        : qsTr("EXT1 RX-only jack")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect && (P2Bridge.rxJackMask & 8) !== 0
@@ -669,8 +672,6 @@ Rectangle {
                 Layout.preferredWidth: 48
                 chipActive: P2Bridge.rxInput === 3
                 onClicked: P2Bridge.rxInput = 3
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("Transverter RX jack")
             }
             ChipButton {
                 visible: P2Bridge.hasAlexAntennaSelect
@@ -678,8 +679,6 @@ Rectangle {
                 Layout.preferredWidth: 48
                 chipActive: antMapPopup.visible
                 onClicked: antMapPopup.open()
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                ToolTip.text: qsTr("Assign ANT and RX jack for every amateur band")
             }
         }
     }

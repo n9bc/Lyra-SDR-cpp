@@ -60,9 +60,12 @@ Rectangle {
         implicitHeight: 24
         checkable: true
         font.pixelSize: 12
-        ToolTip.text: note
-        ToolTip.visible: (hovered && note.length > 0) && Prefs.tooltipsEnabled
-        ToolTip.delay: 400
+        ToolTip.visible: false
+        LyraHoverHelp {
+            title: btn.text
+            text: btn.note
+            hovered: btn.hovered && btn.note.length > 0
+        }
         background: Rectangle {
             radius: 3
             color: btn.checked ? "#3a2a14" : "#161e28"
@@ -106,9 +109,21 @@ Rectangle {
             spacing: 8
             Layout.fillWidth: true
 
-            Label { text: FrontEnd.label; color: root.cMuted }
+            Label {
+                text: FrontEnd.label; color: root.cMuted
+                HoverHandler { id: feLblHov }
+                LyraHoverHelp {
+                    title: FrontEnd.label
+                    text: lnaSlider.helpText
+                    hovered: feLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: lnaSlider
+                helpTitle: FrontEnd.label
+                helpText: FrontEnd.p2Active
+                    ? qsTr("ATT — Protocol 2 ADC step attenuation, 0…31 dB, remembered per band. Higher = more pad. Auto Step walks this pad on overload. The S-meter adds ATT so the reading stays true-to-source.")
+                    : qsTr("LNA — RF input gain on the HL2 AD9866 PGA, −12…+48 dB. Higher = more sensitivity; back off on strong bands. Auto rides the overload edge. S-meter compensates.")
                 // 120 -> 100: the A-ATT state cue is wider than the 10 px
                 // overload dot it replaces, which pushed the Out button off
                 // the right edge of row 1.  Trimmed here and on Vol rather
@@ -118,14 +133,6 @@ Rectangle {
                 stepSize: 1; snapMode: Slider.SnapAlways
                 value: FrontEnd.value
                 onMoved: FrontEnd.setValue(value)
-                ToolTip.text: FrontEnd.p2Active
-                    ? qsTr("ATT — Protocol 2 ADC step attenuation, 0…31 dB, remembered per band.\n"
-                        + "Higher = more pad (less ADC gain). Enable Auto Step to walk this pad.\n"
-                        + "The S-meter adds ATT so the reading stays true-to-source as the pad moves.")
-                    : qsTr("LNA — RF input gain on the HL2's AD9866 PGA, −12…+48 dB.\n"
-                        + "Higher = more sensitivity; back off on strong bands to avoid ADC overload.\n"
-                        + "The S-meter compensates automatically, so changing LNA won't shift the reading.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
                 WheelHandler {
                     onWheel: (ev) => FrontEnd.setValue(
                         FrontEnd.value + (ev.angleDelta.y > 0 ? 1 : -1))
@@ -160,18 +167,18 @@ Rectangle {
                     elide: Text.ElideRight
                     clip: true
                 }
-                ToolTip.text: FrontEnd.p2Active
-                    ? qsTr("Auto Step — walks the 0…31 dB ADC pad on overload "
-                        + "(+3 dB after ~400 ms of clipping, −1 dB toward 0 when the band clears).\n"
-                        + "Frozen while transmitting. Turning Auto off leaves the pad where it settled.\n"
-                        + "Not Auto-LNA (that is Hermes Lite 2 only).")
-                    : qsTr("Auto-LNA — backs the LNA off on ADC overload and "
-                        + "creeps it back when the band clears (rides the overload edge).\n"
-                        + "Turning Auto off leaves the LNA where it settled.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: FrontEnd.p2Active ? qsTr("Step") : qsTr("Auto")
+                    text: FrontEnd.p2Active
+                        ? qsTr("Auto Step walks the 0…31 dB ADC pad on overload.")
+                        : qsTr("Auto-LNA rides the HL2 PGA on the overload edge.")
+                    hovered: autoBtn.hovered
+                }
             }
             LyraComboBox {
                 id: adcCombo
+                helpTitle: qsTr("ADC")
+                helpText: qsTr("Which Protocol 2 ADC this receiver uses.")
                 visible: FrontEnd.p2Active
                 Layout.preferredWidth: 58
                 // Compact pads: the roomy 8/20 default leaves 30 px, too
@@ -181,9 +188,6 @@ Rectangle {
                 model: [qsTr("ADC1"), qsTr("ADC2")]
                 currentIndex: FrontEnd.adcIndex
                 onActivated: FrontEnd.setAdcIndex(currentIndex)
-                ToolTip.text: qsTr("ADC feeding DDC0. The attenuation and overload "
-                    + "indicator follow the selected ADC.")
-                ToolTip.visible: hovered && Prefs.tooltipsEnabled
             }
             // ADC-overload ladder, or the auto-attenuator state cue.
             //
@@ -226,35 +230,40 @@ Rectangle {
                                                                : "#33424e"
                 }
 
-                ToolTip.text: FrontEnd.autoEnabled
-                    ? (FrontEnd.p2Active
-                       ? qsTr("A-ATT — Auto Step is walking the 0…31 dB ADC pad. "
-                           + "Overload alarm is hidden while it is engaged.")
-                       : qsTr("A-ATT — Auto-LNA is managing the HL2 PGA. "
-                           + "Overload alarm is hidden while it is engaged."))
-                    : (FrontEnd.p2Active
-                       ? qsTr("G2 ADC overload — amber: clipped recently; red: "
-                           + "sustained clipping. Selected ADC peak: %1 / 32768.")
-                           .arg(FrontEnd.adcPeak)
-                       : qsTr("ADC overload — amber: the front end clipped "
-                        + "recently and is settling. Red: sustained clipping. "
-                        + "Reduce LNA or enable Auto."))
-                ToolTip.visible: (ovLampMa.containsMouse) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: FrontEnd.autoEnabled ? qsTr("A-ATT") : qsTr("Overload")
+                    text: FrontEnd.autoEnabled
+                        ? (FrontEnd.p2Active
+                           ? qsTr("A-ATT — Auto Step is walking the 0…31 dB ADC pad. Overload alarm is hidden while it is engaged.")
+                           : qsTr("A-ATT — Auto-LNA is managing the HL2 PGA. Overload alarm is hidden while it is engaged."))
+                        : (FrontEnd.p2Active
+                           ? qsTr("G2 ADC overload — amber: clipped recently; red: sustained clipping. Selected ADC peak: %1 / 32768.")
+                               .arg(FrontEnd.adcPeak)
+                           : qsTr("ADC overload — amber: clipped recently; red: sustained. Reduce LNA or enable Auto."))
+                    hovered: ovLampMa.containsMouse
+                }
                 MouseArea { id: ovLampMa; anchors.fill: parent; hoverEnabled: true }
             }
 
             Item { width: 12 }
 
-            Label { text: qsTr("AF"); color: root.cMuted }
+            Label {
+                text: qsTr("AF"); color: root.cMuted
+                HoverHandler { id: afLblHov }
+                LyraHoverHelp {
+                    title: qsTr("AF")
+                    text: afSlider.helpText
+                    hovered: afLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: afSlider
+                helpTitle: qsTr("AF")
+                helpText: qsTr("AF makeup gain (0…+40 dB) — pre-Volume output trim. Set a comfortable level here, then ride Vol on top.")
                 Layout.preferredWidth: 76
                 from: 0; to: 40; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.afGainDb
                 onMoved: WdspEngine.setAfGainDb(value)
-                ToolTip.text: qsTr("AF makeup gain (0…+40 dB) — pre-Volume output "
-                    + "trim. Set a comfortable level here, then ride Vol on top.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { text: "+" + Math.round(WdspEngine.afGainDb) + qsTr(" dB")
                     color: root.cText; font.family: "Consolas"
@@ -263,9 +272,19 @@ Rectangle {
             Item { width: 10 }
 
             // ── Volume + MUTE — LIVE (RX1) ──
-            Label { text: qsTr("Vol"); color: root.cMuted }
+            Label {
+                text: qsTr("Vol"); color: root.cMuted
+                HoverHandler { id: volLblHov }
+                LyraHoverHelp {
+                    title: qsTr("Vol")
+                    text: volSlider.helpText
+                    hovered: volLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: volSlider
+                helpTitle: qsTr("Vol")
+                helpText: qsTr("RX1 volume. MUTE next to it silences without moving this slider.")
                 // Shorten when Vol2 is on the row so MUTE/Bal still fit.
                 Layout.preferredWidth: 70
                 from: 0.0; to: 1.0
@@ -287,19 +306,31 @@ Rectangle {
                 Layout.preferredWidth: 44
             }
             LyraButton {
+                id: muteBtn
                 text: WdspEngine.muted ? qsTr("MUTED") : qsTr("MUTE")
                 checkable: true
                 checked: WdspEngine.muted
                 onToggled: WdspEngine.setMuted(checked)
                 implicitWidth: 66; implicitHeight: 24
-                ToolTip.text: qsTr("Silence output without changing the Volume slider.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: qsTr("MUTE")
+                    text: qsTr("Silence RX1 without moving the volume slider.")
+                    hovered: muteBtn.hovered
+                }
             }
 
             Label {
                 text: qsTr("Vol2"); color: root.cMuted
+                HoverHandler { id: vol2LblHov }
+                LyraHoverHelp {
+                    title: qsTr("Vol2")
+                    text: qsTr("RX2 volume. MUTE2 silences without moving this slider.")
+                    hovered: vol2LblHov.hovered
+                }
             }
             LyraSlider {
+                helpTitle: qsTr("Vol2")
+                helpText: qsTr("RX2 volume. MUTE2 silences without moving this slider.")
                 Layout.preferredWidth: 70
                 from: 0.0; to: 1.0
                 value: WdspEngine.volumeRx2
@@ -320,30 +351,41 @@ Rectangle {
                 Layout.preferredWidth: 44
             }
             LyraButton {
+                id: mute2Btn
                 text: WdspEngine.mutedRx2 ? qsTr("MUTED") : qsTr("MUTE2")
                 checkable: true
                 checked: WdspEngine.mutedRx2
                 onToggled: WdspEngine.setMutedRx2(checked)
                 implicitWidth: 66; implicitHeight: 24
-                ToolTip.text: qsTr("Silence RX2 without changing Vol2.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: qsTr("MUTE2")
+                    text: qsTr("Silence RX2 without moving the Vol2 slider.")
+                    hovered: mute2Btn.hovered
+                }
             }
 
             Item { width: 10 }
 
-            Label { text: qsTr("Bal"); color: root.cMuted }
+            Label {
+                text: qsTr("Bal"); color: root.cMuted
+                HoverHandler { id: balLblHov }
+                LyraHoverHelp {
+                    title: qsTr("Bal")
+                    text: balSlider.helpText
+                    hovered: balLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: balSlider
+                helpTitle: qsTr("Bal")
+                helpText: root.subOn
+                    ? qsTr("Pan RX1 (left) vs RX2 (right). Centre = both equal; snaps to centre.")
+                    : qsTr("Stereo balance — pan left/right. Centre = both equal; snaps to centre near the middle.")
                 Layout.preferredWidth: 76
                 from: -1.0; to: 1.0
                 value: WdspEngine.balance
                 // Snap to dead-centre near 0 so it's easy to recentre.
                 onMoved: WdspEngine.setBalance(Math.abs(value) < 0.06 ? 0.0 : value)
-                ToolTip.text: root.subOn
-                    ? qsTr("Pan RX1 (left) vs RX2 (right). Centre = both equal; snaps to centre.")
-                    : qsTr("Stereo balance — pan the audio left/right "
-                        + "(centre = both channels equal; snaps to centre near the middle).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
 
             Item { width: 10 }
@@ -371,16 +413,16 @@ Rectangle {
                     elide: Text.ElideRight
                     clip: true
                 }
-                ToolTip.text: qsTr("Monitor — hear your own processed TX audio "
-                    + "(post-rack: Speech / EQ / Combinator / Plating) on the "
-                    + "headphone jack while you transmit. It's your voice through "
-                    + "the DSP rack, before the radio's corrective ALC and TX "
-                    + "bandpass — set the level with the Monitor slider. "
-                    + "(HL2 jack now; a separate PC monitor device comes later.)")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: qsTr("MON TX")
+                    text: qsTr("Hear your processed TX on the jack. Slider sets level.")
+                    hovered: monBtn.hovered
+                }
             }
             LyraSlider {
                 id: monSlider
+                helpTitle: qsTr("MON TX")
+                helpText: qsTr("Hear your processed TX on the jack. Slider sets level.")
                 Layout.preferredWidth: 72
                 from: 0.0; to: 1.0
                 enabled: WdspEngine.monEnabled
@@ -393,8 +435,6 @@ Rectangle {
                         WdspEngine.setMonVolume(Math.max(0.0, Math.min(1.0, nv)))
                     }
                 }
-                ToolTip.text: qsTr("Monitor level — how loud your own TX audio is in the monitor.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label {
                 text: WdspEngine.monVolume <= 0.0
@@ -424,14 +464,17 @@ Rectangle {
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
                     clip: true }
-                ToolTip.text: {
-                    var d = WdspEngine.audioOutputDevices()
-                    var i = WdspEngine.audioDeviceIndex
-                    return qsTr("Audio output: ")
-                         + ((i >= 0 && i < d.length) ? d[i] : "?")
-                         + qsTr(" — click to switch (full setup in Settings → Audio).")
+                LyraHoverHelp {
+                    title: qsTr("Out")
+                    text: {
+                        var d = WdspEngine.audioOutputDevices()
+                        var i = WdspEngine.audioDeviceIndex
+                        return qsTr("Out: ")
+                             + ((i >= 0 && i < d.length) ? d[i] : "?")
+                             + qsTr(" — click to switch (Settings → Audio).")
+                    }
+                    hovered: outBtn.hovered
                 }
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
                 // #164 — styled list popup: a titled dark panel with one row
                 // per device, the current one ▶-marked / accented, hover
                 // highlight, and an as-needed scrollbar.  Reads the same
@@ -502,7 +545,15 @@ Rectangle {
             spacing: 4
             Layout.fillWidth: true
 
-            Label { text: qsTr("DSP"); color: root.cAccent; font.bold: true }
+            Label {
+                text: qsTr("DSP"); color: root.cAccent; font.bold: true
+                HoverHandler { id: dspLblHov }
+                LyraHoverHelp {
+                    title: qsTr("DSP")
+                    text: qsTr("NB impulse blanker · BIN binaural · NR EMNR · NNR neural · ANF auto-notch · LMS enhancer · SQ squelch · APF CW peak · NF manual notches (right-click spectrum). Strength sliders appear when a block is on. NR-C is captured-profile NR (📷 Cap).")
+                    hovered: dspLblHov.hovered
+                }
+            }
 
             DspToggle {
                 text: "NB"
@@ -599,7 +650,14 @@ Rectangle {
                     anchors.centerIn: parent
                     spacing: 6
                     Label { text: qsTr("AGC"); color: root.cAccent; font.bold: true
-                            anchors.verticalCenter: parent.verticalCenter }
+                            anchors.verticalCenter: parent.verticalCenter
+                            HoverHandler { id: agcLblHov }
+                            LyraHoverHelp {
+                                title: qsTr("AGC")
+                                text: qsTr("Left-click: cycle Off → Fast → Med → Slow. Wheel: threshold ±1 dBFS. Right-click: type it. Lower (more negative) = more weak-signal gain.")
+                                hovered: agcLblHov.hovered || agcMa.containsMouse
+                            }
+                    }
                     Label { text: WdspEngine.agcMode.toUpperCase()
                             color: root.cAccent; font.family: "Consolas"; font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
@@ -629,12 +687,6 @@ Rectangle {
                         var i = order.indexOf(WdspEngine.agcMode)
                         WdspEngine.setAgcMode(order[(i + 1) % order.length])
                     }
-                    ToolTip.text: qsTr("Left-click: cycle AGC (Off → Fast → Med → Slow).\n"
-                        + "Wheel: nudge the AGC threshold ±1 dBFS.\n"
-                        + "Right-click: type an exact threshold.\n"
-                        + "Lower (more negative) = more weak-signal gain; higher = less.")
-                    ToolTip.visible: (containsMouse) && Prefs.tooltipsEnabled
-                    ToolTip.delay: 500
                 }
                 // Wheel over the whole cell nudges the AGC knee (same idiom as
                 // the LNA slider's wheel).  Left-click still cycles mode.
@@ -673,19 +725,13 @@ Rectangle {
                                 border.color: autoAgcBtn.checked ? root.cOn : "#2a3a4a"
                                 border.width: 1
                             }
-                            contentItem: Text {
+                                contentItem: Text {
                                 text: autoAgcBtn.text
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 color: autoAgcBtn.checked ? root.cOn : root.cText
                                 font.pixelSize: 12
                             }
-                            ToolTip.text: qsTr("Auto AGC-T (latching) — keeps the AGC "
-                                + "knee anchored to the live noise floor and re-tracks "
-                                + "as the band changes.\nAny manual threshold change turns "
-                                + "it off; the AGC cell glows orange while engaged.")
-                            ToolTip.visible: hovered && Prefs.tooltipsEnabled
-                            ToolTip.delay: 400
                         }
                         // Auto offset (dB): raises the knee above the floor.
                         // The reference lands its auto max-gain ~55-57; nudge
@@ -719,18 +765,25 @@ Rectangle {
             // row 3 already carries LMS / NB / APF / BIN and they crowd each
             // other once several DSP blocks are on together.
             Item { width: 8; visible: WdspEngine.squelchEnabled }
-            Label { text: qsTr("SQ:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.squelchEnabled }
+            Label {
+                text: qsTr("SQ:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.squelchEnabled
+                HoverHandler { id: sqLblHov }
+                LyraHoverHelp {
+                    title: qsTr("SQ")
+                    text: sqSlider.helpText
+                    hovered: sqLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: sqSlider
+                helpTitle: qsTr("SQ")
+                helpText: qsTr("Squelch threshold — higher = tighter. Typical 10–30. Routes to SSQL / FM-SQ / AM-SQ by mode.")
                 visible: WdspEngine.squelchEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.squelchThreshold * 100)
                 Layout.preferredWidth: 96
                 onMoved: WdspEngine.setSquelchThreshold(value / 100.0)
-                ToolTip.text: qsTr("Squelch threshold — higher = tighter (only stronger signals open it).\n"
-                    + "Typical sweet spot 10–30; routes to SSQL / FM-SQ / AM-SQ by mode.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.squelchEnabled
                     text: Math.round(WdspEngine.squelchThreshold * 100)
@@ -752,9 +805,17 @@ Rectangle {
                     text: qsTr("CW MON")
                     color: root.cMuted; font.pixelSize: 11
                     Layout.alignment: Qt.AlignVCenter
+                    HoverHandler { id: cwMonLblHov }
+                    LyraHoverHelp {
+                        title: qsTr("CW MON")
+                        text: qsTr("CW sidetone level (0–127) — how loud you hear your own CW while keying. Hardware sidetone; separate from MON TX.")
+                        hovered: cwMonLblHov.hovered
+                    }
                 }
                 LyraSlider {
                     id: cwMonSlider
+                    helpTitle: qsTr("CW MON")
+                    helpText: qsTr("CW sidetone level (0–127) — how loud you hear your own CW while keying. Hardware sidetone; separate from MON TX.")
                     Layout.preferredWidth: 80
                     from: 0; to: 127; stepSize: 1
                     value: Stream.cwSidetoneLevel
@@ -764,10 +825,6 @@ Rectangle {
                             Math.max(0, Math.min(127, Stream.cwSidetoneLevel
                                      + (ev.angleDelta.y > 0 ? 2 : -2)))
                     }
-                    ToolTip.text: qsTr("CW sidetone level — how loud you hear "
-                        + "your own CW while keying (0-127). The radio's "
-                        + "hardware sidetone; separate from the MON TX monitor.")
-                    ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
                 }
                 Label {
                     text: Stream.cwSidetoneLevel
@@ -782,66 +839,90 @@ Rectangle {
             spacing: 6
             Layout.fillWidth: true
 
-            Label { text: qsTr("NR Mode:"); color: root.cText; font.pixelSize: 11
-                    visible: !WdspEngine.nnrEnabled }
+            Label {
+                text: qsTr("NR Mode:"); color: root.cText; font.pixelSize: 11
+                visible: !WdspEngine.nnrEnabled
+                HoverHandler { id: nrModeLblHov }
+                LyraHoverHelp {
+                    title: qsTr("NR Mode")
+                    text: nrModeSlider.helpText
+                    hovered: nrModeLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: nrModeSlider
+                helpTitle: qsTr("NR Mode")
+                helpText: qsTr("NR mode 1–4 (WDSP EMNR): 1 Wiener+SPP · 2 Wiener · 3 MMSE-LSA (default) · 4 trained")
                 visible: !WdspEngine.nnrEnabled
                 from: 1; to: 4; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.nrMode
                 Layout.preferredWidth: 96
                 onMoved: WdspEngine.setNrMode(Math.round(value))
-                ToolTip.text: qsTr("NR mode 1..4 (WDSP EMNR gain function):\n"
-                                   + "1 Wiener+SPP   2 Wiener   3 MMSE-LSA (default)   4 trained")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: !WdspEngine.nnrEnabled
                     text: WdspEngine.nrMode; color: "#50d0ff"
                     font.family: "Consolas"; font.bold: true
                     Layout.preferredWidth: 16
                     HoverHandler { id: nrModeValHov }
-                    ToolTip.text: qsTr("EMNR Mode %1").arg(WdspEngine.nrMode)
-                    ToolTip.visible: nrModeValHov.hovered && Prefs.tooltipsEnabled }
+                    LyraHoverHelp {
+                        title: qsTr("EMNR Mode")
+                        text: qsTr("EMNR Mode %1").arg(WdspEngine.nrMode)
+                        hovered: nrModeValHov.hovered
+                    } }
 
-            Label { text: qsTr("NNR Model:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.nnrEnabled }
+            Label {
+                text: qsTr("NNR Model:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.nnrEnabled
+                HoverHandler { id: nnrModelLblHov }
+                LyraHoverHelp {
+                    title: qsTr("NNR Model")
+                    text: qsTr("WDSP NNR model: Standard = slot 0 (lighter CPU). Premium = slot 1 (heavier).")
+                    hovered: nnrModelLblHov.hovered
+                }
+            }
             LyraComboBox {
                 id: nnrModelCombo
+                helpTitle: qsTr("NNR Model")
+                helpText: qsTr("WDSP NNR model: Standard = slot 0 (lighter CPU). Premium = slot 1 (heavier).")
                 visible: WdspEngine.nnrEnabled
                 model: [qsTr("Standard"), qsTr("Premium")]
                 currentIndex: WdspEngine.nnrModel
                 onActivated: WdspEngine.setNnrModel(currentIndex)
                 Layout.preferredWidth: 110
                 font.pixelSize: 11
-                ToolTip.text: qsTr("WDSP NNR model:\n"
-                                   + "Standard = slot 0 (default, lighter CPU)\n"
-                                   + "Premium = slot 1 (heavier model, more CPU)")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
 
-            Label { text: qsTr("Mask:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.nnrEnabled }
+            Label {
+                text: qsTr("Mask:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.nnrEnabled
+                HoverHandler { id: maskLblHov }
+                LyraHoverHelp {
+                    title: qsTr("Mask")
+                    text: nnrMaskSlider.helpText
+                    hovered: maskLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: nnrMaskSlider
+                helpTitle: qsTr("Mask")
+                helpText: qsTr("NNR mask floor (dB): −10 least suppression, −50 most. Try −25 to −40.")
                 visible: WdspEngine.nnrEnabled
                 from: -10; to: -50; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.nnrMaskFloorDb
                 Layout.preferredWidth: 96
                 onMoved: WdspEngine.setNnrMaskFloorDb(value)
-                ToolTip.text: qsTr("NNR mask floor (dB):\n"
-                                   + "−10 least suppression (more noise through)\n"
-                                   + "−50 most suppression\n"
-                                   + "Try −25 to −40 as a starting point.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.nnrEnabled
                     text: Math.round(WdspEngine.nnrMaskFloorDb)
                     color: "#50d0ff"; font.family: "Consolas"; font.bold: true
                     Layout.preferredWidth: 32
-                    ToolTip.text: qsTr("NNR mask floor %1 dB")
-                                  .arg(Math.round(WdspEngine.nnrMaskFloorDb))
                     HoverHandler { id: nnrMaskValHov }
-                    ToolTip.visible: nnrMaskValHov.hovered && Prefs.tooltipsEnabled }
+                    LyraHoverHelp {
+                        title: qsTr("NNR mask floor")
+                        text: qsTr("NNR mask floor %1 dB")
+                              .arg(Math.round(WdspEngine.nnrMaskFloorDb))
+                        hovered: nnrMaskValHov.hovered
+                    } }
 
             Item { width: 8; visible: !WdspEngine.nnrEnabled }
             CheckBox {
@@ -864,42 +945,57 @@ Rectangle {
                     leftPadding: aepfCheck.indicator
                                  ? aepfCheck.indicator.width + 4 : 0
                 }
-                ToolTip.text: qsTr("Anti-musical-noise smoother — engages BOTH WDSP "
-                                   + "stages (artifact elimination + post-filter). On = "
-                                   + "noticeably less musical 'twinkle' with the voice kept "
-                                   + "natural (MMSE-LSA); off = rawer EMNR on quiet bands.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
+                LyraHoverHelp {
+                    title: qsTr("AEPF")
+                    text: qsTr("Anti-musical-noise post-filter on EMNR. Sits next to NPE.")
+                    hovered: aepfCheck.hovered
+                }
             }
 
             Item { width: 6; visible: !WdspEngine.nnrEnabled }
-            Label { text: qsTr("NPE:"); color: root.cText; font.pixelSize: 11
-                    visible: !WdspEngine.nnrEnabled }
+            Label {
+                text: qsTr("NPE:"); color: root.cText; font.pixelSize: 11
+                visible: !WdspEngine.nnrEnabled
+                HoverHandler { id: npeLblHov }
+                LyraHoverHelp {
+                    title: qsTr("NPE")
+                    text: qsTr("EMNR noise-power estimator: OSMS or MCRA. AEPF (left) is the anti-musical-noise smoother.")
+                    hovered: npeLblHov.hovered
+                }
+            }
             LyraComboBox {
                 id: npeCombo
+                helpTitle: qsTr("NPE")
+                helpText: qsTr("EMNR noise-power estimator: OSMS or MCRA. AEPF (left) is the anti-musical-noise smoother.")
                 visible: !WdspEngine.nnrEnabled
                 model: ["OSMS", "MCRA"]
                 currentIndex: WdspEngine.npeMethod
                 onActivated: WdspEngine.setNpeMethod(currentIndex)
                 Layout.preferredWidth: 86
                 font.pixelSize: 11
-                ToolTip.text: qsTr("EMNR noise-power estimator: OSMS or MCRA.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
 
             // LMS strength — appears only when LMS is engaged (old-Lyra idiom).
             Item { width: 8; visible: WdspEngine.lmsEnabled }
-            Label { text: qsTr("LMS:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.lmsEnabled }
+            Label {
+                text: qsTr("LMS:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.lmsEnabled
+                HoverHandler { id: lmsLblHov }
+                LyraHoverHelp {
+                    title: qsTr("LMS")
+                    text: lmsSlider.helpText
+                    hovered: lmsLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: lmsSlider
+                helpTitle: qsTr("LMS")
+                helpText: qsTr("LMS strength — more taps + harder prediction. 0 subtle · 50 WDSP default · 100 full.")
                 visible: WdspEngine.lmsEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.lmsStrength * 100)
                 Layout.preferredWidth: 104
                 onMoved: WdspEngine.setLmsStrength(value / 100.0)
-                ToolTip.text: qsTr("LMS strength — more taps + harder prediction.\n"
-                    + "0 subtle · 50 WDSP-class default · 100 full")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.lmsEnabled
                     text: Math.round(WdspEngine.lmsStrength * 100) + "%"
@@ -908,18 +1004,25 @@ Rectangle {
 
             // NB strength — appears only when NB is engaged.
             Item { width: 8; visible: WdspEngine.nbEnabled }
-            Label { text: qsTr("NB:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.nbEnabled }
+            Label {
+                text: qsTr("NB:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.nbEnabled
+                HoverHandler { id: nbLblHov }
+                LyraHoverHelp {
+                    title: qsTr("NB")
+                    text: nbSlider.helpText
+                    hovered: nbLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: nbSlider
+                helpTitle: qsTr("NB")
+                helpText: qsTr("Noise-blanker strength — higher = more aggressive impulse blanking. Back off if it chews CW/SSB transients.")
                 visible: WdspEngine.nbEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.nbStrength * 100)
                 Layout.preferredWidth: 104
                 onMoved: WdspEngine.setNbStrength(value / 100.0)
-                ToolTip.text: qsTr("Noise-blanker strength — higher = more aggressive impulse blanking.\n"
-                    + "Back off if it starts chewing CW/SSB transients.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.nbEnabled
                     text: Math.round(WdspEngine.nbStrength * 100) + "%"
@@ -929,17 +1032,25 @@ Rectangle {
             // APF gain — appears only when APF is on; stepped in 3 dB
             // increments so it's a quick few-choice pick (3…18 dB).
             Item { width: 8; visible: WdspEngine.apfEnabled }
-            Label { text: qsTr("APF:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.apfEnabled }
+            Label {
+                text: qsTr("APF:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.apfEnabled
+                HoverHandler { id: apfLblHov }
+                LyraHoverHelp {
+                    title: qsTr("APF")
+                    text: apfSlider.helpText
+                    hovered: apfLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: apfSlider
+                helpTitle: qsTr("APF")
+                helpText: qsTr("APF peak gain — how hard the CW peak lifts the tone (3–18 dB).")
                 visible: WdspEngine.apfEnabled
                 from: 3; to: 18; stepSize: 3; snapMode: Slider.SnapAlways
                 value: WdspEngine.apfGainDb
                 Layout.preferredWidth: 96
                 onMoved: WdspEngine.setApfGainDb(value)
-                ToolTip.text: qsTr("APF peak gain — how hard the CW peak lifts the tone (3–18 dB).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.apfEnabled
                     text: Math.round(WdspEngine.apfGainDb) + qsTr(" dB")
@@ -948,17 +1059,25 @@ Rectangle {
 
             // BIN depth — appears only when BIN is on (0 = mono … 100 = full).
             Item { width: 8; visible: WdspEngine.binEnabled }
-            Label { text: qsTr("BIN:"); color: root.cText; font.pixelSize: 11
-                    visible: WdspEngine.binEnabled }
+            Label {
+                text: qsTr("BIN:"); color: root.cText; font.pixelSize: 11
+                visible: WdspEngine.binEnabled
+                HoverHandler { id: binLblHov }
+                LyraHoverHelp {
+                    title: qsTr("BIN")
+                    text: binSlider.helpText
+                    hovered: binLblHov.hovered
+                }
+            }
             LyraSlider {
                 id: binSlider
+                helpTitle: qsTr("BIN")
+                helpText: qsTr("Binaural depth — soundstage width on headphones (0 = mono, 100 = full Hilbert pair).")
                 visible: WdspEngine.binEnabled
                 from: 0; to: 100; stepSize: 5
                 value: Math.round(WdspEngine.binDepth * 100)
                 Layout.preferredWidth: 96
                 onMoved: WdspEngine.setBinDepth(value / 100.0)
-                ToolTip.text: qsTr("Binaural depth — soundstage width on headphones (0 = mono, 100 = full Hilbert pair).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
             }
             Label { visible: WdspEngine.binEnabled
                     text: Math.round(WdspEngine.binDepth * 100) + "%"
@@ -997,9 +1116,11 @@ Rectangle {
                     elide: Text.ElideRight
                     clip: true
                 }
-                ToolTip.text: qsTr("Capture the band's noise spectrum over the chosen "
-                    + "window — do it on a quiet, signal-free frequency. Click again to cancel.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
+                LyraHoverHelp {
+                    title: qsTr("Cap")
+                    text: qsTr("Capture band noise on a quiet frequency. Click again to cancel.")
+                    hovered: capBtn.hovered
+                }
             }
 
             LyraComboBox {
@@ -1013,8 +1134,6 @@ Rectangle {
                         return
                     WdspEngine.setNoiseCaptureSeconds(secs[i])
                 }
-                ToolTip.text: qsTr("Capture window length.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
             }
 
             LyraComboBox {
@@ -1035,10 +1154,6 @@ Rectangle {
                     // a different FFT size.
                     WdspEngine.setNoiseFftSize(sizes[i])
                 }
-                ToolTip.text: qsTr("FFT resolution — 8192 resolves wide ESSB noise finest "
-                    + "(more latency); 2048 = lowest latency. Changing it clears the "
-                    + "current profile (size-specific).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
             }
 
             DspToggle {
@@ -1060,9 +1175,6 @@ Rectangle {
                 implicitWidth: 32; implicitHeight: 24
                 visible: WdspEngine.noiseApplyEnabled
                 onClicked: tunePop.open()
-                ToolTip.text: qsTr("Tune the captured-profile noise reduction "
-                    + "(Strength / Floor / Smoothing).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
                 background: Rectangle {
                     radius: 3
                     color: tunePop.opened ? "#16242e" : "#161e28"
@@ -1115,15 +1227,20 @@ Rectangle {
                         }
                         RowLayout { spacing: 8; Layout.fillWidth: true
                             Label { text: qsTr("Floor"); color: root.cText
-                                    font.pixelSize: 11; Layout.preferredWidth: 68 }
+                                    font.pixelSize: 11; Layout.preferredWidth: 68
+                                    HoverHandler { id: floorLblHov }
+                                    LyraHoverHelp {
+                                        title: qsTr("Floor")
+                                        text: qsTr("Deepest any bin may drop, before AGC. More negative = more audible hiss cut. Default −24 dB.")
+                                        hovered: floorLblHov.hovered
+                                    }
+                            }
                             LyraSlider { Layout.fillWidth: true
+                                helpTitle: qsTr("Floor")
+                                helpText: qsTr("Deepest any bin may drop, before AGC. More negative = more audible hiss cut. Default −24 dB.")
                                 from: -30; to: -3; stepSize: 1
                                 value: WdspEngine.noiseFloorDb
-                                onMoved: WdspEngine.setNoiseFloorDb(value)
-                                ToolTip.text: qsTr("Deepest any bin may drop, before AGC. "
-                                    + "More negative = more audible hiss cut. Default −24 dB.")
-                                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled
-                                ToolTip.delay: 400 }
+                                onMoved: WdspEngine.setNoiseFloorDb(value) }
                             Label { text: Math.round(WdspEngine.noiseFloorDb) + qsTr(" dB")
                                     color: "#50d0ff"; font.family: "Consolas"
                                     Layout.preferredWidth: 44 }
@@ -1177,9 +1294,6 @@ Rectangle {
                             .indexOf(WdspEngine.noiseActiveProfile)
                     }
                 }
-                ToolTip.text: qsTr("Saved noise profiles — select to load (tagged with "
-                    + "rate + FFT size).")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
             }
 
             LyraButton {
@@ -1188,8 +1302,6 @@ Rectangle {
                 enabled: WdspEngine.noiseProfileValid
                 opacity: enabled ? 1.0 : 0.45
                 onClicked: WdspEngine.promptSaveProfile()
-                ToolTip.text: qsTr("Save the just-captured profile under a name.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
             }
             LyraButton {
                 text: qsTr("Del"); implicitHeight: 24; implicitWidth: 44
@@ -1198,8 +1310,6 @@ Rectangle {
                 opacity: enabled ? 1.0 : 0.45
                 onClicked: if (WdspEngine.noiseActiveProfile.length > 0)
                                WdspEngine.deleteNoiseProfile(WdspEngine.noiseActiveProfile)
-                ToolTip.text: qsTr("Delete the selected profile.")
-                ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 400
             }
 
             Item { Layout.fillWidth: true }
