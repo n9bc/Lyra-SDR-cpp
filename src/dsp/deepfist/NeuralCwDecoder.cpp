@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
+#include <deque>
 #include <utility>
 
 #include "dsp/deepfist/DeepFistCtc.h"
@@ -28,6 +30,8 @@ constexpr float  kKeyingMin = 12.0f;        // min keying ratio (p90/p10) to dec
 constexpr double kMatchTolS = 0.2;          // max shift of one char between windows
                                             // (measured <=0.06 s once settled; an "EE"
                                             // pair at 20 WPM is 0.24 s apart)
+
+constexpr double kSpaceSlackS = 0.05;        // envelope delay at a gap's edges
 
 // One decoded character: estimated audio time (s) and token id.
 struct TimedChar {
@@ -89,6 +93,126 @@ std::vector<TimedChar> newChars(const std::vector<TimedChar>& committed,
         }
     }
     return out;
+}
+
+// A key-down mark or key-up gap in the window, in audio time (s).
+struct KeyRun {
+    double start;
+    double end;
+};
+
+// Split a window's keying envelope (one value per sample, window starting at
+// audio time t0) into complete key-down marks and key-up gaps: threshold
+// halfway between the 10th and 90th percentile levels.  Runs cut off by
+// either window edge are left out — their length is unknown.
+void keyRuns(const std::vector<float>& env, double t0,
+             std::vector<KeyRun>& marks, std::vector<KeyRun>& gaps) {
+    marks.clear();
+    gaps.clear();
+    const size_t n = env.size();
+    if (n < 16) return;
+    std::vector<float> s(env);
+    std::nth_element(s.begin(), s.begin() + n / 10, s.end());
+    const float lo = s[n / 10];
+    std::nth_element(s.begin(), s.begin() + (n - 1 - n / 10), s.end());
+    const float hi = s[n - 1 - n / 10];
+    const float thr = 0.5f * (lo + hi);
+    bool on = env[0] > thr;
+    size_t runStart = 0;
+    bool bounded = false;               // first run touches the window edge
+    for (size_t k = 1; k < n; ++k) {
+        const bool o = env[k] > thr;
+        if (o == on) continue;
+        if (bounded) {
+            const KeyRun r{t0 + static_cast<double>(runStart) / kSr,
+                           t0 + static_cast<double>(k) / kSr};
+            (on ? marks : gaps).push_back(r);
+        }
+        bounded = true;
+        runStart = k;
+        on = o;
+    }
+}
+
+// This sender's own spacing, learned from the gaps already settled.  DeepFist
+// reads a long gap between letters as a word space, so a loose or hand-sent
+// fist ("U S E D", "B R A IN") comes out split into letters.  Classing a gap
+// as a word space against the sender's own letter gaps, not standard 3/7-dit
+// timing, lets the decoder drop those spaces.
+class SenderSpacing {
+public:
+    void clear() { marks_.clear(); gaps_.clear(); lastMarkEnd_ = lastGapEnd_ = -1.0; }
+
+    // Learn from the window's runs that have settled and weren't seen before.
+    void learn(const std::vector<KeyRun>& marks, const std::vector<KeyRun>& gaps,
+               double settleTo) {
+        add(marks, settleTo, lastMarkEnd_, marks_);
+        add(gaps, settleTo, lastGapEnd_, gaps_);
+    }
+
+    // Shortest gap (s) that counts as a word space; 0 = not enough keying
+    // seen yet to judge.
+    double wordGapS() const {
+        // Marks under 25 ms (faster than ~48 WPM) are envelope blips.
+        std::vector<double> m;
+        for (double d : marks_) if (d > 0.025) m.push_back(d);
+        if (m.size() < 6) return 0.0;
+        std::nth_element(m.begin(), m.begin() + m.size() / 4, m.end());
+        const double dit = m[m.size() / 4];          // short elements
+
+        // Gaps between letters or words (inside a letter is ~1 dit); longer
+        // than 20 dits is a pause between overs, not a word space.
+        std::vector<double> g;
+        for (double d : gaps_)
+            if (d >= 2.0 * dit && d <= 20.0 * dit) g.push_back(std::log(d / dit));
+        const double standard = 5.0 * dit;           // halfway between 3 and 7 dits
+        if (g.size() < 5) return standard;
+
+        // Split letter gaps from word gaps on log length at the point that
+        // best separates the two groups (Otsu), then put the threshold
+        // halfway (geometric) between the two group means.
+        std::sort(g.begin(), g.end());
+        const size_t n = g.size();
+        double total = 0;
+        for (double x : g) total += x;
+        double best = -1, c1 = 0, c2 = 0, left = 0;
+        for (size_t k = 1; k < n; ++k) {           // groups g[0..k) | g[k..n)
+            left += g[k - 1];
+            const double m1 = left / k, m2 = (total - left) / (n - k);
+            const double between = double(k) * double(n - k) * (m2 - m1) * (m2 - m1);
+            if (between > best) { best = between; c1 = m1; c2 = m2; }
+        }
+        if (c2 - c1 < std::log(1.5)) return standard;   // no clear word gaps yet
+        const double thr = std::exp(0.5 * (c1 + c2)) * dit;
+        return std::clamp(thr, 4.5 * dit, 12.0 * dit);
+    }
+
+private:
+    static void add(const std::vector<KeyRun>& runs, double settleTo, double& lastEnd,
+                    std::deque<double>& out) {
+        for (const KeyRun& r : runs) {
+            if (r.end > settleTo || r.end <= lastEnd) continue;
+            out.push_back(r.end - r.start);
+            lastEnd = r.end;
+            if (out.size() > kKeep) out.pop_front();
+        }
+    }
+    static constexpr size_t kKeep = 60;   // ~15-20 s of keying
+    std::deque<double> marks_, gaps_;
+    double lastMarkEnd_ = -1.0, lastGapEnd_ = -1.0;
+};
+
+// Whether a space the model emitted at time `t` is a real word space: the
+// key-up gap it falls in must be at least `wordGapS`.  DeepFist puts its
+// space ~0.1 s into the gap; `slack` allows for envelope delay at the edges.
+// No gap found, or no judgement yet (wordGapS 0) -> trust the model.
+bool isWordSpace(double t, const std::vector<KeyRun>& gaps, double wordGapS,
+                 double slack) {
+    if (wordGapS <= 0.0) return true;
+    for (const KeyRun& g : gaps)
+        if (t >= g.start - slack && t <= g.end + slack)
+            return g.end - g.start >= wordGapS;
+    return true;
 }
 }  // namespace
 
@@ -174,12 +298,30 @@ void NeuralCwDecoder::workerLoop() {
 
     // Append `fresh` to the transcript text and the committed history, and
     // raise committedT_ to the newest.  Caller holds mx_.
+    // Word-space filter (see SenderSpacing), for models whose profile asks
+    // for it; LYRA_CW_SPACEFILTER=0 turns it off.
+    const bool spaceFilter = [this] {
+        const char* e = std::getenv("LYRA_CW_SPACEFILTER");
+        return model_.profile().wordSpaceFilter && !(e && e[0] == '0');
+    }();
+    SenderSpacing spacing;
+    std::vector<KeyRun> marks, gaps;    // this tick's window
+    double wordGapS = 0.0;
+
+    // Append `fresh` to the transcript text and the committed history, and
+    // raise committedT_ to the newest.  A space that falls in a letter-length
+    // gap stays in the history (so the next window still lines up) but is
+    // left out of the text.  Caller holds mx_.
     auto commit = [&](const std::vector<TimedChar>& fresh, std::string& text) {
         const auto& toks = model_.tokens();
         for (const TimedChar& c : fresh) {
-            text += toks[static_cast<size_t>(c.id)];
+            const std::string& tok = toks[static_cast<size_t>(c.id)];
             committed.push_back(c);
             committedT_ = std::max(committedT_, c.t);
+            if (spaceFilter && tok == " " &&
+                !isWordSpace(c.t, gaps, wordGapS, kSpaceSlackS))
+                continue;
+            text += tok;
         }
     };
 
@@ -202,6 +344,7 @@ void NeuralCwDecoder::workerLoop() {
         if (gen != histGen) {           // reset() since the last tick
             committed.clear();
             lastDecode.clear();
+            spacing.clear();
             histGen = gen;
         }
 
@@ -228,6 +371,11 @@ void NeuralCwDecoder::workerLoop() {
         // not the dead-air hallucination the gate exists to stop.
         const float keyRatio = model_.keyingRatio(window.data(), kWindow);
         if (onKeying) onKeying(keyRatio);
+        if (spaceFilter) {
+            keyRuns(model_.keyingEnvelope(window.data(), kWindow), winStart, marks, gaps);
+            spacing.learn(marks, gaps, audioEnd - kGuardBase);
+            wordGapS = spacing.wordGapS();
+        }
         if (keyRatio < kKeyingMin) {
             std::string flush;
             {

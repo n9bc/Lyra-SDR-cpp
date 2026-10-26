@@ -39,9 +39,12 @@ struct NeuralModelProfile {
     bool conditioner;          // run DeepFistConditioner before the STFT
     bool standardize;          // global standardize after log1p
     bool timeMajor;            // [1,1,T,F] in / [1,T,C] out (else [1,1,F,T] / [T,1,C])
+    bool wordSpaceFilter;      // drop spaces in letter-length gaps (NeuralCwDecoder);
+                               // DeepFist only — it splits loose fists into letters,
+                               // and its space timing is what the filter assumes
 
-    static NeuralModelProfile deepFist() { return {"DeepFist", "deepfist", true,  true,  false}; }
-    static NeuralModelProfile deepCw()   { return {"DeepCW",   "deepcw",   false, false, true};  }
+    static NeuralModelProfile deepFist() { return {"DeepFist", "deepfist", true,  true,  false, true};  }
+    static NeuralModelProfile deepCw()   { return {"DeepCW",   "deepcw",   false, false, true,  false}; }
 };
 
 class DeepFistModel {
@@ -59,6 +62,7 @@ public:
               const NeuralModelProfile& profile = NeuralModelProfile::deepFist());
 
     bool ready() const { return ready_; }
+    const NeuralModelProfile& profile() const { return profile_; }
 
     // Decode one window of mono audio already at 3200 Hz.  Returns the decoded
     // text (may be empty).  Safe to call only when ready().
@@ -76,6 +80,12 @@ public:
     // steady carriers (see DeepFistConditioner::keyingRatio).
     float keyingRatio(const float* audio, int n) const {
         return cond_.keyingRatio(audio, n, cond_.detectTone(audio, n));
+    }
+
+    // Baseband envelope of the window at the tone keyingRatio() last locked to
+    // (call keyingRatio first in the same tick).  One value per sample.
+    std::vector<float> keyingEnvelope(const float* audio, int n) const {
+        return cond_.keyingEnvelope(audio, n, cond_.lockedTone());
     }
 
     // Estimated CW speed (WPM) of the window, 0 if indeterminate.

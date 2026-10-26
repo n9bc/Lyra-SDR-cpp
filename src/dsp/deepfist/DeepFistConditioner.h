@@ -59,6 +59,13 @@ public:
     // there isn't enough keying to judge.  Approximate — for the panel readout.
     float estimateWpm(const float* audio, int n, float toneHz) const;
 
+    // The isolated tone's baseband envelope, one value per input sample (same
+    // DSP as keyingRatio).  Lets the streamer measure the actual key-up gaps.
+    std::vector<float> keyingEnvelope(const float* audio, int n, float toneHz) const;
+
+    // The tone the last detectTone() locked to (kOutPitch before the first).
+    float lockedTone() const { return toneEma_ > 0.0f ? toneEma_ : kOutPitch; }
+
 private:
     void fft(std::vector<std::complex<double>>& a) const;   // radix-2, size kToneNfft
 

@@ -165,6 +165,29 @@ float DeepFistConditioner::keyingRatio(const float* audio, int n, float tone) co
     return on / (off + 1e-3f);
 }
 
+std::vector<float> DeepFistConditioner::keyingEnvelope(const float* audio, int n,
+                                                      float tone) const {
+    std::vector<float> env;
+    if (!audio || n <= 0) return env;
+    const float sr = static_cast<float>(kSr);
+    const float pi = static_cast<float>(kPi);
+    const float alpha = 1.0f - std::exp(-2.0f * pi * (kCondBwHz * 0.5f) / sr);
+    const float ds = std::sin(-2.0f * pi * tone / sr);
+    const float dc = std::cos(-2.0f * pi * tone / sr);
+    float pr = 1.0f, pj = 0.0f, bI = 0.0f, bQ = 0.0f, cI = 0.0f, cQ = 0.0f;
+    env.resize(static_cast<size_t>(n));
+    for (int k = 0; k < n; ++k) {
+        const float s = audio[k];
+        const float di = s * pr, dq = s * pj;
+        bI += alpha * (di - bI); bQ += alpha * (dq - bQ);
+        cI += alpha * (bI - cI); cQ += alpha * (bQ - cQ);
+        env[static_cast<size_t>(k)] = std::sqrt(cI * cI + cQ * cQ);
+        const float npr = pr * dc - pj * ds, npj = pr * ds + pj * dc;
+        pr = npr; pj = npj;
+    }
+    return env;
+}
+
 float DeepFistConditioner::estimateWpm(const float* audio, int n, float tone) const {
     if (!audio || n < kToneNfft) return 0.0f;
     const float sr = static_cast<float>(kSr);
