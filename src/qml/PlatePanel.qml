@@ -17,15 +17,18 @@ Rectangle {
     border.color: "#2a4a5a"
 
     readonly property color cAccent: "#00e5ff"
+    // Lit "on" look, shared across the rack: the Audio panel's Auto orange.
+    readonly property color cOn:     "#ff9a3c"
+    readonly property color cOnFill: "#3a2a14"
     readonly property color cText:   "#cdd9e5"
     readonly property color cMuted:  "#8a9aac"
 
     property bool collapsed: false
 
     // The whole TX rack is bypassed in the digital data modes (DIGU/DIGL,
-    // gated by SetTxRackBypass) and is moot in CW.  Dim the ON lamp +
-    // controls so the operator sees the rack isn't shaping audio there.
-    // Purely visual — model/profile state untouched, re-lights on USB/LSB.
+    // gated by SetTxRackBypass) and is moot in CW.  Dim the controls so the
+    // operator sees the rack isn't shaping audio there; the ON lamp keeps
+    // showing what is switched on.  Purely visual — model/profile untouched.
     readonly property bool rackInactive: {
         var m = WdspEngine.mode.toUpperCase()
         return m === "DIGU" || m === "DIGL" || m === "CWU" || m === "CWL"
@@ -101,11 +104,11 @@ Rectangle {
                 implicitWidth: 50; implicitHeight: 22
                 onClicked: Plate.bypass = !checked
                 background: Rectangle { radius: 4
-                    color: (onBtn.checked && !root.rackInactive) ? "#0b3a44" : "#1f2a35"
-                    border.color: (onBtn.checked && !root.rackInactive) ? root.cAccent : "#3a5060"
+                    color: onBtn.checked ? root.cOnFill : "#1f2a35"
+                    border.color: onBtn.checked ? root.cOn : "#3a5060"
                     border.width: 2 }
                 contentItem: Text { text: onBtn.checked ? "ON" : "OFF"
-                    color: (onBtn.checked && !root.rackInactive) ? root.cAccent : root.cMuted
+                    color: onBtn.checked ? root.cOn : root.cMuted
                     font.bold: true; horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter }
             }

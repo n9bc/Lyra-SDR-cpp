@@ -17,6 +17,9 @@ Rectangle {
     border.color: "#2a4a5a"
 
     readonly property color cAccent: "#00e5ff"
+    // Lit "on" look, shared across the rack: the Audio panel's Auto orange.
+    readonly property color cOn:     "#ff9a3c"
+    readonly property color cOnFill: "#3a2a14"
     readonly property color cText:   "#cdd9e5"
     readonly property color cMuted:  "#8a9aac"
 
@@ -24,9 +27,10 @@ Rectangle {
 
     // The whole TX rack is bypassed in the digital data modes (DIGU/DIGL,
     // gated by SetTxRackBypass) and is moot in CW (no mic audio).  Dim the
-    // stage lamps + controls so the operator sees at a glance the rack isn't
-    // shaping audio in those modes.  Purely visual — the model/profile state
-    // is untouched and re-lights the instant the mode returns to USB/LSB.
+    // stage controls and flag the header so the operator sees at a glance the
+    // rack isn't shaping audio in those modes.  The ON lamps keep showing what
+    // is switched on, like the Audio panel's buttons.  Purely visual — the
+    // model/profile state is untouched.
     readonly property bool rackInactive: {
         var m = WdspEngine.mode.toUpperCase()
         return m === "DIGU" || m === "DIGL" || m === "CWU" || m === "CWL"
@@ -68,13 +72,12 @@ Rectangle {
         property string name: ""
         property string sub: ""
         property bool on: false
-        property color accent: root.cAccent
         signal toggled(bool v)
         Layout.fillWidth: true
         radius: 4
         color: "#0b141b"
-        border.color: (on && !root.rackInactive) ? accent : "#1c2a36"
-        border.width: (on && !root.rackInactive) ? 2 : 1
+        border.color: on ? root.cOn : "#1c2a36"
+        border.width: on ? 2 : 1
         implicitHeight: col.implicitHeight + 16
         ColumnLayout {
             id: col
@@ -96,12 +99,12 @@ Rectangle {
                     onClicked: stage.toggled(checked)
                     background: Rectangle {
                         radius: 11
-                        color: (en.checked && !root.rackInactive) ? accent : "#1f2a35"
-                        border.color: (en.checked && !root.rackInactive) ? accent : "#3a5060"
+                        color: en.checked ? root.cOnFill : "#1f2a35"
+                        border.color: en.checked ? root.cOn : "#3a5060"
                     }
                     contentItem: Text {
                         text: en.checked ? "ON" : "OFF"
-                        color: (en.checked && !root.rackInactive) ? "#0d141b" : root.cMuted
+                        color: en.checked ? root.cOn : root.cMuted
                         font.bold: true; font.pixelSize: 10
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -174,7 +177,6 @@ Rectangle {
             visible: !root.collapsed
             name: qsTr("Noise Gate")
             sub: qsTr("mutes shack noise between words")
-            accent: "#9a6cff"
             on: Speech.gateEnabled
             onToggled: (v) => Speech.gateEnabled = v
             ColumnLayout {
@@ -203,7 +205,6 @@ Rectangle {
             visible: !root.collapsed
             name: qsTr("Auto-AGC")
             sub: qsTr("levels the mic before the rack")
-            accent: "#378ADD"
             on: Speech.agcEnabled
             onToggled: (v) => Speech.agcEnabled = v
             ColumnLayout {
@@ -227,7 +228,6 @@ Rectangle {
             visible: !root.collapsed
             name: qsTr("De-esser")
             sub: qsTr("tames harsh sibilance")
-            accent: "#BA7517"
             on: Speech.deessEnabled
             onToggled: (v) => Speech.deessEnabled = v
             ColumnLayout {

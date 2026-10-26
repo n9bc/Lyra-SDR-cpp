@@ -29,6 +29,9 @@ Rectangle {
 
     // ── palette (matches the glassy panadapter language) ───────────────
     readonly property color cAccent: "#00e5ff"
+    // Lit "on" look, shared across the rack: the Audio panel's Auto orange.
+    readonly property color cOn:     "#ff9a3c"
+    readonly property color cOnFill: "#3a2a14"
     readonly property color cText:   "#cdd9e5"
     readonly property color cMuted:  "#8a9aac"
     readonly property color cGrid:   "#2a3e4d"
@@ -100,9 +103,10 @@ Rectangle {
     }
 
     // The TX rack is bypassed in the digital data modes (DIGU/DIGL, gated by
-    // SetTxRackBypass) and is moot in CW.  Gray the ON lamp + flag the header
-    // so the operator sees the EQ isn't shaping audio there.  Purely visual —
-    // the engine/profile state is untouched and re-lights on USB/LSB.
+    // SetTxRackBypass) and is moot in CW.  Flag the header so the operator
+    // sees the EQ isn't shaping audio there; the ON lamp keeps showing whether
+    // the EQ is switched on.  Purely visual — the engine/profile state is
+    // untouched.
     readonly property bool rackInactive: {
         var m = WdspEngine.mode.toUpperCase()
         return bypassModes.indexOf(m) >= 0
@@ -222,13 +226,13 @@ Rectangle {
                 onClicked: eq.bypass = !checked
                 background: Rectangle {
                     radius: 4
-                    color: (onBtn.checked && !root.rackInactive) ? "#0b3a44" : "#1f2a35"
-                    border.color: (onBtn.checked && !root.rackInactive) ? root.cAccent : "#3a5060"
+                    color: onBtn.checked ? root.cOnFill : "#1f2a35"
+                    border.color: onBtn.checked ? root.cOn : "#3a5060"
                     border.width: 2
                 }
                 contentItem: Text {
                     text: onBtn.text
-                    color: (onBtn.checked && !root.rackInactive) ? root.cAccent : root.cMuted
+                    color: onBtn.checked ? root.cOn : root.cMuted
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -296,11 +300,11 @@ Rectangle {
                                    + "Off → Spectrum → RTA (live on the mic)")
                 ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 800
                 background: Rectangle { radius: 4
-                    color: specBtn.active ? "#0b3a44" : "#1f2a35"
-                    border.color: specBtn.active ? root.cAccent : "#3a5060" }
+                    color: specBtn.active ? root.cOnFill : "#1f2a35"
+                    border.color: specBtn.active ? root.cOn : "#3a5060" }
                 contentItem: Text { text: specBtn.text; font.pixelSize: 11
                     font.bold: true
-                    color: specBtn.active ? root.cAccent : root.cMuted
+                    color: specBtn.active ? root.cOn : root.cMuted
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter }
             }
@@ -315,12 +319,12 @@ Rectangle {
                                    + "spectrum.  Right-click for hang/decay.")
                 ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 800
                 background: Rectangle { radius: 4
-                    color: accBtn.checked ? "#0b3a44" : "#1f2a35"
-                    border.color: accBtn.checked ? root.cAccent : "#3a5060"
+                    color: accBtn.checked ? root.cOnFill : "#1f2a35"
+                    border.color: accBtn.checked ? root.cOn : "#3a5060"
                     opacity: accBtn.enabled ? 1.0 : 0.4 }
                 contentItem: Text { text: accBtn.text; font.pixelSize: 11
                     font.bold: true
-                    color: accBtn.checked ? root.cAccent : root.cMuted
+                    color: accBtn.checked ? root.cOn : root.cMuted
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter }
                 // Right-click → hang/decay preset menu (left-click still
@@ -342,12 +346,12 @@ Rectangle {
                                    + "(before) trace so you see what the EQ did")
                 ToolTip.visible: (hovered) && Prefs.tooltipsEnabled; ToolTip.delay: 800
                 background: Rectangle { radius: 4
-                    color: baBtn.checked ? "#0b3a44" : "#1f2a35"
-                    border.color: baBtn.checked ? root.cAccent : "#3a5060"
+                    color: baBtn.checked ? root.cOnFill : "#1f2a35"
+                    border.color: baBtn.checked ? root.cOn : "#3a5060"
                     opacity: baBtn.enabled ? 1.0 : 0.4 }
                 contentItem: Text { text: baBtn.text; font.pixelSize: 11
                     font.bold: true
-                    color: baBtn.checked ? root.cAccent : root.cMuted
+                    color: baBtn.checked ? root.cOn : root.cMuted
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter }
             }
