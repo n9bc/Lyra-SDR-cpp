@@ -1,6 +1,6 @@
 // Lyra — Tuner panel: native manual-ATU memory (the "Tuner Reminder" idea,
 // built in).  Tracks the live dial against the active antenna's stored
-// Input / Output / Inductor settings and shows the matching — or nearest —
+// Input / Inductor / Output settings and shows the matching — or nearest —
 // point, with live colour-coded SWR embedded.  Collapsed = basics only;
 // expanded = the full editable table.
 //
@@ -240,15 +240,15 @@ Rectangle {
             Item { Layout.fillWidth: true }
         }
 
-        // ── Match tiles: Input / Output / Inductor ──
+        // ── Match tiles: Input / Inductor / Output ──
         GridLayout {
             Layout.fillWidth: true
             columns: 3; columnSpacing: 6; rowSpacing: 0
             Repeater {
                 model: [
                     { k: qsTr("INPUT"),    v: Tuner.matchInput },
-                    { k: qsTr("OUTPUT"),   v: Tuner.matchOutput },
-                    { k: qsTr("INDUCTOR"), v: Tuner.matchInductor }
+                    { k: qsTr("INDUCTOR"), v: Tuner.matchInductor },
+                    { k: qsTr("OUTPUT"),   v: Tuner.matchOutput }
                 ]
                 delegate: Rectangle {
                     id: tile
@@ -318,8 +318,8 @@ Rectangle {
                 GridLayout {
                     Layout.fillWidth: true; columns: 3; columnSpacing: 6; rowSpacing: 4
                     TextField { id: inF;  placeholderText: qsTr("Input");    Layout.fillWidth: true }
-                    TextField { id: outF; placeholderText: qsTr("Output");   Layout.fillWidth: true }
                     TextField { id: indF; placeholderText: qsTr("Inductor"); Layout.fillWidth: true }
+                    TextField { id: outF; placeholderText: qsTr("Output");   Layout.fillWidth: true }
                 }
                 TextField { id: noteF; placeholderText: qsTr("Note (optional)"); Layout.fillWidth: true }
                 RowLayout {
@@ -355,11 +355,11 @@ Rectangle {
                         Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                         Layout.maximumWidth: root.tuneColW
                         horizontalAlignment: Text.AlignHCenter }
-                Label { text: qsTr("Out");   color: root.cMuted; font.pixelSize: 11
+                Label { text: qsTr("Ind");   color: root.cMuted; font.pixelSize: 11
                         Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                         Layout.maximumWidth: root.tuneColW
                         horizontalAlignment: Text.AlignHCenter }
-                Label { text: qsTr("Ind");   color: root.cMuted; font.pixelSize: 11
+                Label { text: qsTr("Out");   color: root.cMuted; font.pixelSize: 11
                         Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                         Layout.maximumWidth: root.tuneColW
                         horizontalAlignment: Text.AlignHCenter }
@@ -414,12 +414,12 @@ Rectangle {
                                 Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                                 Layout.maximumWidth: root.tuneColW
                                 horizontalAlignment: Text.AlignHCenter }
-                        Label { visible: !row.editing; text: row.p.output || "—"
+                        Label { visible: !row.editing; text: row.p.inductor || "—"
                                 color: root.cText; font.family: "Consolas"; font.pixelSize: 12
                                 Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                                 Layout.maximumWidth: root.tuneColW
                                 horizontalAlignment: Text.AlignHCenter }
-                        Label { visible: !row.editing; text: row.p.inductor || "—"
+                        Label { visible: !row.editing; text: row.p.output || "—"
                                 color: root.cText; font.family: "Consolas"; font.pixelSize: 12
                                 Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                                 Layout.maximumWidth: root.tuneColW
@@ -432,13 +432,13 @@ Rectangle {
                                     Layout.maximumWidth: root.tuneColW
                                     horizontalAlignment: Text.AlignHCenter
                                     onEditingFinished: Tuner.updatePoint(row.pIdx, reIn.text, reOut.text, reInd.text, row.p.note) }
-                        TextField { id: reOut; visible: row.editing; text: row.p.output
+                        TextField { id: reInd; visible: row.editing; text: row.p.inductor
                                     font.pixelSize: 12
                                     Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                                     Layout.maximumWidth: root.tuneColW
                                     horizontalAlignment: Text.AlignHCenter
                                     onEditingFinished: Tuner.updatePoint(row.pIdx, reIn.text, reOut.text, reInd.text, row.p.note) }
-                        TextField { id: reInd; visible: row.editing; text: row.p.inductor
+                        TextField { id: reOut; visible: row.editing; text: row.p.output
                                     font.pixelSize: 12
                                     Layout.minimumWidth: root.tuneColW; Layout.preferredWidth: root.tuneColW
                                     Layout.maximumWidth: root.tuneColW
