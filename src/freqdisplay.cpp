@@ -2,8 +2,11 @@
 
 #include "freqdisplay.h"
 #include "vfo_digit_hit.h"
+#include "vfo_snap.h"
 #include "wheel_steps.h"
 
+#include <QCursor>
+#include <QHoverEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -18,11 +21,35 @@ int placeStep(int idx) {   // 10^idx, idx in [0, 9]
     for (int i = 0; i < idx; ++i) s *= 10;
     return s;
 }
+
+// Steps for a wheel event with no scroll phase (QML WheelHandler / HID):
+// whole notches of 120, else one step in the delta's direction.
+int wheelTicks(int angleDeltaY, int pixelDeltaY) {
+    if (angleDeltaY <= -120 || angleDeltaY >= 120)
+        return angleDeltaY / 120;
+    if (angleDeltaY != 0)
+        return angleDeltaY > 0 ? 1 : -1;
+    if (pixelDeltaY != 0)
+        return pixelDeltaY > 0 ? 1 : -1;
+    return 0;
+}
+
+FreqDisplay *g_ledUnderMouse = nullptr;
 } // namespace
+
+FreqDisplay *FreqDisplay::ledUnderMouse() {
+    return g_ledUnderMouse;
+}
 
 FreqDisplay::FreqDisplay(QQuickItem *parent) : QQuickItem(parent) {
     setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptHoverEvents(true);
     setFlag(ItemAcceptsInputMethod, false);
+}
+
+FreqDisplay::~FreqDisplay() {
+    if (g_ledUnderMouse == this)
+        g_ledUnderMouse = nullptr;
 }
 
 void FreqDisplay::setFreqHz(int hz) {
@@ -41,6 +68,14 @@ void FreqDisplay::setExternalStepHz(int hz) {
     }
     externalStepHz_ = hz;
     emit externalStepHzChanged();
+}
+
+void FreqDisplay::setStickyWheel(bool on) {
+    if (on == stickyWheel_) {
+        return;
+    }
+    stickyWheel_ = on;
+    emit stickyWheelChanged();
 }
 
 void FreqDisplay::setDigitRects(const QVariantList &rects) {
@@ -113,6 +148,7 @@ void FreqDisplay::mousePressEvent(QMouseEvent *e) {
         e->ignore();
         return;
     }
+    g_ledUnderMouse = this;
     const int place = digitPlaceAt(rects_, e->position());
     if (place >= 0) {
         setSelected(place);
@@ -130,7 +166,28 @@ void FreqDisplay::mouseDoubleClickEvent(QMouseEvent *e) {
     e->ignore();
 }
 
+void FreqDisplay::hoverEnterEvent(QHoverEvent *e) {
+    g_ledUnderMouse = this;
+    QQuickItem::hoverEnterEvent(e);
+}
+
+void FreqDisplay::hoverLeaveEvent(QHoverEvent *e) {
+    if (g_ledUnderMouse == this)
+        g_ledUnderMouse = nullptr;
+    QQuickItem::hoverLeaveEvent(e);
+}
+
+void FreqDisplay::handleWheel(int angleDeltaY, int pixelDeltaY, qreal x, qreal y) {
+    g_ledUnderMouse = this;
+    applyWheelAt(wheelTicks(angleDeltaY, pixelDeltaY), QPointF(x, y));
+}
+
+void FreqDisplay::nudgeByTicks(int ticks) {
+    applyWheelAt(ticks, mapFromGlobal(QCursor::pos()));
+}
+
 void FreqDisplay::wheelEvent(QWheelEvent *e) {
+    g_ledUnderMouse = this;
 #if defined(Q_OS_MACOS)
     constexpr bool kNotchIsOneStep = true;
 #else
@@ -142,18 +199,27 @@ void FreqDisplay::wheelEvent(QWheelEvent *e) {
         e->ignore();
         return;
     }
-    const int hover = digitPlaceAt(rects_, e->position());
+    applyWheelAt(units, e->position());
+    e->accept();
+}
+
+// Over a digit: step that place.  Elsewhere: this VFO's Tuning Step, snapped
+// to its grid when stickyWheel is on.
+void FreqDisplay::applyWheelAt(int ticks, QPointF pos) {
+    if (ticks == 0) {
+        return;
+    }
+    const int hover = digitPlaceAt(rects_, pos);
     if (hover >= 0) {
         setSelected(hover);
+        changeFreq(ticks * placeStep(hover));
+        return;
     }
-    int step;
-    if (hover >= 0)              step = placeStep(hover);
-    else if (externalStepHz_ > 0) step = externalStepHz_;
-    else if (selected_ >= 0)      step = placeStep(selected_);
-    else { e->ignore(); return; }
-
-    changeFreq(units * step);
-    e->accept();
+    if (externalStepHz_ <= 0) {
+        return;
+    }
+    const int next = nextWheelHz(freqHz_, externalStepHz_, ticks, stickyWheel_);
+    changeFreq(next - freqHz_);
 }
 
 void FreqDisplay::keyPressEvent(QKeyEvent *e) {

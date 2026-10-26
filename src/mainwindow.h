@@ -266,6 +266,11 @@ private:
     // QSettings "layouts/<slot>/{name,geometry,windowState,panadapterSplit}".
     void saveNamedLayout(int slot);
     void recallNamedLayout(int slot);
+    // Live recall (window already shown): restoreState only. Applying
+    // saveGeometry() on a visible QMainWindow is what exploded named
+    // slots after factory had already stuck (GitHub #20 follow-up).
+    void applyLiveDockState(const QByteArray &st, const QVariant &split,
+                            const QVariantMap &dockVis = {});
     void refreshLayoutMenus();         // refresh slot labels on menu open
     // Two-converter radios only: SUB adds a second spectrum dock. Qt
     // otherwise grows the bottom control docks. Steal height from the
@@ -383,8 +388,17 @@ private:
     QByteArray                  layoutCurrent_;              // last settled arrangement
     QTimer                     *layoutSnapTimer_ = nullptr;  // debounce dock-change bursts
     bool                        layoutRestoring_ = false;    // guard our own restoreState
+    // Recalling factory (or a first launch) must not persist Qt saveState()
+    // as the session: that blob is a photograph and often corrupts on the
+    // next start (GitHub #20, laptop DPI / undock).  Rebuild factory until
+    // the operator actually moves a dock.
+    bool                        layoutUseFactory_ = false;
+    void setLayoutUseFactory(bool on);
     QAction                    *startStopAction_ = nullptr;   // header Start/Stop
     QToolButton                *startStopBtn_ = nullptr;      // its backing button (green/red)
+    QToolButton                *freqCalBtn_ = nullptr;        // hidden while this Lyra is the desk
+    bool                        deskMenuShown_ = false;       // Rig menu rebuilt on role change
+    bool                        deskCwLatched_ = false;        // host is holding a desk CW edge
     QLabel                     *connStatus_ = nullptr;        // header conn status
     QLabel                     *tciStatus_  = nullptr;        // header TCI client indicator
     QLabel                     *spottedBadge_ = nullptr;      // "you've been spotted" header badge

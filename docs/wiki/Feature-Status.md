@@ -1,18 +1,24 @@
 # Feature Status
 
 Where Lyra stands today. Everything marked ✅ is shipped and working in
-**v0.25.24 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
+**v0.25.28 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
 **BrickSDR2 / Brick3SDR** (Protocol 2), unless a row says otherwise.
-**v0.25.23+** includes a beta of Lyra-to-Lyra
-([User Guide → Lyra to Lyra](User-Guide#lyra-to-lyra)).
-**v0.25.22** remains the return point.
+**v0.25.28** writes Pico **RX fcodes** 13/14 (GitHub #23) and makes
+PureSignal dock **ON** a single Thetis-style switch.
+**v0.25.27 Sheliak** is the previous public build and the IO-board
+return installer.
+**v0.25.22** remains the long return point.
 
 > **Legend:** ✅ working now · 🚧 in progress · 🗺️ planned (see [Roadmap](Roadmap))
 
-### Last several builds (0.25.16 → 0.25.24)
+### Last several builds (0.25.16 → 0.25.28)
 
 | Build | What landed |
 |---|---|
+| **0.25.28** | Pico **RX fcodes** 13/14 from the dial (GitHub #23). PureSignal dock **ON** like Thetis. Analog BYTE0–4 and RF1/Alt unchanged. **`LYRA_NO_IOBOARD_FCODE=1`** skips 13/14. **v0.25.27** is the return installer |
+| **0.25.27** | **VFO LED** digit place vs empty-LED **Step** (GitHub #22). **Helios TX SWR** after watts. **View → Freq Cal** float (GitHub #21). **v0.25.26** remains the previous public build. **v0.25.22** remains the return point |
+| **0.25.26** | **Layouts (GitHub #20).** Factory recall survives restart until you move a panel; named slots remember open docks. **Snap VFO wheel to Step** (Settings → Hardware → Navigation, default off). Laptop Tuning logo matches the VFO boxes. **v0.25.22** remains the return point |
+| **0.25.25** | **Lyra to Lyra: desk RX2 and CW.** Second-receiver picture and audio when the host SUB is on and the radio has a second converter. CW decoder, host pitch on the desk, and CW chip Send that makes RF on a Protocol 2 Brick. In CW, transmit stays off at 150 ms or more. Outside CW, voice, MOX, Tune, and 2-tone stay off at 200 ms or more. Away picture stays about 60 Hz. **v0.25.22** remains the return point |
 | **0.25.24** | HL2 **RF1 / Alt RX** per Xvtr (and ham) chip — I2C 0x1D register 11; GPA100 analog BYTE0–4 unchanged. Protocol 2 **DUC-IQ** on its own native pump (keyed / no-RF after a long session). Lyra-to-Lyra from 0.25.23 stays in the tree |
 | **0.25.23** | **Beta of Lyra-to-Lyra.** Second Lyra on the laptop; shack stays on the radio. [User Guide → Lyra to Lyra](User-Guide#lyra-to-lyra). **v0.25.22** remains the return point |
 | **0.25.22** | **Helios / Sonar / Cluster** meter faces · **TX band-jump ignore** (stay keyed) · Xvtr per-chip LNA (HL2) / ATT (P2) · listen-password box disabled until a real RX lock |
@@ -83,7 +89,7 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 
 ### Metering &amp; TX safety
 
-- ✅ Multimeter — **PO / SWR / MIC / COMP / ALC / PA current**. The **PWR** needle keeps the loudest coupler sample between ticks so voice peaks land on the scale (factory peak-hold 700 ms if you have not saved your own). Optional **Sonar** (PPI + compass; replaces Radar), **Helios** (sun + planets), and **Cluster** (arc + segmented bars) — same cal as Arc.
+- ✅ Multimeter — **PO / SWR / MIC / COMP / ALC / PA current**. The **PWR** needle keeps the loudest coupler sample between ticks so voice peaks land on the scale (factory peak-hold 700 ms if you have not saved your own). Optional **Sonar** (PPI + compass; replaces Radar), **Helios** (sun + planets; TX readout is watts then **SWR** then the planet name, plus MIC / ALC / GAIN chips), and **Cluster** (arc + segmented bars) — same cal as Arc.
 - ✅ **TX band-jump ignore** — while keyed, a VFO write that would change amateur-band region is refused; transmit stays up. Status: *Frequency change ignored while transmitting.*
 - ✅ **ATT-on-TX** RX-front-end protection · **RX2 jack isolate on TX** (two-converter radios, default on) · **TR-sequencing** for amp hot-switch safety
 - ✅ **SWR protection** (auto-cut above threshold) · **max power / drive cap** for low-drive amps
@@ -92,7 +98,7 @@ Where Lyra stands today. Everything marked ✅ is shipped and working in
 ## Panadapter, waterfall &amp; UI
 
 - ✅ **Vulkan / RHI** scene-graph spectrum — glassy fill/glow, peak-hold, noise-floor line, palettes
-- ✅ Click / drag / wheel tuning; draggable passband edges; **click-to-tune on the waterfall**; collapsible waterfall
+- ✅ Click / drag / wheel tuning; draggable passband edges; **click-to-tune on the waterfall**; collapsible waterfall. Display **Panafall** is the pan wheel step; **Exact / 100 Hz** is how a pan click/drag lands. Tuning **Step** is the VFO LED (empty of a digit) and USB encoder. Wheel on a LED **digit** is that place. **Snap VFO wheel to Step** (Settings → Hardware → Navigation) lands empty-LED / encoder / pan wheel on that surface's grid.
 - ✅ **Dockable UI** — snap to edge / split / tab / float, four named layout slots + factory default, lock panels; optional **SUB layout** recall (Visuals) that restores the pre-SUB arrangement when SUB goes off
 - ✅ **Windows per-app mixer** volume remembered across Stop / Start
   (v0.25.17; Issue #18 — Stop no longer slams the mixer to 100 % / unmute)

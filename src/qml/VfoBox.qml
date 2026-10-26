@@ -105,6 +105,7 @@ Item {
             height: box.tuneRect.height
             freqHz: box.freqHz
             externalStepHz: stepMode.stepHz
+            stickyWheel: Prefs.vfoStickyWheel
             digitRects: box.style
                 ? box.style.digitRects.map(function (d) {
                       return Qt.rect(d.x - box.tuneRect.x, d.y - box.tuneRect.y,

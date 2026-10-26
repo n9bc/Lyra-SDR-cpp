@@ -4,6 +4,78 @@ Running EOD log. Newest entry on top. Short rough-outline format.
 
 ---
 
+## 2026-10-25 — v0.25.28 Sheliak RELEASED
+
+Pico RX fcodes 13/14 (GitHub #23, deskHPSDR-shaped). PureSignal dock ON
+like Thetis. Analog BYTE0–4 and REG 11 0/2 unchanged. Kill switch
+`LYRA_NO_IOBOARD_FCODE=1`. Return installer v0.25.27. Tag `v0.25.28`.
+Do not merge `main`.
+
+## 2026-10-24 — v0.25.27 Sheliak RELEASED
+
+VFO LED digit vs Step (#22), Helios TX SWR, View → Freq Cal float (#21).
+Installer `dist/Lyra-Setup-0.25.27.exe`. Tag `v0.25.27`. Do not merge
+`main`.
+
+## 2026-10-24 — LED Step + Helios SWR
+
+Digit wheel on the VFO LED. Empty LED uses that VFO's Step; Snap only
+there (panadapter Panafall / Exact·100 Hz untouched). Helios TX SWR
+after watts, before planet name. Docs + wiki.
+
+## 2026-10-22 — v0.25.26 Sheliak RELEASED
+
+Layouts (GitHub #20) + Snap VFO wheel to Step + laptop Tuning logo.
+Installer `dist/Lyra-Setup-0.25.26.exe`. Tag `v0.25.26`. Do not merge
+`main`.
+
+## 2026-10-22 — Recall test1 left Profiles/Display open
+
+Qt restoreState does not hide docks that are already visible. Save
+now records dockVis; recall hides main docks then applies that map.
+Photograph the slot before the name dialog. SPLIT is radio state,
+not a layout slot.
+
+## 2026-10-22 — Named slot recall exploded on a live window
+
+Factory stick worked on the laptop. Save test1 / close / reopen looked
+fine (session restore before show). Recall test1 then crushed docks:
+recall applied saveGeometry() on a visible QMainWindow. Live recall
+now restores dock state only.
+
+## 2026-10-22 — Layout #20: factory survives restart
+
+Recent, not ancient: v0.25.17 SUB panadapter2 + skip-save while SUB
+on; v0.25.20 Diversity + FloatingDockMemory (forces float on show);
+Filters RX/TX lo and meter faces changed min sizes. Qt restoreState
+of an older blob + those extra docks comes up crushed. Recalling
+factory looked fine, then layout-undo treated the QML load / float
+memory as a drag and photographed the crush on close.
+
+Recalling factory no longer writes Qt saveState() as the session.
+Rebuild factory until a dock is moved. Restore/factory is quiet
+until docksReady so undo + float-memory cannot clear that flag.
+Hidden cache: AppData + HKCU N8SDR\Lyra-cpp.
+
+## 2026-10-22 — Sticky VFO Snap (Volker); quiet [hb] gui
+
+Sticky VFO is **Settings → Hardware → Navigation** (default off).
+Wheel on LED / panadapter / HID snaps to the Step grid when ticked.
+Digit-place wheel stays additive. GUI heartbeat no longer WARNs
+every second — stall line only.
+
+## 2026-10-21 — Hold after v0.25.25
+
+Operator: 0.25.25 is out. Hold for a while. Only small fixes
+or cosmetics unless something is actually broken. No new
+feature sprints. Do not merge `main`. macOS stays `macos-port`.
+
+## 2026-10-21 — Volker DL1VE: RF1/Alt + LNA on v0.25.24
+
+Mail: antenna switching works; LNA Auto and manual between HF and
+2 m. More tests coming. Lyra-to-Lyra still on his list. GPA100
+analog not in this test.
+
 ## 2026-10-20 — v0.25.24 Sheliak RELEASED
 
 Tester cut for Volker (HL2 RF1 / Alt RX, I2C 0x1D register 11;

@@ -475,8 +475,7 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
                     auto *s = session_;
                     const bool subOn =
                         stream_ && stream_->subEnabled();
-                    const bool psOn = stream_ && stream_->psArmed()
-                        && stream_->psAttestation();
+                    const bool psOn = stream_ && stream_->psLiveArmed();
                     const quint32 hz = static_cast<quint32>(
                         stream_ ? corrected_freq(stream_->ddsHzForRf(
                                       stream_->rx2FreqHz()))
@@ -1400,6 +1399,7 @@ void P2RxBridge::open(const QString &ip, const QString &mac,
     auto *st = stream_;
     if (st) {
         st->setP2DrivePath(true);
+        st->setP2CwHost(true);
         st->setTxCalRigId(rigId_);
     }
     if (st) {
@@ -1487,6 +1487,7 @@ void P2RxBridge::open(const QString &ip, const QString &mac,
 void P2RxBridge::close() {
     if (!open_) return;
     auto *s = session_;
+    if (stream_) stream_->setP2CwHost(false);
     if (stream_ && stream_->moxActive())
         stream_->requestMox(false);
     // BLOCKING: callers use close() to switch wire paths (Settings

@@ -123,6 +123,7 @@
 #include <QStatusBar>
 #include <QToolButton>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QDesktopServices>
 #include <QPushButton>
@@ -272,6 +273,44 @@ inline bool isChipSummonedPanel(const QString &objectName) {
     for (const char *nm : kChipSummonedPanels)
         if (objectName == QLatin1String(nm)) return true;
     return false;
+}
+
+// Qt restoreState() will not *hide* a dock that is already visible
+// (QTBUG-44935). Named-slot recall from factory therefore left
+// Profiles / Display open even though the saved slot had closed them.
+QVariantMap captureMainDockVis(
+        const QHash<QString, QDockWidget *> &docks) {
+    QVariantMap m;
+    for (auto it = docks.cbegin(); it != docks.cend(); ++it) {
+        QDockWidget *d = it.value();
+        if (!d || isChipSummonedPanel(it.key()))
+            continue;
+        m.insert(it.key(), d->isVisible());
+    }
+    return m;
+}
+
+void hideMainDocksForRestore(const QHash<QString, QDockWidget *> &docks) {
+    for (auto it = docks.cbegin(); it != docks.cend(); ++it) {
+        QDockWidget *d = it.value();
+        if (!d || isChipSummonedPanel(it.key()))
+            continue;
+        d->hide();
+    }
+}
+
+void applyMainDockVis(const QHash<QString, QDockWidget *> &docks,
+                      const QVariantMap &vis) {
+    if (vis.isEmpty())
+        return;
+    for (auto it = vis.cbegin(); it != vis.cend(); ++it) {
+        if (isChipSummonedPanel(it.key()))
+            continue;
+        QDockWidget *d = docks.value(it.key());
+        if (!d)
+            continue;
+        d->setVisible(it.value().toBool());
+    }
 }
 
 // Diagnostic: LYRA_TEST_SIZE=WxH opens the window at exactly that LOGICAL size.
@@ -1091,9 +1130,21 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             if (!desk_ || !desk_->attached() || desk_->isHost()) return;
             desk_->setPlayPos(rx->volume());
             desk_->setPlayMuted(rx->muted());
+            desk_->setPlayPosRx2(rx->volumeRx2());
+            desk_->setPlayMutedRx2(rx->mutedRx2());
+            desk_->setSidetoneHz(rx->cwPitchHz());
         };
         connect(rx, &lyra::dsp::WdspEngine::volumeChanged, this, syncDeskLevel);
         connect(rx, &lyra::dsp::WdspEngine::mutedChanged, this, syncDeskLevel);
+        connect(rx, &lyra::dsp::WdspEngine::volumeRx2Changed, this, syncDeskLevel);
+        connect(rx, &lyra::dsp::WdspEngine::mutedRx2Changed, this, syncDeskLevel);
+        connect(rx, &lyra::dsp::WdspEngine::cwPitchChanged, this, syncDeskLevel);
+        connect(rx, &lyra::dsp::WdspEngine::cwPitchChanged, this, [this, rx]() {
+            // Host only. The desk applies this pitch; it does not send
+            // its own number back.
+            if (desk_ && desk_->attached() && desk_->isHost())
+                desk_->sendPitch(rx->cwPitchHz());
+        });
         connect(desk_, &DeskLink::changed, this, syncDeskLevel);
         desk_->setSpectrumSource([this](float *dst, int maxN, int *center, int *span) {
             auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
@@ -1102,15 +1153,44 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             *center = int(st->rx1FreqHz());
             return engine->copyHostSpectrumForDesk(dst, maxN, span);
         });
+        desk_->setRx2SpectrumSource([this](float *dst, int maxN, int *center, int *span) {
+            auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            if (!engine || !st || !center || !span) return 0;
+            *center = int(st->rx2FreqHz());
+            return engine->copyRx2SpectrumCache(dst, maxN, span);
+        });
         connect(desk_, &DeskLink::spectrumFrame, this, [this](int span) {
             if (auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
                 engine->postDeskSpectrum(desk_->spectrumDb(),
                                          desk_->spectrumCount(), span);
         });
+        connect(desk_, &DeskLink::spectrumRx2Frame, this, [this](int span) {
+            if (auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+                engine->postDeskSpectrumRx2(desk_->spectrumRx2Db(),
+                                            desk_->spectrumRx2Count(), span);
+        });
+        desk_->setCwAudioTap([this](const qint16 *left, const qint16 *right, int n) {
+            auto *engine = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            if (!engine || !left || n <= 0) return;
+            const qint16 *pcm = left;
+            if (right && st && st->subEnabled() && st->focusedRx() == 2)
+                pcm = right;
+            engine->feedRemoteCwAudio(pcm, n);
+        });
     }
     connect(desk_, &DeskLink::remoteFreq, this, [this](quint32 hz) {
         if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
             st->setRx1FreqHz(hz);
+    });
+    connect(desk_, &DeskLink::remotePitch, this, [this](int hz) {
+        // The freq line is the DDS. The host VFO shows DDS + this pitch
+        // in CWU/CWL. Apply it here so the desk LED and spectrum marker
+        // use the same offset. The host keeps its own pitch.
+        if (!desk_ || desk_->isHost()) return;
+        if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+            rx->setCwPitchHz(hz);
     });
     connect(desk_, &DeskLink::remoteMode, this, [this](const QString &mode) {
         if (prefs_) prefs_->setMode(mode);
@@ -1326,7 +1406,7 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         if (on) {
             const bool radioUp = st->isRunning()
                 || (p2Bridge_ && p2Bridge_->isRunning());
-            if (!st->psAttestation() || st->txInhibit() || !radioUp
+            if (st->txInhibit() || !radioUp
                 || st->psDigitalLockout()) {
                 deskPsMs_ = 0;
                 pushDeskPs();
@@ -1349,8 +1429,14 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             });
             return;
         }
-        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
             st->clearDeskPureSignal();
+            st->refreshDualAdcFromSettings();
+            st->setSuppressLocalTxBadge(false);
+        }
+        if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+            rx->clearDeskSpectrumRx2();
+        if (desk_) desk_->setLocalSidetone(false);
     });
     connect(desk_, &DeskLink::remoteRig, this, [this](int protocol, const QString &) {
         if (frontEnd_) frontEnd_->setDeskProtocol(protocol);
@@ -1380,8 +1466,18 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         p2Bridge_->setRxInputForBand(band, rx);
     });
     connect(desk_, &DeskLink::remoteSub, this, [this](bool on) {
+        if (desk_ && !desk_->isHost() && !on) {
+            if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+                rx->clearDeskSpectrumRx2();
+        }
         if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
             st->setSubEnabled(on);
+    });
+    connect(desk_, &DeskLink::remoteAdc, this, [this](int n) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_ || desk_->isHost()) return;
+        if (n <= 0) st->refreshDualAdcFromSettings();
+        else st->setDualAdc(n > 1);
     });
     connect(desk_, &DeskLink::remoteRx2, this, [this](quint32 hz) {
         if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
@@ -1417,6 +1513,11 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             desk_->setKeying(false);
         }
         if (tci_) tci_->releaseDeskDigitalInput();
+        if (deskCwLatched_) {
+            deskCwLatched_ = false;
+            if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+                st->applyRemoteCw(false, false);
+        }
         if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
             st->setTuneEnabled(false);
             st->setTwoToneEnabled(false);
@@ -1473,6 +1574,11 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         }
         if (tci_) tci_->setDeskOwnsVoice(false);
         if (tci_) tci_->releaseDeskDigitalInput();
+        if (deskCwLatched_) {
+            deskCwLatched_ = false;
+            if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+                st->applyRemoteCw(false, false);
+        }
         if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
             st->setTuneEnabled(false);
             st->setTwoToneEnabled(false);
@@ -1589,9 +1695,45 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         if (st->moxActive())
             desk_->sendDigitalState(true);
     });
+    connect(desk_, &DeskLink::remoteCwEdge, this, [this, deskTxRefuse](bool key, bool ptt) {
+        auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+        if (!st || !desk_ || !desk_->isHost()) return;
+        auto dropDeskCw = [this, st]() {
+            if (!deskCwLatched_) return;
+            deskCwLatched_ = false;
+            st->applyRemoteCw(false, false);
+        };
+        if (!key && !ptt) {
+            dropDeskCw();
+            return;
+        }
+        const QString mode = prefs_ ? prefs_->mode().toUpper() : QString();
+        const bool cw = mode == QLatin1String("CW")
+                        || mode == QLatin1String("CWU")
+                        || mode == QLatin1String("CWL");
+        if (!cw) {
+            dropDeskCw();
+            return;
+        }
+        const QString why = deskTxRefuse();
+        if (!why.isEmpty()) {
+            dropDeskCw();
+            if (why != QLatin1String("voice"))
+                desk_->sendVoiceDeny(why);
+            return;
+        }
+        st->applyRemoteCw(key, ptt);
+        deskCwLatched_ = key || ptt;
+    });
     connect(desk_, &DeskLink::changed, this, [this, deskTxLimit]() {
-        if (!desk_ || !desk_->isHost() || !desk_->keying()) return;
+        if (!desk_ || !desk_->isHost()) return;
         const int rtt = desk_->rttMs();
+        if (rtt >= deskTxLimit() && deskCwLatched_) {
+            deskCwLatched_ = false;
+            if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+                st->applyRemoteCw(false, false);
+        }
+        if (!desk_->keying()) return;
         if (rtt >= deskTxLimit()) {
             if (desk_->digitalWanted()) {
                 desk_->setDigitalWanted(false);
@@ -1679,6 +1821,9 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         if (!desk_ || !desk_->isHost()) return;
         auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
         auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_);
+        // Pitch before the DDS, so the desk's first carrier paint
+        // already uses the host offset.
+        if (rx) desk_->sendPitch(rx->cwPitchHz());
         if (st) desk_->sendTune(st->rx1FreqHz());
         if (prefs_) {
             desk_->sendTuneDrive(prefs_->tuneDriveMode(),
@@ -1691,6 +1836,9 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
             desk_->sendRxLow(prefs_->filterLow());
         }
         if (st) {
+            desk_->sendAdcCount(st->dualAdc() ? 2 : 1);
+            desk_->setSendRx2Audio(st->subEnabled());
+            desk_->setSendRx2Spectrum(st->subEnabled() && st->dualAdc());
             desk_->sendRit(st->ritEnabled(), st->ritOffsetHz());
             desk_->sendSplit(st->splitEnabled());
             desk_->sendSub(st->subEnabled());
@@ -1881,9 +2029,38 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         }
     };
     if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+        st->setCwEdgeHook([this](bool key, bool ptt) {
+            QMetaObject::invokeMethod(this, [this, key, ptt]() {
+                if (!desk_ || !desk_->attached() || desk_->isHost()) return;
+                desk_->sendCwEdge(key, ptt);
+            }, Qt::QueuedConnection);
+        });
+        connect(st, &lyra::ipc::HL2Stream::txTimeoutFired, this, [this]() {
+            if (!desk_ || !desk_->isHost() || !deskCwLatched_) return;
+            deskCwLatched_ = false;
+            if (auto *s = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+                s->applyRemoteCw(false, false);
+        });
+        connect(st, &lyra::ipc::HL2Stream::txInhibitChanged, this, [this](bool on) {
+            if (!on || !desk_ || !desk_->isHost() || !deskCwLatched_) return;
+            deskCwLatched_ = false;
+            if (auto *s = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+                s->applyRemoteCw(false, false);
+        });
         connect(st, &lyra::ipc::HL2Stream::runningChanged, this, pushDeskRig);
         connect(st, &lyra::ipc::HL2Stream::subEnabledChanged, this, [this, st]() {
-            if (desk_ && desk_->attached()) desk_->sendSub(st->subEnabled());
+            if (!desk_ || !desk_->attached()) return;
+            if (desk_->isHost()) {
+                desk_->sendAdcCount(st->dualAdc() ? 2 : 1);
+                desk_->setSendRx2Audio(st->subEnabled());
+                desk_->setSendRx2Spectrum(st->subEnabled() && st->dualAdc());
+            }
+            desk_->sendSub(st->subEnabled());
+        });
+        connect(st, &lyra::ipc::HL2Stream::dualAdcChanged, this, [this, st]() {
+            if (!desk_ || !desk_->attached() || !desk_->isHost()) return;
+            desk_->sendAdcCount(st->dualAdc() ? 2 : 1);
+            desk_->setSendRx2Spectrum(st->subEnabled() && st->dualAdc());
         });
         connect(st, &lyra::ipc::HL2Stream::rx2FreqChanged, this, [this, st]() {
             if (desk_ && desk_->attached()) desk_->sendRx2(st->rx2FreqHz());
@@ -2145,6 +2322,23 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
     buildToolbar();
     qInfo("[startup] restoring layout");
     restoreLayout();   // geometry + dock state + lock state
+    // QML min-heights land after show.  Keep restore/factory quiet until
+    // then so 0.25.20 float-memory and layout-undo do not treat load as
+    // an operator drag (GitHub #20).
+    connect(this, &MainWindow::docksReady, this, [this]() {
+        QTimer::singleShot(500, this, [this]() {
+            if (layoutUseFactory_)
+                layoutCurrent_ = saveState();
+            layoutRestoring_ = false;
+        });
+    });
+    QTimer::singleShot(4000, this, [this]() {
+        if (!layoutRestoring_)
+            return;
+        if (layoutUseFactory_)
+            layoutCurrent_ = saveState();
+        layoutRestoring_ = false;
+    });
     if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
         connect(st, &lyra::ipc::HL2Stream::subEnabledChanged,
                 this, &MainWindow::syncRx2Pan);
@@ -2513,16 +2707,23 @@ void MainWindow::showEvent(QShowEvent *event) {
         chipDocksResurrected = true;
         QTimer::singleShot(400, this, &MainWindow::resurrectOpenChipDocks);
     }
-    // 1 Hz GUI-thread heartbeat in lyra-log.txt.  If the UI freezes,
-    // copy the log while it is stuck: last `[hb] gui` is when the
-    // event loop last ran; later lines from other threads still flush.
+    // 1 Hz GUI-thread heartbeat.  Healthy ticks stay silent so the
+    // operator log is not a WARN every second.  If a tick is late,
+    // `[hb] gui stall N ms` is the gap; copy the log while frozen —
+    // later lines from other threads still flush.
     static bool hbArmed = false;
     if (!hbArmed) {
         hbArmed = true;
         auto *hb = new QTimer(this);
         hb->setInterval(1000);
-        connect(hb, &QTimer::timeout, this, [] {
-            qWarning("[hb] gui");
+        connect(hb, &QTimer::timeout, this, [last = QElapsedTimer()]() mutable {
+            if (!last.isValid()) {
+                last.start();
+                return;
+            }
+            const qint64 ms = last.restart();
+            if (ms >= 1500)
+                qWarning("[hb] gui stall %lld ms", static_cast<long long>(ms));
         });
         hb->start();
     }
@@ -2963,6 +3164,11 @@ void MainWindow::buildDocks() {
     if (QDockWidget *d = docks_.value(QStringLiteral("freqcal"))) {
         d->setFloating(true);
         d->hide();
+        // Same as Tuner: hide/show drops the float, so remember the frame.
+        // View → Freq Cal uses toggleViewAction and would otherwise re-dock
+        // into the bottom strip (or bounce closed via the chip).
+        new FloatingDockMemory(d, QStringLiteral("ui/freqcalDock"),
+                               &layoutRestoring_, d);
     }
     // #201 Session recorder — opt-in floating tool window (View → Recorder),
     // hidden by default so it never clutters the front panel.  REC/⏹ + timer
@@ -3237,6 +3443,29 @@ void MainWindow::buildMenus() {
         if (it.key() == QLatin1String("ampview")
             || it.key() == QLatin1String("diversity"))
             continue;
+        // Freq Cal is a float-only chip. toggleViewAction re-docks it and
+        // re-enters visibilityChanged; that path crashed (GitHub #21).
+        if (it.key() == QLatin1String("freqcal")) {
+            QDockWidget *d = it.value();
+            QAction *act = viewMenu->addAction(tr("Freq Cal"));
+            act->setCheckable(true);
+            act->setChecked(d->isVisible());
+            connect(act, &QAction::toggled, this, [d](bool on) {
+                if (on) {
+                    d->setFloating(true);
+                    d->show();
+                    d->raise();
+                    d->activateWindow();
+                } else {
+                    d->hide();
+                }
+            });
+            connect(d, &QDockWidget::visibilityChanged, act, [act](bool vis) {
+                const QSignalBlocker block(act);
+                act->setChecked(vis);
+            });
+            continue;
+        }
         viewMenu->addAction(it.value()->toggleViewAction());
     }
     viewMenu->addSeparator();
@@ -3883,6 +4112,7 @@ void MainWindow::pushDeskPlot()
 
 void MainWindow::rebuildRigMenu() {
     rigMenu_->clear();
+    const bool deskRole = desk_ && desk_->attached() && !desk_->isHost();
     const QString active = lyra::rig::registry::activeRigId();
     const auto rigs = lyra::rig::registry::rigs();
     if (rigs.isEmpty()) {
@@ -3911,10 +4141,28 @@ void MainWindow::rebuildRigMenu() {
         const QString label = r.label.isEmpty() ? r.rigId : r.label;
         QAction *a = rigMenu_->addAction(label);
         a->setCheckable(true);
-        a->setChecked(r.rigId == active);
+        a->setChecked(!deskRole && r.rigId == active);
         const QString id = r.rigId;
-        connect(a, &QAction::triggered, this, [this, id]() { switchRig(id); });
+        connect(a, &QAction::triggered, this, [this, id]() {
+            if (desk_ && desk_->attached() && !desk_->isHost()) {
+                statusBar()->showMessage(
+                    tr("Detach before using a radio on this computer."), 6000);
+                rebuildRigMenu();
+                return;
+            }
+            switchRig(id);
+        });
     }
+    QAction *remoteAct = rigMenu_->addAction(tr("Remote"));
+    remoteAct->setCheckable(true);
+    remoteAct->setChecked(deskRole);
+    connect(remoteAct, &QAction::triggered, this, [this]() {
+        if (desk_ && desk_->attached() && !desk_->isHost()) {
+            rebuildRigMenu();
+            return;
+        }
+        openSettingsTopic(QStringLiteral("remote"));
+    });
     rigMenu_->addSeparator();
     rigMenu_->addAction(tr("Add rig…"), this, &MainWindow::addRigInteractive);
     if (!active.isEmpty())
@@ -3929,6 +4177,12 @@ void MainWindow::rebuildRigMenu() {
 }
 
 void MainWindow::switchRig(const QString &rigId) {
+    if (desk_ && desk_->attached() && !desk_->isHost()) {
+        statusBar()->showMessage(
+            tr("Detach before using a radio on this computer."), 6000);
+        rebuildRigMenu();
+        return;
+    }
     if (rigId.isEmpty() || rigId == lyra::rig::registry::activeRigId())
         return;   // already active — nothing to do
 
@@ -4400,6 +4654,7 @@ void MainWindow::buildToolbar() {
         // dock's visibility directly.
         if (QDockWidget *d = docks_.value(QStringLiteral("freqcal"))) {
             auto *fc = new QToolButton(tb);
+            freqCalBtn_ = fc;
             fc->setText(tr("Freq Cal"));
             fc->setCheckable(true);
             fc->setChecked(d->isVisible());
@@ -5143,12 +5398,16 @@ void MainWindow::updateConnState() {
                                              : tr("▶  Start"));
     }
     const bool deskRole = desk_ && desk_->attached() && !desk_->isHost();
-    if (startStopAction_)
-        startStopAction_->setEnabled(!deskRole || anyRunning);
+    const bool hideLocalStart = deskRole && !anyRunning;
+    if (startStopAction_) {
+        startStopAction_->setEnabled(!hideLocalStart);
+        startStopAction_->setVisible(!hideLocalStart);
+    }
     if (startStopBtn_) {
         // Green when stopped (the button says "Start"); red when running
         // (it says "Stop") — the colour signals the ACTION the click does.
-        startStopBtn_->setEnabled(!deskRole || anyRunning);
+        startStopBtn_->setVisible(!hideLocalStart);
+        startStopBtn_->setEnabled(!hideLocalStart);
         startStopBtn_->setToolTip(deskRole
             ? tr("This desk uses the shack radio. Detach to start a radio here.")
             : QString());
@@ -5188,6 +5447,21 @@ void MainWindow::updateConnState() {
                 : deskRole
                     ? QStringLiteral("QLabel{color:#7ec8e3;font-weight:bold;}")
                     : QStringLiteral("QLabel{color:#e53935;font-weight:bold;}"));
+    }
+    if (freqCalBtn_)
+        freqCalBtn_->setVisible(!deskRole);
+    if (deskRole) {
+        if (QDockWidget *d = docks_.value(QStringLiteral("freqcal"))) {
+            if (d->isVisible()) d->hide();
+        }
+    }
+    if (st)
+        st->setSuppressLocalTxBadge(deskRole);
+    if (settingsDlg_)
+        settingsDlg_->setRemoteDesk(deskRole);
+    if (deskMenuShown_ != deskRole) {
+        deskMenuShown_ = deskRole;
+        rebuildRigMenu();
     }
 }
 
@@ -5454,6 +5728,17 @@ void MainWindow::fitWindowToScreen() {
           avail.width(), avail.height());
 }
 
+void MainWindow::setLayoutUseFactory(bool on) {
+    if (testWindowSize().isValid() || safeBootLayout())
+        return;
+    layoutUseFactory_ = on;
+    QSettings s;
+    const QString p = layoutSlotPrefix();
+    s.setValue(p + QStringLiteral("useFactory"), on);
+    if (on)
+        s.remove(p + QStringLiteral("windowState"));
+}
+
 void MainWindow::saveLayout() {
     if (testWindowSize().isValid()) return;   // diagnostic run — see testWindowSize()
     if (safeBootLayout()) return;             // safe boot is READ-ONLY — see safeBootLayout()
@@ -5468,9 +5753,20 @@ void MainWindow::saveLayout() {
     // window, so main-window saveState() naturally omits them; each rack
     // persists its own geometry/state separately.
     s.setValue(p + QStringLiteral("geometry"), saveGeometry());
-    s.setValue(p + QStringLiteral("windowState"), saveState());
     if (prefs_)
         s.setValue(p + QStringLiteral("panadapterSplit"), prefs_->panadapterSplit());
+    // Factory is rebuilt on launch, not photographed.  Writing saveState()
+    // here was GitHub #20: Recall factory looked fine, close saved a bad
+    // blob, restart restored the corruption.
+    if (layoutUseFactory_) {
+        s.setValue(p + QStringLiteral("useFactory"), true);
+        s.remove(p + QStringLiteral("windowState"));
+        s.remove(p + QStringLiteral("dockVis"));
+    } else {
+        s.setValue(p + QStringLiteral("useFactory"), false);
+        s.setValue(p + QStringLiteral("windowState"), saveState());
+        s.setValue(p + QStringLiteral("dockVis"), captureMainDockVis(docks_));
+    }
     saveLayoutUndoStack();
 }
 
@@ -5541,6 +5837,7 @@ void MainWindow::restoreLayout() {
               qUtf8Printable(layoutSlotKey()));
     }
 
+    layoutRestoring_ = true;
     const QByteArray geo = s.value(p + QStringLiteral("geometry")).toByteArray();
     if (!geo.isEmpty()) {
         restoreGeometry(geo);   // includes the maximized/normal flag
@@ -5551,17 +5848,23 @@ void MainWindow::restoreLayout() {
         // maximize and close, saveGeometry() persists it for THIS setup.
         setWindowState(windowState() | Qt::WindowMaximized);
     }
+    const bool wantFactory =
+        s.value(p + QStringLiteral("useFactory"), false).toBool();
     const QByteArray st = s.value(p + QStringLiteral("windowState")).toByteArray();
-    if (!st.isEmpty()) {
-        restoreState(st);
-        layoutSource_ = QStringLiteral("restored slot '%1'").arg(layoutSlotKey());
-    } else {
-        // No session for this display setup: come up in the factory layout
-        // rather than the raw dock-creation order.  Built, not restored from a
-        // snapshot — see applyDefaultLayout().
+    if (wantFactory || st.isEmpty()) {
+        // Rebuild factory (GitHub #20).  Do not restoreState a photograph
+        // of factory — that blob is what scrambled laptops after restart.
         applyDefaultLayout();
-        layoutSource_ = QStringLiteral("FACTORY (slot '%1' was empty)")
-                            .arg(layoutSlotKey());
+        layoutSource_ = wantFactory
+            ? QStringLiteral("FACTORY (sticky, slot '%1')").arg(layoutSlotKey())
+            : QStringLiteral("FACTORY (slot '%1' was empty)").arg(layoutSlotKey());
+    } else {
+        hideMainDocksForRestore(docks_);
+        restoreState(st);
+        applyMainDockVis(docks_,
+                         s.value(p + QStringLiteral("dockVis")).toMap());
+        layoutUseFactory_ = false;
+        layoutSource_ = QStringLiteral("restored slot '%1'").arg(layoutSlotKey());
     }
     qInfo("[layout] %s", qUtf8Printable(layoutSource_));
     // The panadapter/waterfall divider lives inside the panadapter dock's QML,
@@ -5590,6 +5893,7 @@ void MainWindow::saveUserLayout() {
     QSettings s;
     s.setValue(QStringLiteral("ui/userGeometry"), saveGeometry());
     s.setValue(QStringLiteral("ui/userWindowState"), saveState());
+    s.setValue(QStringLiteral("ui/userDockVis"), captureMainDockVis(docks_));
     // The panadapter/waterfall divider isn't part of saveState() — it's
     // a QML SplitView inside the dock — so snapshot it alongside.
     if (prefs_) {
@@ -5616,25 +5920,8 @@ void MainWindow::restoreUserLayout() {
                "default\"."));
         return;
     }
-    const QByteArray geo =
-        s.value(QStringLiteral("ui/userGeometry")).toByteArray();
-    if (!geo.isEmpty()) {
-        restoreGeometry(geo);
-        fitWindowToScreen();   // saved on a bigger screen? don't go off-desktop
-    }
-    restoreState(st);
-    // Trust restoreState() for each dock's saved visibility — do NOT force-show
-    // (that re-opened panels the operator had closed when saving this layout;
-    // see #189).
-    // Re-apply the saved divider position (QML re-applies on the
-    // panadapterSplit change).
-    if (prefs_) {
-        const QVariant sp =
-            s.value(QStringLiteral("ui/userPanadapterSplit"));
-        if (sp.isValid()) {
-            prefs_->setPanadapterSplit(sp);
-        }
-    }
+    applyLiveDockState(st, s.value(QStringLiteral("ui/userPanadapterSplit")),
+                       s.value(QStringLiteral("ui/userDockVis")).toMap());
 }
 
 // The machine-specific-key filter + the export/restore engine now live in
@@ -5788,21 +6075,11 @@ void MainWindow::importLayoutFromFile() {
         != QMessageBox::Yes)
         return;
 
-    if (!restoreState(st)) {
-        QMessageBox::warning(this, tr("Import failed"),
-            tr("Lyra couldn't apply that layout (it may be from a much "
-               "newer or older version)."));
-        return;
-    }
-    if (prefs_) {
-        const QJsonValue sp = o.value(QStringLiteral("panadapterSplit"));
-        if (!sp.isUndefined() && !sp.isNull())
-            prefs_->setPanadapterSplit(sp.toVariant());
-    }
-    // Re-apply the current lock state to the restored arrangement + persist,
-    // exactly as recallNamedLayout() does.
-    applyPanelLock(
-        QSettings().value(QStringLiteral("ui/panelsLocked"), false).toBool());
+    QVariant split;
+    const QJsonValue spv = o.value(QStringLiteral("panadapterSplit"));
+    if (!spv.isUndefined() && !spv.isNull())
+        split = spv.toVariant();
+    applyLiveDockState(st, split);
     flushLayoutToSettings();
     QMessageBox::information(this, tr("Layout applied"),
         tr("Now using the layout \"%1\".\n\nTo keep it in a slot for quick "
@@ -5836,20 +6113,44 @@ void MainWindow::refreshLayoutMenus() {
     refreshLayoutUndoAction();
 }
 
-void MainWindow::applyDockLayout(const QByteArray &geo, const QByteArray &st,
-                                const QVariant &split, bool persistSession) {
+void MainWindow::applyLiveDockState(const QByteArray &st, const QVariant &split,
+                                   const QVariantMap &dockVis) {
     layoutRestoring_ = true;
-    if (!geo.isEmpty()) {
-        restoreGeometry(geo);
-        fitWindowToScreen();
-    }
-    if (!st.isEmpty())
-        restoreState(st);
+    if (layoutSnapTimer_)
+        layoutSnapTimer_->stop();
+    // restoreGeometry() on a visible window crushes docks. restoreState()
+    // will not hide a dock that is already open (QTBUG-44935) — that is
+    // why Recall test1 left Profiles/Display up after factory. Hide the
+    // main docks first, restore the blob, then apply the saved vis map.
+    hideMainDocksForRestore(docks_);
+    if (!restoreState(st))
+        qWarning("[layout] restoreState rejected the saved dock blob");
+    applyMainDockVis(docks_, dockVis);
     if (prefs_ && split.isValid())
         prefs_->setPanadapterSplit(split);
     applyPanelLock(
         QSettings().value(QStringLiteral("ui/panelsLocked"), false).toBool());
-    QTimer::singleShot(0, this, [this, persistSession]() {
+    setLayoutUseFactory(false);
+    layoutCurrent_ = saveState();
+    QTimer::singleShot(600, this, [this]() { layoutRestoring_ = false; });
+}
+
+void MainWindow::applyDockLayout(const QByteArray &geo, const QByteArray &st,
+                                const QVariant &split, bool persistSession) {
+    layoutRestoring_ = true;
+    if (!geo.isEmpty() && !isVisible()) {
+        restoreGeometry(geo);
+        fitWindowToScreen();
+    }
+    if (!st.isEmpty()) {
+        hideMainDocksForRestore(docks_);
+        restoreState(st);
+    }
+    if (prefs_ && split.isValid())
+        prefs_->setPanadapterSplit(split);
+    applyPanelLock(
+        QSettings().value(QStringLiteral("ui/panelsLocked"), false).toBool());
+    QTimer::singleShot(600, this, [this, persistSession]() {
         layoutRestoring_ = false;
         if (persistSession)
             saveLayout();
@@ -6002,6 +6303,12 @@ void MainWindow::hideRx2ReturningHeight(QDockWidget *rx2) {
 
 void MainWindow::saveNamedLayout(int slot) {
     if (testWindowSize().isValid() || safeBootLayout()) return refuseLayoutWrite();
+    // Photograph BEFORE the name dialog. Closing that dialog must not
+    // be what we save.
+    const QByteArray geo = saveGeometry();
+    const QByteArray st = saveState();
+    const QVariantMap vis = captureMainDockVis(docks_);
+    const QVariant split = prefs_ ? prefs_->panadapterSplit() : QVariant();
     QSettings s;
     const QString base = QStringLiteral("layouts/%1/").arg(slot);
     QString cur = s.value(base + QStringLiteral("name")).toString();
@@ -6013,13 +6320,12 @@ void MainWindow::saveNamedLayout(int slot) {
     if (!ok) return;
     if (name.isEmpty()) name = tr("Layout %1").arg(slot);
     s.setValue(base + QStringLiteral("name"), name);
-    s.setValue(base + QStringLiteral("geometry"), saveGeometry());
-    s.setValue(base + QStringLiteral("windowState"), saveState());
-    // The panadapter/waterfall divider is a QML SplitView inside the dock —
-    // not part of saveState() — so snapshot it alongside.
-    if (prefs_)
-        s.setValue(base + QStringLiteral("panadapterSplit"),
-                   prefs_->panadapterSplit());
+    s.setValue(base + QStringLiteral("geometry"), geo);
+    s.setValue(base + QStringLiteral("windowState"), st);
+    s.setValue(base + QStringLiteral("dockVis"), vis);
+    if (split.isValid())
+        s.setValue(base + QStringLiteral("panadapterSplit"), split);
+    setLayoutUseFactory(false);
     statusBar()->showMessage(
         tr("Saved layout \"%1\" to slot %2.").arg(name).arg(slot), 4000);
 }
@@ -6037,30 +6343,13 @@ void MainWindow::recallNamedLayout(int slot) {
                 .arg(slot));
         return;
     }
-    const QByteArray geo =
-        s.value(base + QStringLiteral("geometry")).toByteArray();
-    if (!geo.isEmpty()) {
-        restoreGeometry(geo);
-        fitWindowToScreen();   // saved on a bigger screen? don't go off-desktop
-    }
-    restoreState(st);
-    // Trust restoreState() for each dock's saved open/closed state.  An earlier
-    // force-show of every non-chip panel here re-opened ANY panel the operator
-    // had closed when saving this slot — the Solar panel was the visible victim
-    // (#189), but it hit meter/audio/tx/band equally.  A faithful recall must
-    // reproduce exactly what was saved, so no force-show.
-    if (prefs_) {
-        const QVariant sp = s.value(base + QStringLiteral("panadapterSplit"));
-        if (sp.isValid()) prefs_->setPanadapterSplit(sp);
-    }
-    // Re-apply the current lock state to the freshly-restored arrangement
-    // (restoreState resets dock features the same way restoreLayout handles).
-    applyPanelLock(
-        QSettings().value(QStringLiteral("ui/panelsLocked"), false).toBool());
+    applyLiveDockState(st, s.value(base + QStringLiteral("panadapterSplit")),
+                       s.value(base + QStringLiteral("dockVis")).toMap());
     statusBar()->showMessage(tr("Recalled layout slot %1.").arg(slot), 4000);
 }
 
 void MainWindow::applyDefaultLayout() {
+    layoutRestoring_ = true;
     // The factory arrangement — BUILT, not restored from a captured blob.
     //
     // It used to be a QMainWindow::saveState() snapshot embedded in the source.
@@ -6160,6 +6449,16 @@ void MainWindow::applyDefaultLayout() {
     // would remove the persisted ui/panadapterSplit key, so skip it (the operator's
     // real slot keeps its own split, restored on the next normal launch).
     if (prefs_ && !safeBootLayout()) prefs_->setPanadapterSplit(QVariant());
+    setLayoutUseFactory(true);
+    layoutCurrent_ = saveState();
+    // Menu recall: docks are already live.  Startup waits for docksReady.
+    if (docksReadyEmitted_) {
+        QTimer::singleShot(800, this, [this]() {
+            if (layoutUseFactory_)
+                layoutCurrent_ = saveState();
+            layoutRestoring_ = false;
+        });
+    }
 }
 
 // ── Layout undo (randol request) ─────────────────────────────────────────
@@ -6228,6 +6527,7 @@ void MainWindow::commitLayoutSnapshot() {
     while (layoutUndoStack_.size() > kLayoutUndoMax)
         layoutUndoStack_.removeFirst();            // drop the oldest
     layoutCurrent_ = now;
+    setLayoutUseFactory(false);                    // operator moved a dock
     saveLayoutUndoStack();                         // survives a restart
     refreshLayoutUndoAction();
 }
@@ -6243,6 +6543,7 @@ void MainWindow::undoLayoutChange() {
     const QByteArray prev = layoutUndoStack_.takeLast();
     restoreState(prev);
     layoutCurrent_ = prev;
+    setLayoutUseFactory(false);
     // restoreState resets each dock's features — re-apply the lock state, as
     // recallNamedLayout does.
     applyPanelLock(

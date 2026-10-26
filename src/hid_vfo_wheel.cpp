@@ -1,4 +1,6 @@
 #include "hid_vfo_wheel.h"
+#include "vfo_snap.h"
+#include "freqdisplay.h"
 
 #include "hl2_stream.h"
 #include "prefs.h"
@@ -254,8 +256,13 @@ bool HidVfoWheel::nativeEventFilter(const QByteArray &eventType, void *message,
         return false;
     lastMatch_.restart();
     emit wheelHeard();
-    if (prefs_ && prefs_->hidVfoWheelEnabled())
+    if (prefs_ && prefs_->hidVfoWheelEnabled()) {
+        if (auto *led = FreqDisplay::ledUnderMouse()) {
+            led->nudgeByTicks(ticks);
+            return false;
+        }
         applyTicks(ticks);
+    }
 #else
     Q_UNUSED(eventType);
     Q_UNUSED(message);
@@ -287,16 +294,23 @@ void HidVfoWheel::applyTicks(int ticks)
     const int step = rx2 ? prefs_->vfoStepHzRx2(mode) : prefs_->vfoStepHz(mode);
     if (step <= 0)
         return;
-    const int off = wdsp_
-        ? (rx2 ? wdsp_->markerOffsetHzRx2() : wdsp_->markerOffsetHz())
-        : 0;
-    quint32 dds = stream_->rx1FreqHz();
-    if (rx2)
-        dds = stream_->rx2FreqHz();
-    else if (vfoB)
-        dds = stream_->vfoBHz();
-    qint64 next = qint64(dds) + qint64(off) + qint64(ticks) * qint64(step)
-                  - qint64(off);
+    // VFO B is stored as carrier. RX1 / RX2 DDS need the CW pitch offset
+    // so sticky snaps the number on the LED, not the NCO.
+    int off = 0;
+    quint32 stored = stream_->rx1FreqHz();
+    if (rx2) {
+        stored = stream_->rx2FreqHz();
+        off = wdsp_ ? wdsp_->markerOffsetHzRx2() : 0;
+    } else if (vfoB) {
+        stored = stream_->vfoBHz();
+    } else if (wdsp_) {
+        off = wdsp_->markerOffsetHz();
+    }
+    const int carrier = static_cast<int>(
+        qBound(0LL, qint64(stored) + qint64(off), 2147483647LL));
+    const int nextCarrier = nextWheelHz(
+        carrier, step, ticks, prefs_->vfoStickyWheel());
+    qint64 next = qint64(nextCarrier) - qint64(off);
     if (next < 0)
         next = 0;
     if (next > 2147483647LL)

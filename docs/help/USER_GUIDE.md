@@ -22,7 +22,73 @@ not programmers — if you can click a menu, you can use this.
 
 ## Current build
 
-**v0.25.24 Sheliak.** See [What's new in 0.25.24](#whats-new-in-02524).
+**v0.25.28 Sheliak.** See [What's new in 0.25.28](#whats-new-in-02528).
+
+## What's new in 0.25.28
+
+- **HL2 IO-board RX fcodes (GitHub #23).** Same one-byte codes deskHPSDR
+  writes to Pico registers **13 / 14**, from the **dial** (not the 10 m
+  IF). Analog BYTE0–4 (GPA100 / J4 PWM) and RF1/Alt (register 11 = 0 or
+  2) are unchanged. If a Pico GPIO decoder is wrong, set environment
+  **`LYRA_NO_IOBOARD_FCODE=1`** (13/14 off, analog stays) or reinstall
+  **v0.25.27**.
+- **PureSignal dock ON.** One switch, like Thetis / DeskHPSDR. First ON
+  records the coupler checkbox. Drive / watts cap / ATT-on-TX are not
+  on that path. DIG/CW/FM still force the calibrator off.
+- **v0.25.27 Sheliak** is the previous public build. If this cut
+  misbehaves on J4 band volts or RF1/Alt, reinstall **v0.25.27**.
+  **v0.25.22** remains the long return point. Settings stay.
+
+## What's new in 0.25.27
+
+- **VFO LED wheel (GitHub #22).** Wheel **on a digit** moves that place.
+  Wheel **on the LED but not on a digit** uses that VFO's Tuning **Step**
+  (A and B each have their own). **Snap VFO wheel to Step** (Settings →
+  Hardware → Navigation) applies only on that empty-LED path, plus the
+  USB encoder and panadapter wheel. Panadapter wheel stays Display
+  **Panafall**; click stays **Exact / 100 Hz**.
+- **Helios TX SWR.** On transmit the SOL readout is watts, then **SWR**,
+  then the planet name. MIC / ALC / GAIN chips are unchanged.
+- **View → Freq Cal (GitHub #21).** Opens the same floating panel as the
+  Freq Cal chip (no re-dock crash). Settings → Calibration is unchanged.
+- **v0.25.26 Sheliak** remains the previous public build. If this cut
+  misbehaves, reinstall **v0.25.22**. Settings stay.
+
+## What's new in 0.25.26
+
+- **Layouts (GitHub #20).** Recalling **Lyra default (factory)** now
+  survives a restart until you move a panel. Named slots remember which
+  docks were open (Profiles / Display stay closed if you closed them).
+  Uninstall does **not** wipe layout: `%APPDATA%\N8SDR\Lyra-cpp` and
+  `HKCU\Software\N8SDR\Lyra-cpp`. After install: Recall factory, close,
+  reopen. `--safe` starts factory without touching the saved slot.
+  See [Getting around the window](#getting-around-the-window).
+- **Snap VFO wheel to Step** — **Settings → Hardware → Navigation**,
+  default **off**. First wheel notch lands on the step grid in that
+  direction. Wheel **on a VFO digit** always moves that place. Wheel on
+  the LED **but not on a digit**, and the USB encoder, use that VFO's
+  Tuning **Step** (Snap applies there). Panadapter wheel uses Display
+  **Panafall**; panadapter click uses **Exact / 100 Hz**. See
+  [Tuning](#tuning) and [Navigation](#navigation-usb-encoder--hid-wheel).
+- **Laptop Tuning row.** The Lyra logo matches the VFO boxes so SPLIT /
+  RIT sit fully on a short dock.
+- **v0.25.25 Sheliak** remains the previous public build. If this cut
+  misbehaves, reinstall **v0.25.22**. Settings stay.
+
+## What's new in 0.25.25
+
+- **Lyra to Lyra: desk RX2 and CW**, on top of the v0.25.24 Sheliak
+  release. The desk shows the host second-receiver picture and plays
+  that audio when **SUB** is on and the radio has its own second
+  converter. A single-converter **SUB** sends the audio and no second
+  picture. CW from the desk follows the host pitch, and CW chip
+  **Send** on a Protocol 2 Brick puts a carrier on the air. While the
+  host is in CW, **Start voice**, the key, **MOX**, **Tune**, and
+  **2-tone** stay off at 150 ms or more. Outside CW, voice, **MOX**,
+  **Tune**, and **2-tone** stay off at 200 ms or more. The away
+  picture stays about **60 Hz**. See [Lyra to Lyra](#lyra-to-lyra).
+- **v0.25.24 Sheliak** remains the previous public build. If this beta
+  misbehaves, reinstall **v0.25.22**. Settings stay.
 
 ## What's new in 0.25.24
 
@@ -36,8 +102,16 @@ not programmers — if you can click a menu, you can use this.
   writer, not the radio session thread. Aimed at the occasional
   “keyed, relay clicks, no RF” stall after a long digital session.
   Dummy-load first key on Brick after install.
-- **Lyra to Lyra** from 0.25.23 is still in this build. Both PCs need
-  the same version. If that beta is not for you, reinstall **v0.25.22**.
+- **Lyra to Lyra.** The desk shows the host's second-receiver picture
+  and plays that audio when **SUB** is on and the radio has its own
+  second converter. A single-converter **SUB** sends the audio and no
+  second picture. CW from the desk follows the host pitch. On a
+  Protocol 2 Brick, **Send** holds transmit for the message and puts
+  a carrier on the air for each element. While the host is in CW,
+  **Start voice**, the key, **MOX**, **Tune**, and **2-tone** stay off
+  at 150 ms or more. Outside CW, voice, **MOX**, **Tune**, and
+  **2-tone** stay off at 200 ms or more. Both PCs need this version.
+  If that beta is not for you, reinstall **v0.25.22**.
 
 ## What's new in 0.25.23
 
@@ -51,8 +125,8 @@ not programmers — if you can click a menu, you can use this.
 ## What's new in 0.25.22
 
 - **Meter faces.** Header **Arc | Bar | Ladder | Sonar | Sol | Clus**.
-  **Helios** is the sun-and-planets look (S9 = Jupiter; TX watts plus
-  MIC / ALC / GAIN). **Sonar** is the PPI with a compass ring (replaces
+  **Helios** is the sun-and-planets look (S9 = Jupiter; TX watts, then
+  SWR, then the planet name, plus MIC / ALC / GAIN chips). **Sonar** is the PPI with a compass ring (replaces
   Radar). **Cluster** is the cockpit arc plus segmented bars. Same
   calibration as Arc. See [Meter panel](#meter-panel).
 - **Band change while transmitting.** Tuning across a band edge while
@@ -395,6 +469,10 @@ Dummy load first.
 
 ## Contents
 
+- [What's new in 0.25.28](#whats-new-in-02528)
+- [What's new in 0.25.27](#whats-new-in-02527)
+- [What's new in 0.25.26](#whats-new-in-02526)
+- [What's new in 0.25.25](#whats-new-in-02525)
 - [What's new in 0.25.24](#whats-new-in-02524)
 - [What's new in 0.25.23](#whats-new-in-02523)
 - [What's new in 0.25.22](#whats-new-in-02522)
@@ -1002,7 +1080,9 @@ one click:
 - **Lyra default** — returns to the built-in factory arrangement. (Use
   this if a layout ever gets scrambled.) Any header-chip panel you had
   docked into the main window goes back to a floating window — still open
-  if it was open — so it can't crowd the factory rows.
+  if it was open — so it can't crowd the factory rows. That choice
+  **survives a restart** until you move a panel; closing used to photograph
+  a bad Qt snapshot and come back corrupted (laptop / GitHub #20).
 
 Recalling a layout restores only your main panels — it won't pop open the
 TX/RX DSP-rack or CW tool windows you reach from the header chips.
@@ -1059,7 +1139,10 @@ second receiver while **SUB** is on and that VFO is focused.
   exact), in **100 Hz** it rounds to the nearest 100 Hz.
 - **Click + drag** left/right to pan across the band.
 - **Mouse wheel** steps the frequency by the **Panafall step** (set on the
-  Display panel). **Ctrl + wheel** zooms instead.
+  Display panel). With **Snap VFO wheel to Step** on (**Settings →
+  Hardware → Navigation**), the first notch lands on that grid —
+  `14.228.200` at 500 Hz goes to `14.228.500` or `14.228.000`, not
+  `14.228.700`. **Ctrl + wheel** zooms instead.
 - **Middle-click** — while SPLIT or SUB is on: from **TUNE A**, parks VFO B
   (or SUB) on the click and focuses it (**TUNE B**); from **TUNE B**,
   returns focus to VFO A. Left/right/wheel stay for tuning, notches, and
@@ -1141,14 +1224,14 @@ VFO → VFO style** and choose **Lyra (Mac)** (default), **Amber LED** (the
 original look), **Classic LCD**, **Nixie**, **VFD**, or **Widget**. The
 choice is shared by VFO A and B and remembered.
 
-- **Click a digit** to select it (a cyan underline marks it), then **roll
-  the mouse wheel** over the display to tune that digit's place up/down;
-  with the LED focused, the **arrow keys** also step that place (Left /
-  Right pick the digit, Up / Down change it).
+- **Click a digit** to select it (a cyan underline marks it). **Roll the
+  mouse wheel on that digit** to tune **that place** (not the Tuning
+  **Step**). **Wheel on the LED but not on a digit** uses that VFO's
+  **Step** (VFO A and VFO B each have their own). With the LED focused,
+  the **arrow keys** also step the underlined place (Left / Right pick
+  the digit, Up / Down change it).
 - **Arrow keys anywhere else** (not typing, not in a dialog): **Left /
   Right = 1 kHz**, **Up / Down = 10 Hz** on the focused receiver.
-- **Roll the wheel** anywhere on the display to tune by the current
-  **Step** (see below).
 - **Double-click** the display to type an exact frequency.
 The frequency, **Step**, and **Mode** form one bordered **VFO cluster**.
 In every style the border is **green while receiving**, turns **red on
@@ -1170,6 +1253,21 @@ FM (repeaters); leave RPT alone if you are not on FM.
   12.5 kHz** (default **1 kHz**). The last step is remembered **per
   mode** (FM vs USB vs …) and separately for RX2. **6.25 / 8.33 / 12.5 kHz**
   are land-mobile and airband channel spacings.
+- **Snap VFO wheel to Step** — **Settings → Hardware → Navigation**,
+  default **off**. When on, the **first** wheel notch lands **on the
+  grid**, in the direction you rolled, then further notches step.
+  Example, Tuning **Step = 500 Hz**, dial `14.228.200`:
+  - wheel **up** → `14.228.500`
+  - wheel **down** → `14.228.000`
+  Off (today's habit) **adds** the step from wherever you are →
+  `14.228.700`.
+  - **VFO LED, not on a digit** uses that VFO's Tuning **Step** (Snap
+    applies here). **Wheel on a digit** still moves that place only.
+  - **USB encoder** uses the Tuning **Step**.
+  - **Panadapter wheel** uses the Display **Panafall** step (that is
+    already the pan wheel's step).
+  - Panadapter **click** still uses **Exact / 100 Hz** on the Display
+    panel. SPLIT is radio state, not this checkbox.
 - **Mode** — under the VFO: **LSB, USB, CWL, CWU, DSB, AM, FM, DIGU,
   DIGL**. (Mode lives with the VFO it applies to — moved here from the
   old Mode + Filter panel.) **PureSignal** only runs in phone/AM-class
@@ -2289,11 +2387,24 @@ Works on any HL2 or HL2+.
    manufacturer app or a hardware volume/mute — check it. Speak and confirm
    the Windows input bar moves.
 4. Point Lyra at it — **Settings → TX → Mic source = "PC Soundcard (VAC1)"**,
-   then **Settings → Audio → VAC1** and set the **Input device** to that same
-   Windows microphone.
-5. Pick your mode and frequency (as in Path A step 5), hold **MOX** (or your
-   PTT), and talk — watch Lyra's **MIC** meter move. No movement → go back to
-   step 3 (Windows).
+   then **Settings → Audio → VAC1**:
+   - tick **Enable VAC1**
+   - **Auto-enable for digital** **off** (if that is on, USB/LSB **stops**
+     VAC and you get no PC mic)
+   - **Input device** = that same Windows microphone (the headset **mic**,
+     not the speakers, not `(none)`)
+   - **Output device** = **`(none)`** for a USB headset used as a mic
+     (RX already goes through **Out**; do not pick the headset twice)
+   - tick **Combine input (mono)** if the headset is stereo
+5. Dummy load. **Enable PA** / Drive above 0. USB or LSB. Click **MOX**
+   and talk — watch the **MIC** meter (not watts) move. No movement →
+   Windows mic (step 3) or the VAC Input device. **MON TX** on, raise
+   **Monitor**; you should hear yourself in the headset.
+
+**USB headset, no virtual cable (VB-CABLE not required).** One device for
+listen and talk: **Out** = headset speakers, VAC1 **Input** = headset
+mic, VAC1 **Output** = `(none)`. You do **not** need a virtual cable
+for this.
 
 ---
 
@@ -2311,7 +2422,9 @@ is laid out in old Lyra's three-row arrangement:
 - **Panafall** — the step the mouse wheel tunes by when you scroll over
   the panadapter/waterfall (**1 Hz … 100 kHz**). This is your coarse
   band-skim step, separate from the fine VFO step on the Tuning panel.
-- **Exact / 100 Hz** — how a panadapter **click/drag/wheel** tune lands:
+  **Snap VFO wheel to Step** (**Settings → Hardware → Navigation**,
+  default off) lands the first wheel notch on this grid.
+- **Exact / 100 Hz** — how a panadapter **click/drag** lands:
   - **Exact** — go to where you clicked, snapped to the **Panafall step**
     above. With Panafall = 1 Hz that's truly exact; set it to 10/50 Hz
     (or higher) and clicks snap to that grid. The RX1 readout shows the
@@ -2367,8 +2480,10 @@ A GPU-drawn **RX / TX meter** with a choice of faces — pick one from the
   Earth holds S5–S7, Jupiter is S9+, Saturn +15, Uranus +30, Pluto a
   tickle at +45, wormhole at +50. On TX the planets follow the watts
   scale (rated max in Settings → Meter); a small **MIC · ALC · GAIN**
-  line (cyan / green / red, no bars) sits under the poster. The big
-  S / watts number stays.
+  line (cyan / green / red, no bars) sits under the poster. The bottom
+  readout is **TX PWR**, watts, **SWR** (`1.12:1`, or `—` below usable
+  power), then the planet name (e.g. WORMHOLE). SWR is green under 1.5,
+  gold from 1.5, red at 2.0 and up. The big S / watts number stays.
 - **Cluster** — cockpit arc of lamps plus segmented bars for the Ladder
   stack (S / NF / SNR on RX; PWR and the TX rows on TX). Theme cyan.
 - **VFD, Drum, Iris, Phosphor** — single-hue tube, drum, aperture and
@@ -2640,7 +2755,7 @@ PC dies.
 
 | Surface | What it is |
 |---|---|
-| **Settings → TX** | **Attestation** checkbox (default **off**). Tick only if **this** radio has the coupler. Until then Arm stays inert. |
+| **Settings → TX** | **Coupler installed** (default **off**). First **ON** on the PureSignal dock sets this for you, same as Thetis. Uncheck to disable PS on a radio with no tap. Drive / watts cap / ATT-on-TX stay separate. |
 | Header **Options → PureSignal** | Opens the compact **PURESIGNAL** dock |
 | Header **Options → Amp View** | Opens the **AMP VIEW** plot (last two chips on the Options row) |
 | PureSignal dock **2-tone** | Two equal tones that **key MOX**. Same generator as the TX dock. Average power reads about half of TUN. |
@@ -2648,12 +2763,12 @@ PC dies.
 
 ### Modes that force PureSignal off
 
-The **ON / Arm** chip follows the **focused** Mode combo (the VFO you
+The **ON** chip follows the **focused** Mode combo (the VFO you
 last clicked), not only RX1. SUB on RX2 in DIGU with RX1 still USB
 still turns PS off.
 
-Your **Arm** tick is remembered. Lyra just **holds the calibrator off**
-in the modes below; leave those modes and Arm comes back if it was on.
+Your **ON** state is remembered. Lyra just **holds the calibrator off**
+in the modes below; leave those modes and ON comes back if it was on.
 
 | Mode | PureSignal |
 |---|---|
@@ -2669,10 +2784,12 @@ still uses the mic rack, but PureSignal stays off.
 
 ### Compact PureSignal dock
 
-- **ON / Arm** — arms the calibrator. The coupler path is live only
-  while **MOX is also on** and the focused mode is **not** on the
-  lock-out list above. The chip goes **off** in those modes even if
-  Arm is still ticked in Settings.
+- **ON** — arms the calibrator (Thetis / DeskHPSDR one-switch). First
+  ON also records **Settings → TX** coupler installed. The coupler
+  path is live only while **MOX is also on** and the focused mode is
+  **not** on the lock-out list above. The chip goes **off** in those
+  modes even if ON is still remembered. Uncheck the coupler box to
+  fully disable PS.
 - **2-tone** — two equal tones into the transmit chain, and it keys
   MOX. Peak power matches TUN; the wattmeter reads **average**, so
   expect about half the TUN reading (18–20 W TUN is often 8–11 W of
@@ -2739,20 +2856,20 @@ plot (live `GetPSDisp` curve).
 
 ### Typical dummy-load session
 
-1. Settings → TX → tick attestation for **this** radio.
-2. Dummy load, PA on, drive low, then raise until the wattmeter is in
+1. Dummy load, PA on, drive low, then raise until the wattmeter is in
    the **5–8 W** class on a bare HL2 (Brick often wants similar or a
    bit more until ADC0 auto-att settles).
-3. Stay in **USB / LSB / AM / SAM / DSB**. Open **PureSignal**, Arm **ON**.
-   (FM, CW, and DIG force Arm off — you will not see a live coupler.)
-4. Key **Voice** or **2-tone** (or TUN / MOX + speech). **Voice**
+2. Stay in **USB / LSB / AM / SAM / DSB**. Open **PureSignal**, press **ON**.
+   (First ON records the coupler. FM, CW, and DIG force ON off — you
+   will not see a live coupler.)
+3. Key **Voice** or **2-tone** (or TUN / MOX + speech). **Voice**
    fills the voice band and is the easier stimulus when 2-tone is
    light on the coupler. Watch **FB** go teal → green. **ATT** may
    step a few times, then hold.
-5. Open **Amp View** if you want the curve. Snap / Hold as needed.
-6. Unkey — FB goes idle/muted; **ATT stays** at the last pad.
-7. Next keyup should land **near** the previous FB, not a full hunt.
-8. Kill-test once, then antenna when you are ready.
+4. Open **Amp View** if you want the curve. Snap / Hold as needed.
+5. Unkey — FB goes idle/muted; **ATT stays** at the last pad.
+6. Next keyup should land **near** the previous FB, not a full hunt.
+7. Kill-test once, then antenna when you are ready.
 
 > **ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** are in tester
 > hands. TX is not on-air validated (dummy-load arm + drive ceiling). Do
@@ -4134,6 +4251,15 @@ Windows only. For a USB knob that shows up as a **HID mouse** (the same
 class as Setup → Navigation Raw Input in other HPSDR apps). This is **not**
 MIDI — a MIDI surface uses a [sidecar](#midi-controllers-sidecar).
 
+- **Snap VFO wheel to Step** — default **off**. First notch lands on the
+  grid in that direction, then steps. `14.228.200` at 500 Hz →
+  `14.228.500` (up) or `14.228.000` (down). Off = add the step
+  (`14.228.700`).
+  - **VFO LED, not on a digit**, and **USB encoder** → that VFO's Tuning
+    **Step** (VFO A and VFO B each have their own).
+  - **Panadapter wheel** → Display **Panafall** step.
+  - Wheel **on a digit** always steps that place. Panadapter **click**
+    still uses Display **Exact / 100 Hz**.
 - **USB encoder / HID mouse wheel tunes the VFO** — master enable (off
   until you pick a device).
 - Device list — every attached HID mouse. Pick the knob, not your
@@ -5543,7 +5669,7 @@ copy of Lyra on the laptop. The
 
 ### Lyra to Lyra
 
-Both computers run this same version of Lyra. This 0.25.24 build is
+Both computers run this same version of Lyra. This 0.25.25 build is
 a beta of that link. The shack PC is the **host** and stays on the
 radio. The laptop is the **desk** and does not open a local radio.
 The host stays **Open**. HPSDR UDP stays on the shack LAN. The shack
@@ -5551,8 +5677,8 @@ panel stays live. Host unkey, TX inhibit, and TX timeout win. The
 host can **Drop desk**.
 
 On the laptop, the header reads **Host rig**, the MagicDNS name, and
-the rig label. Toolbar **Start** stays disabled while this computer
-is attached as the desk. The laptop leaves **Discover** and
+the rig label. Local **Start** is hidden while this computer is
+attached as the desk. The laptop leaves **Discover** and
 **Add-by-IP** alone, and it sends no UDP to the radio.
 
 #### Tailscale
@@ -5621,11 +5747,55 @@ connect.
 
 Receiver audio is a mono tap taken before the shack volume and before
 binaural, so the shack **Vol** and **MUTE** leave the laptop level
-alone. The laptop's own volume sets the laptop level.
+alone. The laptop's own volume sets the laptop level. When the host
+has **SUB** on, the second receiver is its own mono tap, and the
+laptop mixes it with **Vol RX2**.
 
 The spectrum is the host picture, full span. The laptop zooms on its
-own screen. **60 Hz** is the supported picture. A 120 Hz picture and
-the RX2 spectrum come later.
+own screen. The away desk picture stays at about **60 Hz** so the
+connection can carry the receiver audio, the microphone, keying, and
+the controls. A faster panadapter on that link is not used.
+
+**Rig → Remote** is listed with the local radios. While this Lyra is
+attached as the desk, Remote is the checked entry. Calibration and
+the local **Start** button are hidden. The panels follow the host
+rig. This computer does not open a radio of its own, and the local
+transmit badges stay dark. Detach before choosing a radio on this
+computer.
+
+When the host has **SUB** on and that radio has its own second
+receiver, the host sends that picture on the same ~60 Hz tick as the
+main picture, and it sends the second receiver's audio. The main
+picture stays at 60 Hz. Neither rate goes up. When SUB is off, no
+second picture is sent. The desk's second panadapter shows the
+host's second receiver, not a copy of the main one. A
+single-converter SUB still sends the second receiver's audio and
+does not send a second picture.
+
+While attached, the desk follows the host mode. The key stays off
+unless the host is in CW. The host sends its CW pitch. The desk
+applies that pitch to the VFO, the marker, and the passband, so both
+show the same carrier.
+
+A straight key, the serial key line, CW chip **Send**, and the CW
+macros tell the host to key. **Start voice** is required first.
+Without it the desk says *Start voice before the key.* Sidetone
+plays on the desk. The password is unchanged, and one desk is the
+transmit owner.
+
+On a Protocol 2 Brick, **Send** holds transmit for the whole message
+and puts a carrier on the air for each element. Power is the
+**Drive** slider. The **Tune** button stays off.
+
+The decoder prints from the host audio the laptop is already playing.
+Focus on the second receiver and it reads that receiver.
+
+While the host is in CW, **Start voice**, the key, **MOX**, **Tune**,
+and **2-tone** stay off at 150 ms or more. Outside CW, voice,
+**MOX**, **Tune**, and **2-tone** stay off at 200 ms or more.
+Listening stays up. The **CW** lamp is under 150 ms. The **Voice**
+lamp is under 200 ms. A lit **Voice** lamp does not allow those
+controls while the host is in CW and the ping is 150 ms or more.
 
 S-meter, forward power, and SWR come from the host.
 
@@ -5650,7 +5820,7 @@ is the laptop microphone level. PureSignal math stays on the shack.
 The laptop **PureSignal** and **Amp View** panels show the shack
 correction. From the desk, **PureSignal ON** and **2-tone** ask the
 host. Start voice before **2-tone**. Voice-cal noise and the coupler
-attestation stay on the shack (**Settings → TX**).
+coupler-disable checkbox stay on the shack (**Settings → TX**).
 
 During transmit, the laptop panadapter is that host transmit picture,
 after the rack and before the **Drive** slider. The **Drive** slider
@@ -5691,11 +5861,14 @@ number that matters is the shack's **upload** and the laptop's
   trip under 100 ms. That holds the 60 Hz picture and the receiver
   audio.
 - **Under 25 Mbps** is not supported. A phone tether sits under
-  that floor. CW transmit wants a round trip under 150 ms. Other
-  transmit wants under 200 ms. Listening continues above that. A
+  that floor. While the host is in CW, **Start voice**, the key,
+  **MOX**, **Tune**, and **2-tone** stay off at 150 ms or more.
+  Outside CW, voice, **MOX**, **Tune**, and **2-tone** stay off at
+  200 ms or more. Listening continues above that. A
   silent link unkeys in about 300 ms. The desk shows a short
   peak-held ping and **RX**, **CW**, and **Voice** lamps for the
-  latest ping.
+  latest ping. The **CW** lamp is under 150 ms. The **Voice** lamp
+  is under 200 ms.
 
 Lyra watches the round trip and whether the picture is arriving
 whole.

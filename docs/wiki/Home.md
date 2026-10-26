@@ -92,7 +92,7 @@ gear — all native, all in front of the WDSP transmitter:
 
 ## Shipped highlights
 
-✅ **v0.25.24 Sheliak** · ✅ **HL2 RF1 / Alt RX** · ✅ **v0.25.22** (return point) · 🚧 **Lyra-to-Lyra beta** ([guide](User-Guide#lyra-to-lyra)) · ✅ **Helios / Sonar / Cluster** meters · ✅ **Lyra Remote** (separate browser desk) · ✅ **PureSignal** (HL2 coupler / Brick ADC0 /
+✅ **v0.25.28 Sheliak** · ✅ **Pico RX fcodes** (GitHub #23) · ✅ **PureSignal dock ON** · ✅ **v0.25.27 Sheliak** (previous public build · IO-board return) · ✅ **VFO LED digit vs Step** (GitHub #22) · ✅ **Helios TX SWR** · ✅ **View → Freq Cal** (GitHub #21) · ✅ **v0.25.22** (long return point) · ✅ **HL2 RF1 / Alt RX** · ✅ **Helios / Sonar / Cluster** meters · ✅ **Lyra Remote** (separate browser desk) · ✅ **PureSignal** (HL2 coupler / Brick ADC0 /
 Brick3 PS jack) · ✅ **VAC2** · ✅ **SUB / SPLIT** (second pan on Brick3 /
 100D; RX2 jack isolate on TX) · ✅ **Diversity** (Brick3 / 100D / 200D —
 RX2 jack / Ext1, not ANT2; not a second VFO) · ✅ **Band stack** (three
@@ -161,6 +161,8 @@ linHPSDR, HL2 gateware), WDSP / Thetis / fldigi:
 ## Links
 
 - **[Releases](https://github.com/N8SDR1/Lyra-SDR-cpp/releases)** — installers + release notes
+- **[Discord](https://discord.gg/BwjsQvjcSc)** — live help, logs, testers
+- **[Facebook group](https://www.facebook.com/groups/1994335921523916)** — screenshots, on-air reports, “will it Open”
 - **[Report a bug / request a feature](https://github.com/N8SDR1/Lyra-SDR-cpp/issues)**
 - **[README](https://github.com/N8SDR1/Lyra-SDR-cpp/blob/main/README.md)** — features + build from source
 - **License:** GPL-3.0-or-later (WDSP-compatible) — see [NOTICE](https://github.com/N8SDR1/Lyra-SDR-cpp/blob/main/NOTICE.md)
