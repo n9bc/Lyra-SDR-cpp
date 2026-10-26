@@ -2895,6 +2895,9 @@ QDockWidget *MainWindow::addQuickDock(const QString &objectName,
                                       bool resizable) {
     auto *dock = new QDockWidget(title, this);
     dock->setObjectName(objectName);   // load-bearing for saveState/restoreState
+    // A floating dock is a macOS tool window, which the system hides while
+    // another app is active — a popped-out panel vanished on a click-away.
+    dock->setAttribute(Qt::WA_MacAlwaysShowToolWindow);
     dock->setAllowedAreas(Qt::AllDockWidgetAreas);
     dock->setFeatures(kUnlockedFeatures);
     dockQmlOrder_.append(objectName);
@@ -2943,6 +2946,7 @@ QDockWidget *MainWindow::addWidgetDock(const QString &objectName,
                                        Qt::DockWidgetArea area) {
     auto *dock = new QDockWidget(title, this);
     dock->setObjectName(objectName);   // load-bearing for saveState/restoreState
+    dock->setAttribute(Qt::WA_MacAlwaysShowToolWindow);   // see addQuickDock
     dock->setAllowedAreas(Qt::AllDockWidgetAreas);
     dock->setFeatures(kUnlockedFeatures);
     dock->setWidget(content);
