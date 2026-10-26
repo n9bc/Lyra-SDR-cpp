@@ -4470,7 +4470,12 @@ void MainWindow::buildToolbar() {
                                  .arg(label));
             chip->setChecked(rack->openByDefault());
             tb->addWidget(chip);
-            connect(chip, &QToolButton::toggled, this, [rack](bool on) {
+            connect(chip, &QToolButton::toggled, this, [rack, chip](bool on) {
+                // A lit chip over a buried rack brings it forward, not away.
+                if (!on && rack->coveredByHost()) {
+                    QSignalBlocker b(chip); chip->setChecked(true);
+                    on = true;
+                }
                 if (on) { rack->show(); rack->raise(); rack->activateWindow(); }
                 else    { rack->hide(); rack->store(); }
             });

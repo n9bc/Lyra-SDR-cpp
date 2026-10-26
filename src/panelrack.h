@@ -68,6 +68,12 @@ public:
     void restore();                     // read geometry / state (call after members added)
     bool openByDefault() const { return openByDefault_; }
 
+    // Open but buried: the main window was brought forward over the rack
+    // since the rack was last in front.  The host's chip then raises the
+    // rack instead of hiding it — otherwise a click on a lit chip hides a
+    // window the operator can't see, and nothing appears to happen.
+    bool coveredByHost() const;
+
     // Saved layout slots + undo, mirroring the main window's per-display layout
     // slots.  Each numbered slot persists the rack's member arrangement (which
     // are shown, how they are tiled / tabbed / sized) and the rack window
@@ -119,6 +125,11 @@ private:
     bool                           locked_     = false;     // Lock panels: no pop-out
     bool                           quitting_   = false;     // see setQuitting()
     bool                           restoring_  = false;     // in our own restoreState
+    // Focus times (ms since epoch) for coveredByHost(): when the rack last
+    // took focus, and the host's last two activations.
+    qint64                         rackFocusMs_     = 0;
+    qint64                         hostFocusMs_     = 0;
+    qint64                         prevHostFocusMs_ = 0;
     // The rack's OWN drag controller: members re-tile / tab INSIDE the rack
     // (no-tear-out), just like the main window's dockable panels.
     DockDragController            *drag_ = nullptr;

@@ -5,7 +5,9 @@
 
 #include <QAction>
 #include <QCloseEvent>
+#include <QDateTime>
 #include <QDockWidget>
+#include <QGuiApplication>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMenu>
@@ -15,6 +17,7 @@
 #include <QToolButton>
 #include <QVariant>
 #include <QWidget>
+#include <QWindow>
 
 #include <utility>   // std::as_const
 
@@ -91,6 +94,33 @@ PanelRack::PanelRack(const QString &objName, const QString &title,
     resize(520, 680);
     openByDefault_ = QSettings().value(keyBase(objName_) + QStringLiteral("open"),
                                        false).toBool();
+
+    // Which of rack / host was in front last — see coveredByHost().
+    connect(qGuiApp, &QGuiApplication::focusWindowChanged, this,
+            [this](QWindow *w) {
+        if (!w) return;
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const QWidget *host = parentWidget() ? parentWidget()->window() : nullptr;
+        if (w == windowHandle()) {
+            rackFocusMs_ = now;
+        } else if (host && w == host->windowHandle()) {
+            prevHostFocusMs_ = hostFocusMs_;
+            hostFocusMs_     = now;
+        }
+    });
+}
+
+bool PanelRack::coveredByHost() const {
+    const QWidget *host = parentWidget() ? parentWidget()->window() : nullptr;
+    if (!host || !isVisible()) return false;
+    if (!frameGeometry().intersects(host->frameGeometry())) return false;
+    // Clicking the chip on an inactive main window activates it just before
+    // the click lands; that activation doesn't say what was in front before.
+    constexpr qint64 kClickActivateMs = 300;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 hostMs = (now - hostFocusMs_ < kClickActivateMs)
+                              ? prevHostFocusMs_ : hostFocusMs_;
+    return hostMs > rackFocusMs_;
 }
 
 void PanelRack::setAllowTearOut(bool allow) {
