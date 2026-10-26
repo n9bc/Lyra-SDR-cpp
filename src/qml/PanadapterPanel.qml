@@ -1,15 +1,15 @@
 // Lyra — Panadapter dock panel (spectrum over waterfall).
 //
 // Hosted by a QQuickWidget inside a QDockWidget (see mainwindow.cpp).
-// Root is a plain Item so the QQuickWidget can host it.  A vertical
-// SplitView stacks the Vulkan scene-graph Panadapter (top) over the
-// Waterfall (bottom) — both share the exact same frequency extent and
-// dB window, so the spectrum trace and its rolling history read as one
-// instrument.  The spectrum carries the dBm scale (both edges) + the
-// 3-zone right-edge dB drag + the shared frequency scale (drawn at the
-// boundary so it labels both); the waterfall is GPU-textured and
-// palette-coloured.  Display options come from the shared Prefs object
-// (Settings -> Visuals).
+// Root is a plain Item so the QQuickWidget can host it.  Under a slim
+// Zoom strip, a vertical SplitView stacks the Vulkan scene-graph
+// Panadapter (top) over the Waterfall (bottom) — both share the exact
+// same frequency extent and dB window, so the spectrum trace and its
+// rolling history read as one instrument.  The spectrum carries the dBm
+// scale (both edges) + the 3-zone right-edge dB drag + the shared frequency
+// scale (drawn at the boundary so it labels both); the waterfall is
+// GPU-textured and palette-coloured.  Display options come from the shared
+// Prefs object (Settings -> Visuals).
 
 import QtQuick
 import QtQuick.Controls
@@ -27,7 +27,7 @@ Item {
     // labels start to collide, but it stays workable and click-to-tune still
     // lands, so that is a legibility limit rather than a hard floor.
     readonly property int lyraMinWidth:  320
-    readonly property int lyraMinHeight: 200
+    readonly property int lyraMinHeight: 200 + 26   // + the Zoom strip
 
     // ---- Panafall crosshair (opt-in; Settings → Visuals) ----
     // Pointer X/Y published while hovering EITHER pane.  The spectrum and the
@@ -265,9 +265,16 @@ Item {
         }
     }
 
+    ZoomStrip {
+        id: zoomStrip
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: implicitHeight
+    }
+
     SplitView {
         id: splitV
-        anchors.fill: parent
+        anchors { left: parent.left; right: parent.right
+                  top: zoomStrip.bottom; bottom: parent.bottom }
         orientation: Qt.Vertical
 
         // The divider position is NOT covered by QMainWindow.saveState()
