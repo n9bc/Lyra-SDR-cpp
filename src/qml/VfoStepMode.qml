@@ -1,13 +1,15 @@
-// Lyra — a VFO's Step (and Mode) pickers, shared by every VFO style.
+// Lyra — a VFO's Step, Mode and Filter pickers, shared by every VFO style.
 //
 // Holds ALL the Step/Mode logic — per-mode step memory, and RX2's own step
 // and mode on VFO B — so a style only decides where this row sits (its
 // stepModeRect) and its colours (its theme).  VFO B shows Mode only in SUB;
-// in SPLIT it transmits on VFO A's mode.  theme.compact hides the "Step" /
-// "Mode" captions and narrows the pickers for small styles.
+// in SPLIT it transmits on VFO A's mode; Filter follows Mode's visibility.
+// theme.compact hides the "Step" / "Mode" / "Filter" captions and narrows
+// the pickers for small styles.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "FilterPresets.js" as FilterPresets
 
 RowLayout {
     id: sm
@@ -64,6 +66,38 @@ RowLayout {
         onActivated: {
             if (sm.isB) Prefs.modeRx2 = sm.panel.modeList[currentIndex]
             else        Prefs.mode    = sm.panel.modeList[currentIndex]
+        }
+        fieldColor: sm.theme.field
+        fieldBorderColor: sm.theme.fieldBorder
+        textColor: sm.theme.text
+        accentColor: sm.theme.accent
+    }
+    // RX filter bandwidth, from this VFO's mode presets.
+    Label {
+        visible: sm.showMode && !sm.compact
+        text: qsTr("Filter")
+        color: sm.theme.label
+        font.bold: true
+    }
+    LyraComboBox {
+        id: bwBox
+        readonly property string bwMode: sm.isB ? Prefs.modeRx2 : Prefs.mode
+        readonly property int bw: sm.isB ? Prefs.rx2Bandwidth : Prefs.rxBandwidth
+        visible: sm.showMode
+        Layout.preferredWidth: sm.compact ? 64 : 72
+        font.pixelSize: 12
+        textLeftPad: 4
+        textRightPad: 14
+        model: FilterPresets.model(bwMode, bw, "")
+        currentIndex: FilterPresets.currentIndex(bwMode, bw)
+        helpTitle: sm.isB ? qsTr("Filter B") : qsTr("Filter")
+        helpText: sm.isB
+            ? qsTr("RX2 filter bandwidth — presets for VFO B's mode.")
+            : qsTr("RX filter bandwidth — presets for this mode. Remembered per mode.")
+        onActivated: {
+            var hz = FilterPresets.valueAt(bwMode, bw, currentIndex)
+            if (sm.isB) Prefs.rx2Bandwidth = hz
+            else        Prefs.rxBandwidth  = hz
         }
         fieldColor: sm.theme.field
         fieldBorderColor: sm.theme.fieldBorder

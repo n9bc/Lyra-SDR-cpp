@@ -16,11 +16,11 @@ Item {
     property int stepHz: 0
     property bool showMode: true
 
-    readonly property real naturalWidth: 360
+    readonly property real naturalWidth: 400
     readonly property real naturalHeight: 118
-    readonly property rect tuneRect: Qt.rect(14, 28, 332, 40)
-    readonly property rect stepModeRect: Qt.rect(8, 88, 344, 24)
-    readonly property rect txPipRect: Qt.rect(316, 12, 28, 14)
+    readonly property rect tuneRect: Qt.rect(14, 28, 372, 40)
+    readonly property rect stepModeRect: Qt.rect(8, 88, 384, 24)
+    readonly property rect txPipRect: Qt.rect(356, 12, 28, 14)
     readonly property var digitRects: digits.rects.map(function (r) {
         return Qt.rect(tuneRect.x + digits.x + r.x, tuneRect.y + digits.y + r.y,
                        r.width, r.height)

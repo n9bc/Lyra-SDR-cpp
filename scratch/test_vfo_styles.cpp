@@ -6,7 +6,8 @@
 //   - naturalWidth/Height > 0;
 //   - tuneRect / stepModeRect / txPipRect lie inside the style; the Step/Mode
 //     row does NOT overlap tuneRect (FreqDisplay sits over tuneRect and would
-//     swallow its clicks), and the TX pip covers no digit;
+//     swallow its clicks), and the TX pip covers no digit and sits clear of
+//     the Step/Mode/Filter row;
 //   - exactly 10 digitRects, all inside tuneRect, places 0-5 (kHz + Hz,
 //     always shown) non-empty;
 //   - theme carries every key VfoStepMode / VfoTxPip read;
@@ -143,6 +144,7 @@ QtObject {
             check(tag + QStringLiteral("stepModeRect inside"), !sm.isEmpty() && bounds.contains(sm));
             check(tag + QStringLiteral("txPipRect inside"), !pip.isEmpty() && bounds.contains(pip));
             check(tag + QStringLiteral("stepModeRect clear of tuneRect"), !sm.intersects(tune));
+            check(tag + QStringLiteral("txPipRect clear of stepModeRect"), !pip.intersects(sm));
             const QVariantList rects = plain(st->property("digitRects")).toList();
             // The pip is stacked above FreqDisplay in VfoBox, so it may sit in
             // a corner of tuneRect (Amber's does) — but never on a digit.

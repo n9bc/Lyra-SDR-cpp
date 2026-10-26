@@ -17,11 +17,11 @@ Item {
     property int stepHz: 0
     property bool showMode: true
 
-    readonly property real naturalWidth: 230
+    readonly property real naturalWidth: 272
     readonly property real naturalHeight: 230
-    readonly property rect tuneRect: Qt.rect(10, 36, 210, 148)
-    readonly property rect stepModeRect: Qt.rect(14, 192, 202, 26)
-    readonly property rect txPipRect: Qt.rect(188, 13, 28, 15)
+    readonly property rect tuneRect: Qt.rect(10, 36, 252, 148)
+    readonly property rect stepModeRect: Qt.rect(14, 192, 244, 26)
+    readonly property rect txPipRect: Qt.rect(230, 13, 28, 15)
     readonly property var theme: ({
         label: "#cfe6ff", field: "#1d3248", fieldBorder: "#3f6a90",
         text: "#eaf4ff", accent: "#00e5ff",

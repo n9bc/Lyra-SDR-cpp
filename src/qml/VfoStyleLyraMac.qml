@@ -21,11 +21,11 @@ Item {
     property int stepHz: 0
     property bool showMode: true
 
-    readonly property real naturalWidth: 380
+    readonly property real naturalWidth: 460
     readonly property real naturalHeight: 140
-    readonly property rect tuneRect: Qt.rect(10, 26, 360, 64)
-    readonly property rect stepModeRect: Qt.rect(10, 106, 322, 26)
-    readonly property rect txPipRect: Qt.rect(342, 111, 28, 16)
+    readonly property rect tuneRect: Qt.rect(10, 26, 440, 64)
+    readonly property rect stepModeRect: Qt.rect(10, 106, 400, 26)
+    readonly property rect txPipRect: Qt.rect(422, 111, 28, 16)
     readonly property var digitRects: digits.rects.map(function (r) {
         return Qt.rect(tuneRect.x + digits.x + r.x, tuneRect.y + digits.y + r.y,
                        r.width, r.height)

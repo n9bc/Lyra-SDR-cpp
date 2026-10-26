@@ -14,6 +14,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "FilterPresets.js" as FilterPresets
 
 Rectangle {
     id: root
@@ -26,37 +27,17 @@ Rectangle {
     readonly property int lyraMinWidth:  body.implicitWidth + 24
     readonly property int lyraMinHeight: body.implicitHeight + 12
 
-    // Mode list + per-mode bandwidth presets (Hz), from old Lyra.
+    // Mode list.  The per-mode bandwidth presets live in FilterPresets.js
+    // (shared with the VFO's Filter picker).
     readonly property var modes: ["LSB", "USB", "CWL", "CWU",
                                   "DSB", "AM", "SAM", "FM", "DIGU", "DIGL"]
-    readonly property var bwSSB: [1500, 1800, 2100, 2400, 2700, 3000,
-                                  3600, 4000, 6000, 8000, 10000]
-    readonly property var bwCW:  [50, 100, 150, 250, 400, 500, 750, 1000]
-    readonly property var bwDSB: [3000, 4000, 5000, 6000, 8000, 10000]
-    readonly property var bwAM:  [3000, 4000, 6000, 8000, 10000, 12000, 16000, 20000]
-    // FM RX presets are the FM CHANNEL widths the IF must pass, not SSB
-    // widths: narrow FM (±2.5 kHz dev) ≈ 12 k, wide FM (±5 kHz dev) ≈ 16 k
-    // (Carson: 2·(dev + 3 kHz audio)).  8/10 cover data/very-narrow.
-    readonly property var bwFM:  [8000, 10000, 12000, 16000]
     // FM derives its occupied TX width from deviation (audio is brick-walled
     // to 3 kHz ahead of the modulator), so the TX-BW selector + RX↔TX lock
     // are meaningless in FM and are disabled there.
     readonly property bool isFm: Prefs.mode === "FM"
-    readonly property var bwDIG: [1500, 2400, 3000, 3600, 4000, 6000]
 
-    function presetsFor(mode) {
-        if (mode === "LSB" || mode === "USB") return bwSSB
-        if (mode === "CWL" || mode === "CWU") return bwCW
-        if (mode === "DSB") return bwDSB
-        if (mode === "AM" || mode === "SAM") return bwAM
-        if (mode === "FM")  return bwFM
-        if (mode === "DIGL" || mode === "DIGU") return bwDIG
-        return bwSSB
-    }
-    function fmtBw(hz) {
-        return hz >= 1000 ? (hz / 1000).toFixed(hz % 1000 ? 1 : 0) + " k"
-                          : hz + " Hz"
-    }
+    function presetsFor(mode) { return FilterPresets.presetsFor(mode) }
+    function fmtBw(hz) { return FilterPresets.fmtBw(hz) }
     // Nearest preset index for the current bandwidth (handles a stored
     // value that isn't an exact preset).
     function bwIndex(mode, bw) {
@@ -69,30 +50,12 @@ Rectangle {
     // values from dragging the panadapter passband edge (old-Lyra parity):
     // a value that isn't a preset is shown as a "(custom)" entry at the
     // top of the list and selected.  Picking a real preset drops it.
-    function bwIsPreset(mode, bw) {
-        var p = presetsFor(mode)
-        for (var i = 0; i < p.length; ++i) if (p[i] === bw) return true
-        return false
-    }
+    function bwIsPreset(mode, bw) { return FilterPresets.isPreset(mode, bw) }
     function bwModel(mode, bw) {
-        var labels = presetsFor(mode).map(fmtBw)
-        if (bwIsPreset(mode, bw)) return labels
-        return [fmtBw(bw) + qsTr(" (custom)")].concat(labels)
+        return FilterPresets.model(mode, bw, qsTr(" (custom)"))
     }
-    function bwCurrentIndex(mode, bw) {
-        var p = presetsFor(mode)
-        if (!bwIsPreset(mode, bw)) return 0          // custom entry at front
-        for (var i = 0; i < p.length; ++i) if (p[i] === bw) return i
-        return 0
-    }
-    // Map the picked combo index back to a bandwidth (Hz).  `bw` is the
-    // CURRENT bandwidth the model was built from, so the index offset for
-    // the optional leading "(custom)" entry is consistent.
-    function bwValueAt(mode, bw, idx) {
-        var p = presetsFor(mode)
-        if (bwIsPreset(mode, bw)) return p[idx]
-        return idx === 0 ? bw : p[idx - 1]           // idx 0 = the custom entry
-    }
+    function bwCurrentIndex(mode, bw) { return FilterPresets.currentIndex(mode, bw) }
+    function bwValueAt(mode, bw, idx) { return FilterPresets.valueAt(mode, bw, idx) }
 
     // IQ sample rates (96/192/384 k — 48 k excluded, EP2 cadence).
     readonly property var rateVals: [96000, 192000, 384000]
