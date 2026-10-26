@@ -345,7 +345,6 @@ Rectangle {
         // the logo is large and centred between A and B's reserved slot.
         RowLayout {
             Layout.fillWidth: true
-            Layout.fillHeight: true
             spacing: 10
 
             // VFO-A cluster — one bordered box wrapping the freq AND its
@@ -1222,5 +1221,9 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
         }
+
+        // Spare dock height falls below the action row, so it stays right
+        // under the VFOs instead of drifting to the panel's bottom edge.
+        Item { Layout.fillHeight: true }
     }
 }

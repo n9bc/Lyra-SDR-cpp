@@ -2,7 +2,7 @@
 //
 // Hosted by a QQuickWidget inside a QDockWidget (see mainwindow.cpp).
 // Root is a plain Item so the QQuickWidget can host it.  Under a slim
-// Zoom strip, a vertical SplitView stacks the Vulkan scene-graph
+// control strip, a vertical SplitView stacks the Vulkan scene-graph
 // Panadapter (top) over the Waterfall (bottom) — both share the exact
 // same frequency extent and dB window, so the spectrum trace and its
 // rolling history read as one instrument.  The spectrum carries the dBm
@@ -27,7 +27,7 @@ Item {
     // labels start to collide, but it stays workable and click-to-tune still
     // lands, so that is a legibility limit rather than a hard floor.
     readonly property int lyraMinWidth:  320
-    readonly property int lyraMinHeight: 200 + 26   // + the Zoom strip
+    readonly property int lyraMinHeight: 200 + 26   // + the control strip
 
     // ---- Panafall crosshair (opt-in; Settings → Visuals) ----
     // Pointer X/Y published while hovering EITHER pane.  The spectrum and the
@@ -265,8 +265,8 @@ Item {
         }
     }
 
-    ZoomStrip {
-        id: zoomStrip
+    PanadapterStrip {
+        id: panStrip
         anchors { left: parent.left; right: parent.right; top: parent.top }
         height: implicitHeight
     }
@@ -274,7 +274,7 @@ Item {
     SplitView {
         id: splitV
         anchors { left: parent.left; right: parent.right
-                  top: zoomStrip.bottom; bottom: parent.bottom }
+                  top: panStrip.bottom; bottom: parent.bottom }
         orientation: Qt.Vertical
 
         // The divider position is NOT covered by QMainWindow.saveState()

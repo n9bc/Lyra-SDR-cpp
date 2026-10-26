@@ -599,7 +599,7 @@ qt_add_qml_module(lyra
         src/qml/LyraComboBox.qml
         src/qml/LyraHoverHelp.qml
         src/qml/PanadapterPanel.qml
-        src/qml/ZoomStrip.qml
+        src/qml/PanadapterStrip.qml
         src/qml/Rx2PanadapterPanel.qml
         src/qml/TuningPanel.qml
         src/qml/AudioPanel.qml
