@@ -375,7 +375,7 @@ public:
         QSettings s;
         pos_ = s.value(key_ + QStringLiteral("/pos")).toPoint();
         size_ = s.value(key_ + QStringLiteral("/size")).toSize();
-        have_ = size_.isValid() && size_.width() >= 160 && size_.height() >= 40;
+        have_ = usable(size_);
         dock_->installEventFilter(this);
         debounce_.setSingleShot(true);
         debounce_.setInterval(150);
@@ -404,7 +404,7 @@ protected:
         if (live && (e->type() == QEvent::Move || e->type() == QEvent::Resize
                      || e->type() == QEvent::Hide)) {
             const QSize sz = dock_->size();
-            if (sz.width() >= 160 && sz.height() >= 40) {
+            if (usable(sz)) {
                 pos_ = dock_->pos();
                 size_ = sz;
                 have_ = true;
@@ -422,6 +422,14 @@ protected:
     }
 
 private:
+    // Qt's 200x100 floating stub is not an operator frame.  Storing it (the
+    // macOS hide/show in presentChipDock passes through it) and recalling it
+    // after show shrinks the panel into the screen corner.
+    static bool usable(const QSize &sz) {
+        return sz.isValid() && sz.width() >= 160 && sz.height() >= 40
+               && (sz.width() > 200 || sz.height() > 100);
+    }
+
     bool layoutBusy() const {
         return (layoutRestoring_ && *layoutRestoring_)
                || safeBootLayout()
@@ -439,6 +447,15 @@ private:
     void armRecall() {
         if (!have_ || layoutBusy())
             return;
+        // A frame saved on another monitor would drag the panel away from the
+        // Lyra window right after the chip placed it beside it.  Leave that
+        // placement alone; its own Hide stores the new frame.
+        if (!onHostScreen()) {
+            QTimer::singleShot(80, this, [this]() {
+                tracking_ = dock_->isVisible();
+            });
+            return;
+        }
         recalling_ = true;
         QTimer::singleShot(0, this, [this]() { apply(); });
         QTimer::singleShot(60, this, [this]() {
@@ -455,6 +472,16 @@ private:
             dock_->setFloating(true);
         dock_->resize(size_);
         dock_->move(clampPos(pos_, size_));
+    }
+
+    bool onHostScreen() const {
+        const QWidget *host = dock_->parentWidget() ? dock_->parentWidget()->window()
+                                                    : nullptr;
+        const QScreen *scr = host ? host->screen() : nullptr;
+        if (!scr)
+            return true;
+        return scr->availableGeometry().contains(
+            QRect(pos_, size_).center());
     }
 
     static QPoint clampPos(QPoint p, const QSize &sz) {
