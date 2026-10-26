@@ -47,6 +47,7 @@
 #include "dsp/CwArbiter.h"          // Auto-engine ownership arbiter (Phase 1)
 #include "dsp/deepfist/ScpLocal.h"  // Phase 3: RBN-confirmed local call list
 #include "dsp/deepfist/CwCaptureHarvester.h"  // Phase 2: training harvest
+#include "dsp/deepfist/CwCompareCapture.h"   // Compare-mode training capture
 #include "dsp/deepfist/CwHarvestRing.h"
 #include "dsp/FreqCalMeasure.h" // freq calibration — carrier tone estimator
 #include "dsp/ZeroBeat.h"       // zero-beat carrier-offset tuning aid (value member)
@@ -1670,6 +1671,11 @@ private:
     // Harvest off unless LYRA_CW_HARVEST is set truthy (developer capture).
     bool                                            cwLearnEnabled_{true};
     bool                                            cwHarvestEnabled_{false};
+
+    // Compare-mode training capture (env-gated: LYRA_CW_COMPARE_CAPTURE=<dir>).
+    std::unique_ptr<lyra::dsp::CwCompareCapture>    cwCompareCapture_;
+    std::unique_ptr<lyra::dsp::DeepFistResampler>   cwCompareCaptureDecim_;
+    std::vector<float>                              cwCompareCaptureDecimTmp_;
 
     // Zero-beat tuning aid.  zeroBeat_ is touched ONLY on the RX worker
     // (feedIq); zbRunPrev_/zbRate_ are worker-only edge trackers.  The result

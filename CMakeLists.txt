@@ -361,6 +361,8 @@ qt_add_executable(lyra
     src/dsp/deepfist/CwHarvestIo.cpp
     src/dsp/deepfist/CwCaptureHarvester.h
     src/dsp/deepfist/CwCaptureHarvester.cpp
+    src/dsp/deepfist/CwCompareCapture.h
+    src/dsp/deepfist/CwCompareCapture.cpp
     # CW Auto arbiter — engine-agnostic ownership state machine (Phase 1).
     src/dsp/CwArbiter.h
     src/dsp/CwArbiter.cpp

@@ -511,6 +511,7 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
             return;
         }
         if (eng == 4) {   // Compare: Classic's own window
+            if (cwCompareCapture_) cwCompareCapture_->feedText(0, s);
             emit cwCompareText(0, QString::fromUtf8(s.c_str(),
                                                     static_cast<int>(s.size())));
             return;
@@ -545,6 +546,7 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
             return;
         }
         if (eng == 4) {   // Compare: DeepFist's own window
+            if (cwCompareCapture_) cwCompareCapture_->feedText(1, s);
             emit cwCompareText(1, QString::fromUtf8(s.c_str(),
                                                     static_cast<int>(s.size())));
             return;
@@ -574,10 +576,12 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     deepCw_.setSampleRate(cfg_.outRate);
     deepCw_.onText = [this](const std::string& s) {
         const QString t = QString::fromUtf8(s.c_str(), static_cast<int>(s.size()));
-        if (cwEngine_.load(std::memory_order_relaxed) == 4)
+        if (cwEngine_.load(std::memory_order_relaxed) == 4) {
+            if (cwCompareCapture_) cwCompareCapture_->feedText(3, s);
             emit cwCompareText(3, t);
-        else
+        } else {
             emit cwNeuralText(t);
+        }
     };
     deepCw_.onWpm = [this](int wpm) {
         if (cwEngine_.load(std::memory_order_relaxed) == 4)
@@ -591,6 +595,8 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     neuralCw_.onKeying = [this](float r) {
         if (cwEngine_.load(std::memory_order_relaxed) == 2)
             cwArbiter_.updateKeying(r);
+        if (cwCompareCapture_)
+            cwCompareCapture_->feedKeying(r);
         if (cwCaptureOn_.load(std::memory_order_relaxed))
             cwHarvester_->feedKeying(r, QDateTime::currentSecsSinceEpoch());
     };
@@ -2879,6 +2885,15 @@ void WdspEngine::setCwDecodeEngine(int engine)
         if (neuralCw_.ready()) neuralCw_.reset();
         if (deepCw_.ready())   deepCw_.reset();
         cwEngine_.store(4, std::memory_order_relaxed);
+        // Compare-mode training capture (env-gated).
+        static const QByteArray capDir = qgetenv("LYRA_CW_COMPARE_CAPTURE");
+        if (!capDir.isEmpty() && !cwCompareCapture_) {
+            cwCompareCaptureDecim_ = std::make_unique<lyra::dsp::DeepFistResampler>();
+            cwCompareCaptureDecim_->setInRate(cfg_.outRate);
+            cwCompareCapture_ = std::make_unique<lyra::dsp::CwCompareCapture>(
+                std::string(capDir.constData(), capDir.size()));
+            qInfo("CW Compare capture → %s", capDir.constData());
+        }
     } else if (engine >= 1 && engine <= 3) {
         const bool deepCw = (engine == 3);
         const QString err = ensureCwModel(deepCw);
@@ -5199,6 +5214,14 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
             cwDecoder_.process(cwMonoBuf_.data(), nframes);
             neuralCw_.process(cwMonoBuf_.data(), nframes);
             deepCw_.process(cwMonoBuf_.data(), nframes);
+            if (cwCompareCapture_ && cwCompareCaptureDecim_) {
+                cwCompareCaptureDecimTmp_.clear();
+                cwCompareCaptureDecim_->process(cwMonoBuf_.data(), nframes,
+                                                cwCompareCaptureDecimTmp_);
+                if (!cwCompareCaptureDecimTmp_.empty())
+                    cwCompareCapture_->feedAudio(cwCompareCaptureDecimTmp_.data(),
+                                                 static_cast<int>(cwCompareCaptureDecimTmp_.size()));
+            }
         } else {
             cwDecoder_.process(cwMonoBuf_.data(), nframes);
         }
