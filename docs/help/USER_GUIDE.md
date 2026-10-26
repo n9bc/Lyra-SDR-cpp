@@ -3450,7 +3450,7 @@ copy well on typical signals; reach for the rest only when copy is rough:
 ## Tuner (manual ATU memory)
 
 If you run a **manual antenna tuner** (the kind you set by hand with
-Input / Output / Inductor controls), the **Tuner** panel remembers your
+Input / Inductor / Output controls), the **Tuner** panel remembers your
 settings so you can return to a known-good match without starting from
 scratch. Open it from the header — **Options: → Tuner**. It opens as a
 floating panel; drag it anywhere, or drop it on a highlighted spot to dock
@@ -3468,23 +3468,28 @@ transmit, colour-coded — **green** ≤ 1.5, **amber** 1.6–2.4, **red** ≥ 2
 you key up. The **Meter** panel also shows SWR on transmit (larger needle
 / bar) if the Tuner pill is hard to read.
 
-**Reading the panel.** The big tiles show the **Input / Output / Inductor**
-settings for the nearest stored point to where you're tuned:
+**Reading the panel.** The big tiles show the **Input / Inductor / Output**
+settings for the nearest stored point **on the band you're tuned to** (a
+setting saved on another band is never offered):
 
 - **Green "exact match"** — you're sitting on a saved frequency; the tiles
   are exactly what you set last time. Dial in those three numbers and you're
   matched.
 - **Amber "nearest …"** — you're between saved points; the tiles show the
-  closest one, with a **±x.x kHz** badge telling you how far off it is
-  (**+** = the saved point is *above* you on the band, **−** = *below*). It's
-  a starting position — set those numbers, then fine-tune to your SWR.
+  closest one on this band, with a **±x.x kHz** badge telling you how far
+  off it is (**+** = the saved point is *above* you on the band, **−** =
+  *below*). It's a starting position — set those numbers, then fine-tune to
+  your SWR.
 - The list below shows just the points that **bracket** your dial — the one
   just below and the one just above (and the exact one if you're on it). No
   endless scrolling: the complete table lives in **Settings → Tuner**.
 
-**Saving a point.** When the amber banner says nothing's stored near you (or
-you've improved a match), click **Store this freq** (or **Add current
-freq**), type your Input / Output / Inductor numbers (whatever your tuner
+- **Amber "nothing stored"** — this antenna has no point on the band you're
+  on yet; the tiles show "—".
+
+**Saving a point.** When you're not on an exact match (or you've improved
+one), click **Store** at the end of the frequency line (or **Add current
+freq**), type your Input / Inductor / Output numbers (whatever your tuner
 shows — they're free text), and **Save**. Storing on a frequency you already
 have overwrites that point.
 

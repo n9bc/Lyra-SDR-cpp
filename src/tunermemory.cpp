@@ -220,9 +220,14 @@ void TunerMemory::clearActiveAntenna() {
 void TunerMemory::recomputeMatch() {
     int best = -1;
     double bestDelta = 0.0;
+    // Nearest on the dial's own band only: another band's tuner setting is
+    // no starting point (a 40 m match offered on 20 m).  Off the ham bands
+    // there is no label to compare, so every point counts.
+    const QString band = bandLabel(curHz_);
     if (active_ >= 0 && active_ < ant_.size()) {
         const auto &pts = ant_[active_].points;
         for (int i = 0; i < pts.size(); ++i) {
+            if (!band.isEmpty() && pts[i].band != band) continue;
             const double d = std::abs(pts[i].freqHz - curHz_);
             if (best < 0 || d < bestDelta) { best = i; bestDelta = d; }
         }

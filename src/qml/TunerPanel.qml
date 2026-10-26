@@ -1,7 +1,7 @@
 // Lyra — Tuner panel: native manual-ATU memory (the "Tuner Reminder" idea,
 // built in).  Tracks the live dial against the active antenna's stored
-// Input / Inductor / Output settings and shows the matching — or nearest —
-// point, with live colour-coded SWR embedded.  Collapsed = basics only;
+// Input / Inductor / Output settings and shows the matching — or nearest
+// on the same band — point, with live colour-coded SWR embedded.  Collapsed = basics only;
 // expanded = the full editable table.
 //
 // Context properties: Tuner (TunerMemory), Meter (P1/P2-aware live SWR),
@@ -20,7 +20,9 @@ Rectangle {
     // clipping.  Tuner collapses via the Tuner model (not a root `collapsed`
     // prop), so makeQuick treats it as non-collapsible and would otherwise pin
     // the dock to the full content height, defeating the vertical scroll.
-    readonly property int lyraMinHeight: 170
+    // 120 fits the collapsed basics (header, frequency line, tiles) without a
+    // scrollbar; it must stay small, as it stacks with its column neighbours.
+    readonly property int lyraMinHeight: 120
     color: "#101820"
     border.color: "#2a4a5a"
 
@@ -237,7 +239,30 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
-            Item { Layout.fillWidth: true }
+            Label {   // on this band: the band label leads the line
+                visible: !Tuner.matchValid
+                text: qsTr("nothing stored")
+                color: root.cAmber; font.pixelSize: 12
+                Layout.fillWidth: true; Layout.minimumWidth: 0
+                elide: Text.ElideRight
+            }
+            Item { Layout.fillWidth: true; visible: Tuner.matchValid }
+            // Store sits on this line, not in a banner restating it.
+            LyraButton {
+                visible: !root.editingNew && (!Tuner.matchValid || !Tuner.matchExact)
+                text: qsTr("Store")
+                implicitHeight: 22; font.pixelSize: 11
+                HoverHandler { id: storeHov }
+                LyraHoverHelp {
+                    title: qsTr("Store")
+                    text: qsTr("Save this frequency's tuner setting for the selected antenna.")
+                    hovered: storeHov.hovered
+                }
+                onClicked: {
+                    inF.text = ""; outF.text = ""; indF.text = ""; noteF.text = ""
+                    root.editingNew = true
+                }
+            }
         }
 
         // ── Match tiles: Input / Inductor / Output ──
@@ -266,36 +291,6 @@ Rectangle {
                                   ? tile.modelData.v : "—"
                             color: Tuner.matchValid ? root.cText : root.cDim
                             font.family: "Consolas"; font.pixelSize: 18 }
-                    }
-                }
-            }
-        }
-
-        // ── Nearest / no-match banner (amber) ──
-        Rectangle {
-            Layout.fillWidth: true
-            visible: !root.editingNew && (!Tuner.matchValid || !Tuner.matchExact)
-            Layout.maximumHeight: visible ? 4096 : 0
-            implicitHeight: nrCol.implicitHeight + 14
-            radius: 9; color: "#241a0c"; border.color: "#6e4f1c"
-            RowLayout {
-                id: nrCol
-                anchors.fill: parent; anchors.margins: 7; spacing: 8
-                Label { text: "⚠"; color: root.cAmber; font.pixelSize: 16 }
-                Label {
-                    Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11
-                    text: !Tuner.matchValid
-                          ? qsTr("Nothing stored for this antenna yet — store this frequency.")
-                          : qsTr("No exact match — showing nearest (") +
-                            Tuner.fmtFreq(Tuner.matchFreqHz) + qsTr(", ") +
-                            root.fmtDelta(Tuner.matchDeltaHz) + qsTr(")")
-                    color: root.cText }
-                LyraButton {
-                    text: qsTr("Store this freq")
-                    implicitHeight: 24; font.pixelSize: 11
-                    onClicked: {
-                        inF.text = ""; outF.text = ""; indF.text = ""; noteF.text = ""
-                        root.editingNew = true
                     }
                 }
             }
