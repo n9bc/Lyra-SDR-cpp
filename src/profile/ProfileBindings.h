@@ -27,6 +27,11 @@ struct ProfileBindings {
     // True while the wire MOX bit is set — the manager must NOT apply a
     // profile (source/BW switch) mid-transmit (the §15.25 discipline).
     std::function<bool()> isTxActive = [] { return false; };
+
+    // True while the live mode keeps its own filter bandwidth (CW).  The
+    // profiles are voice/digital chains; their 4 kHz must not land on the
+    // CW filter, and the CW width must not dirty or overwrite the profile.
+    std::function<bool()> keepsOwnBandwidth = [] { return false; };
 };
 
 }  // namespace lyra::profile

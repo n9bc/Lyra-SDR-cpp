@@ -28,7 +28,16 @@ void ProfileManager::setBaselineFromActive() {
 
 bool ProfileManager::isModified() const {
     if (!hasBaseline_ || !b_.capture) return false;
-    return !b_.capture().sameValues(baseline_);
+    return !captureKeepingBandwidth(baseline_).sameValues(baseline_);
+}
+
+Profile ProfileManager::captureKeepingBandwidth(const Profile &stored) const {
+    Profile p = b_.capture();
+    if (b_.keepsOwnBandwidth && b_.keepsOwnBandwidth()) {
+        p.rxBandwidth = stored.rxBandwidth;
+        p.txBandwidth = stored.txBandwidth;
+    }
+    return p;
 }
 
 void ProfileManager::saveActive() {
@@ -43,7 +52,8 @@ void ProfileManager::saveActive() {
 void ProfileManager::saveAs(const QString &name) {
     if (name.isEmpty() || !b_.capture) return;
     const bool isNew = !store_.contains(name);
-    Profile p = b_.capture();
+    Profile p = isNew ? b_.capture()
+                      : captureKeepingBandwidth(store_.get(name));
     p.name = name;
     store_.put(p);
     store_.setActive(name);
@@ -63,8 +73,14 @@ bool ProfileManager::load(const QString &name) {
         return false;
     }
     Profile p = store_.get(name);
+    Profile applied = p;
+    if (b_.keepsOwnBandwidth && b_.keepsOwnBandwidth()) {
+        const Profile live = b_.capture();
+        applied.rxBandwidth = live.rxBandwidth;
+        applied.txBandwidth = live.txBandwidth;
+    }
     applying_ = true;            // setter-storm below must not churn the dirty flag
-    b_.apply(p);
+    b_.apply(applied);
     applying_ = false;
     store_.setActive(name);
     baseline_ = p;

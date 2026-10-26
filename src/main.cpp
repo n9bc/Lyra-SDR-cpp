@@ -1229,6 +1229,10 @@ int main(int argc, char *argv[])
     auto *profileSettings = new QSettings(&app);  // app org/app name (set at startup)
     lyra::profile::ProfileBindings pb;
     pb.isTxActive = [stream]() { return stream->moxActive(); };
+    pb.keepsOwnBandwidth = [prefs]() {
+        return lyra::profile::ProfileManager::modeFamily(prefs->mode())
+               == QLatin1String("CW");
+    };
     pb.capture = [prefs, stream, wdspEngine]() {
         lyra::profile::Profile p;
         // NOTE: mode is deliberately NOT captured — a profile is a pure

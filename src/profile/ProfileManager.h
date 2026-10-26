@@ -104,6 +104,9 @@ signals:
 
 private:
     void setBaselineFromActive();
+    // capture(), with the bandwidths taken from `stored` while the live
+    // mode keeps its own (ProfileBindings::keepsOwnBandwidth).
+    Profile captureKeepingBandwidth(const Profile &stored) const;
 
     ProfileBindings b_;
     ProfileStore    store_;
