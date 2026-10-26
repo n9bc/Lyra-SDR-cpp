@@ -194,6 +194,7 @@ Rectangle {
             }
         }
         Label {
+            id: drivePctLbl
             // Live readback from the wire atomic — so an external
             // change (CAT, persistence reload) updates the readout.
             // Unvalidated P2 clamps analog drive to the bench ceiling
@@ -213,8 +214,8 @@ Rectangle {
             LyraHoverHelp {
                 title: qsTr("Drive")
                 text: qsTr("Slider %1% — P2 bench ceiling %2% (Settings → TX).")
-                    .arg(sliderPct).arg(P2Bridge.txDriveLimitPercent)
-                hovered: drivePctHov.hovered && p2Capped
+                    .arg(drivePctLbl.sliderPct).arg(P2Bridge.txDriveLimitPercent)
+                hovered: drivePctHov.hovered && drivePctLbl.p2Capped
             }
         }
 
