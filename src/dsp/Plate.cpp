@@ -79,6 +79,11 @@ void Plate::setTrebDb(double db)     { trebDb_.store(clampd(db, -18.0, 18.0), st
 void Plate::setMix(double frac)      { mix_.store(clampd(frac, 0.0, 1.0), std::memory_order_relaxed); }
 
 void Plate::processInterleaved(double *iq, int nPairs) {
+    // A pending flush runs here, on the audio thread, before any sample of
+    // this block (cheap load first: no RMW on the common no-request path).
+    if (resetReq_.load(std::memory_order_relaxed)
+        && resetReq_.exchange(false, std::memory_order_acq_rel))
+        reset();
     if (bypass_.load(std::memory_order_relaxed) || nPairs <= 0) return;
 
     // ── derive per-block coefficients from the atomic params ────────────

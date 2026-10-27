@@ -52,6 +52,12 @@ public:
 
     void processInterleaved(double *iqPairs, int nPairs);
     void reset();                    // clear all delay + filter state
+    // Ask the audio thread to reset() at the start of its next
+    // processInterleaved() call (eSSB practice loop: drop the clip's reverb
+    // tail before it can reach TXA).  One atomic store — safe from any
+    // thread, including the cm TX thread; the state itself is only ever
+    // cleared on the audio thread.  Consumed even while bypassed.
+    void requestReset() noexcept { resetReq_.store(true, std::memory_order_release); }
 
 private:
     struct Shelf { double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; double z1 = 0, z2 = 0; };
@@ -66,6 +72,7 @@ private:
 
     double fs_ = 48000.0;
     std::atomic<bool> bypass_{false};
+    std::atomic<bool> resetReq_{false};   // requestReset() -> next process call
 
     std::atomic<double> preDelayS_{0.010};
     std::atomic<double> decayS_{1.542};

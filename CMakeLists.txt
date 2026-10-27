@@ -334,6 +334,20 @@ qt_add_executable(lyra
     src/dsp/cw_fldigi/fldigi_cw.cpp
     src/dsp/FreqCalMeasure.h
     src/dsp/FreqCalMeasure.cpp
+    # eSSB Coach — receive-side measurement engines (no Qt), fed by the
+    # read-only RX1 audio (pre-RX-EQ) and IQ taps in WdspEngine.
+    src/dsp/coach/CoachTarget.h
+    src/dsp/coach/CoachTarget.cpp
+    src/dsp/coach/CoachAnalyzer.h
+    src/dsp/coach/CoachAnalyzer.cpp
+    src/dsp/coach/CoachEnvelope.h
+    src/dsp/coach/CoachEnvelope.cpp
+    src/dsp/coach/CoachAdvisor.h
+    src/dsp/coach/CoachAdvisor.cpp
+    src/dsp/coach/SplatterMeter.h
+    src/dsp/coach/SplatterMeter.cpp
+    src/dsp/coach/RxaAgcModel.h
+    src/dsp/coach/RxaAgcModel.cpp
     # DeepFist neural CW decoder (second, selectable CW engine)
     src/dsp/deepfist/DeepFistResampler.h
     src/dsp/deepfist/DeepFistResampler.cpp
@@ -403,6 +417,13 @@ qt_add_executable(lyra
     src/tx/ClipBank.cpp
     src/tx/VoiceKeyer.h
     src/tx/VoiceKeyer.cpp
+    # eSSB practice loop — loop a clip unkeyed through the native rack, A/B
+    # the saved rack against live edits, coach graph per clean pass.
+    src/tx/RackAbSwitch.h
+    src/tx/RackAbSwitch.cpp
+    src/tx/PracticePassTracker.h
+    src/tx/PracticeLoop.h
+    src/tx/PracticeLoop.cpp
     src/tx/ClipRecorder.h
     src/tx/ClipRecorder.cpp
     # Session Recorder (#201) — RX/TX audio + timed pan/waterfall snapshots.
@@ -546,6 +567,11 @@ qt_add_executable(lyra
     # #52 — plate model (bridges dsp/Plate to PlatePanel.qml).
     src/platemodel.h
     src/platemodel.cpp
+    # eSSB Coach — model (bridges dsp/coach to EssbCoachPanel.qml) + report/advice.
+    src/essbcoachmodel.h
+    src/essbcoachmodel.cpp
+    src/essbcoachreport.h
+    src/essbcoachreport.cpp
     src/usb_bcd.h
     src/usb_bcd.cpp
     src/help.h
@@ -612,6 +638,7 @@ qt_add_qml_module(lyra
         src/qml/SpeechPanel.qml
         src/qml/CwConsolePanel.qml
         src/qml/CwDecoderPanel.qml
+        src/qml/EssbCoachPanel.qml
         src/qml/CalibrationPanel.qml
         src/qml/VoiceKeyerPanel.qml
         src/qml/RecorderPanel.qml
@@ -838,6 +865,14 @@ if(APPLE)
         VERBATIM)
 
     add_custom_target(lyra_stage_wdsp ALL DEPENDS "${LYRA_WDSP_STAMP}")
+
+    # eSSB Coach: this branch is the only one whose WDSP comes from the source
+    # tree (tools/build_wdsp_macos.sh builds WDSP_TAG from source).  The coach's
+    # AGC-gain alignment is derived line by line from that source, so it is
+    # trusted only here.  Windows ships a prebuilt wdsp.dll with different
+    # features (NNR), and Linux loads whatever libwdsp.so is installed.  Both
+    # get the unaligned fallback.
+    target_compile_definitions(lyra PRIVATE LYRA_WDSP_FROM_INTREE_SOURCE=1)
 endif()
 
 # DeepFist neural CW decoder — ship onnxruntime.dll next to lyra.exe (a
@@ -1234,6 +1269,23 @@ if(MSVC)
     target_compile_options(test_clip_player PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
+# eSSB practice loop — A/B rack switch + clean-pass tracker unit test.
+# Qt Core only (QJsonObject); EXCLUDE_FROM_ALL.  Build + run:
+#   cmake --build build --target test_practice && ./build/test_practice
+add_executable(test_practice EXCLUDE_FROM_ALL
+    scratch/test_practice.cpp
+    src/tx/RackAbSwitch.h
+    src/tx/RackAbSwitch.cpp
+    src/tx/PracticePassTracker.h
+    src/dsp/MonitorRouting.h
+    src/dsp/MonitorRing.h
+)
+target_include_directories(test_practice PRIVATE src)
+target_link_libraries(test_practice PRIVATE Qt6::Core)
+if(MSVC)
+    target_compile_options(test_practice PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
 # #89 Stage B — WAV I/O unit test (WavIo).  Qt-free; EXCLUDE_FROM_ALL.
 # Build + run:  cmake --build build --target test_wav_io
 add_executable(test_wav_io EXCLUDE_FROM_ALL
@@ -1344,6 +1396,54 @@ add_executable(test_eq_analyzer EXCLUDE_FROM_ALL
 target_include_directories(test_eq_analyzer PRIVATE src)
 if(MSVC)
     target_compile_options(test_eq_analyzer PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+# eSSB Coach — band layout / targets / zones / analyzer / speech-gate unit test.  No Qt.
+# EXCLUDE_FROM_ALL; `cmake --build build --target test_essb_coach`.
+add_executable(test_essb_coach EXCLUDE_FROM_ALL
+    scratch/test_essb_coach.cpp
+    src/dsp/coach/CoachTarget.h
+    src/dsp/coach/CoachTarget.cpp
+    src/dsp/coach/CoachAnalyzer.h
+    src/dsp/coach/CoachAnalyzer.cpp
+    src/dsp/coach/CoachEnvelope.h
+    src/dsp/coach/CoachEnvelope.cpp
+    src/dsp/coach/CoachAdvisor.h
+    src/dsp/coach/CoachAdvisor.cpp
+    src/dsp/coach/SplatterMeter.h
+    src/dsp/coach/SplatterMeter.cpp
+    src/dsp/coach/RxaAgcModel.h
+    src/dsp/coach/RxaAgcModel.cpp
+)
+target_include_directories(test_essb_coach PRIVATE src)
+if(MSVC)
+    target_compile_options(test_essb_coach PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+# eSSB Coach — report JSON + advice wording unit test (Qt Core only; the model
+# itself needs WdspEngine, so the testable parts live in src/essbcoachreport).
+# EXCLUDE_FROM_ALL; `cmake --build build --target test_essb_report`.
+add_executable(test_essb_report EXCLUDE_FROM_ALL
+    scratch/test_essb_report.cpp
+    src/essbcoachreport.h
+    src/essbcoachreport.cpp
+    src/dsp/coach/CoachTarget.h
+    src/dsp/coach/CoachTarget.cpp
+    src/dsp/coach/CoachAnalyzer.h
+    src/dsp/coach/CoachAnalyzer.cpp
+    src/dsp/coach/CoachEnvelope.h
+    src/dsp/coach/CoachEnvelope.cpp
+    src/dsp/coach/CoachAdvisor.h
+    src/dsp/coach/CoachAdvisor.cpp
+    src/dsp/coach/SplatterMeter.h
+    src/dsp/coach/SplatterMeter.cpp
+    src/dsp/coach/RxaAgcModel.h
+    src/dsp/coach/RxaAgcModel.cpp
+)
+target_include_directories(test_essb_report PRIVATE src)
+target_link_libraries(test_essb_report PRIVATE Qt6::Core)
+if(MSVC)
+    target_compile_options(test_essb_report PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 # #88 — native speech pre-processor unit test (Auto-AGC + De-esser).

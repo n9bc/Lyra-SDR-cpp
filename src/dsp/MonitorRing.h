@@ -53,6 +53,24 @@ public:
         return k;
     }
 
+    // Consumer, jitter-buffered (eSSB practice loop).  The producer runs in
+    // bursts that follow the radio's packets, so a plain pop() settles on a
+    // ~10 ms cushion and an occasional late burst empties it mid-block (a
+    // 5 ms dropout).  While !primed this pops nothing until `prime` samples
+    // are queued; once primed it pops like pop().  A block that finds fewer
+    // than n samples delivers what there is and clears `primed`, so the
+    // cushion re-fills before playback resumes.  `primed` is consumer state.
+    std::size_t popPrimed(double *dst, std::size_t n, std::size_t prime,
+                          bool &primed) noexcept {
+        const std::size_t avail = available();
+        if (!primed) {
+            if (avail < prime) return 0;
+            primed = true;
+        }
+        if (avail < n) primed = false;
+        return pop(dst, n);
+    }
+
     std::size_t available() const noexcept {
         return head_.load(std::memory_order_acquire)
              - tail_.load(std::memory_order_acquire);

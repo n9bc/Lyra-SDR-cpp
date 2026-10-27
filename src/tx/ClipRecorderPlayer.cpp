@@ -15,12 +15,14 @@ bool ClipRecorderPlayer::play(std::shared_ptr<const std::vector<float>> mono,
         std::lock_guard<std::mutex> lk(mtx_);
         if (state_ != State::Idle) return false;          // already playing
         if (!mono || mono->empty()) return false;         // nothing to play
+        if (opt.loop && opt.ota) return false;            // never loop onto the air
         // Own-key discipline: never key over a Manual / HwPtt hold.
         if (opt.ota && blockedFn_ && blockedFn_()) return false;
 
         clip_      = std::move(mono);
         pos_       = 0;
         drainLeft_ = 0;
+        passCount_.store(0, std::memory_order_relaxed);
         opt_       = opt;
         gainLin_.store(opt.gainLin, std::memory_order_relaxed);   // seed live gain
         state_     = State::Playing;
@@ -76,6 +78,17 @@ bool ClipRecorderPlayer::fillBlock(int n_pairs, double *out_iq_pairs) {
             return false;
         }
 
+        // Practice-loop air guard: a non-OTA clip must never run while a key is
+        // requested / MOX is active.  Go Idle WITHOUT touching the key and
+        // WITHOUT writing the buffer, so live mic in the caller's buffer flows.
+        if (!opt_.ota && refuseFn_ && refuseFn_()) {
+            state_ = State::Idle;
+            active_.store(false, std::memory_order_release);
+            clip_.reset();
+            pos_ = 0; drainLeft_ = 0; keyHeld_ = false;
+            return false;
+        }
+
         // Own-key abort: a higher-priority source (Manual / HwPtt) grabbed the
         // key mid-clip.  Stop feeding immediately.  Do NOT toggle the key — the
         // higher-priority source now owns it; releasing here would drop THEIR
@@ -94,9 +107,13 @@ bool ClipRecorderPlayer::fillBlock(int n_pairs, double *out_iq_pairs) {
             const double g = gainLin_.load(std::memory_order_relaxed);   // live (rideable)
             const std::size_t sz = clip_ ? clip_->size() : 0;
             int i = 0;
-            for (; i < n_pairs && pos_ < sz; ++i, ++pos_) {
+            for (; i < n_pairs && pos_ < sz; ++i) {
                 out_iq_pairs[2 * i + 0] = static_cast<double>((*clip_)[pos_]) * g;
                 out_iq_pairs[2 * i + 1] = 0.0;
+                if (++pos_ >= sz && opt_.loop) {          // seamless wrap
+                    pos_ = 0;
+                    passCount_.fetch_add(1, std::memory_order_relaxed);
+                }
             }
             if (pos_ >= sz) {
                 // Clip exhausted (this block or exactly filled).  Silence the

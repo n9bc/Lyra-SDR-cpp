@@ -34,6 +34,7 @@
 #include "eqmodel.h"                  // complete type for new EqModel + context property
 #include "speechmodel.h"              // complete type for new SpeechModel + context property
 #include "combinatormodel.h"          // complete type for new CombinatorModel + context property
+#include "essbcoachmodel.h"          // complete type for new EssbCoachModel + context property
 #include "platemodel.h"               // complete type for new PlateModel + context property
 #include "profileui.h"                // native Save-Profile dialog (front panel)
 #include "wdsp_engine.h"
@@ -56,6 +57,8 @@
 #include "recorder/SessionConverter.h" // #201 — offline MP4 converter
 #include <QImage>                    // #201 — panadapter snapshot grab
 #include "tx/VoiceKeyer.h"
+#include "tx/PracticeLoop.h"         // eSSB practice loop ("Practice" ctx prop)
+#include "dsp/coach/CoachAdvisor.h"  // isVoiceMode (practice canRun gate)
 #include "wire/CMaster.h"             // #89 — SendpTxClipInject / SendpTxMicRecordTap
 #include "wire/P2RxBridge.h"          // Saturn / ANAN G2 Protocol 2 RX path
 #include "wire/RadioNet.h"            // prn — refuse Start until create_rnet
@@ -267,7 +270,7 @@ inline const QCursor &moveCursor() {
 // cyan highlight, or ⧉); while panels are locked a floating one only moves.
 constexpr const char *kChipSummonedPanels[] = {
     "txspeech", "txeq", "txcombinator", "txplate", "rxeq",
-    "cwconsole", "cwdecoder", "voicekeyer", "tuner", "freqcal",
+    "cwconsole", "cwdecoder", "essbcoach", "voicekeyer", "tuner", "freqcal",
     "recorder", "ps", "ampview", "diversity",
 };
 
@@ -356,6 +359,29 @@ inline QSize testWindowSize() {
 inline bool safeBootLayout() {
     return qEnvironmentVariableIsSet("LYRA_SAFE");
 }
+
+// Calls `fn` (deferred one event-loop turn) whenever a dock is shown, hidden or
+// re-parented.  A dock hidden because its host window hid (the Options rack
+// closing) gets a Hide event but no visibilityChanged-style notification
+// through its toggle action, so callers re-derive "open" in `fn`.
+class DockStateWatcher : public QObject {
+public:
+    DockStateWatcher(QDockWidget *dock, std::function<void()> fn, QObject *parent)
+        : QObject(parent), fn_(std::move(fn)) {
+        dock->installEventFilter(this);
+    }
+    bool eventFilter(QObject *, QEvent *e) override {
+        switch (e->type()) {
+        case QEvent::Show: case QEvent::Hide: case QEvent::ParentChange:
+            QTimer::singleShot(0, this, fn_);
+            break;
+        default: break;
+        }
+        return false;
+    }
+private:
+    std::function<void()> fn_;
+};
 
 // A floating chip dock loses its frame the moment it is hidden: the next
 // show comes back at the size hint, wherever Qt drops it. Remember the last
@@ -1053,6 +1079,23 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         connect(combinatorModel_, &CombinatorModel::paramsChanged, this, save);
     }
 
+    // eSSB Coach model (drives EssbCoachPanel.qml, "EssbCoach" context
+    // property).  Owns the RX1 audio analyzer + IQ splatter meter; the taps are
+    // attached to the engine only while the panel is open (setActive: toggle
+    // checked and the dock's window showing; see the essbcoach dock below).
+    // Standalone persistence (QSettings "essbCoach/*"), NOT in the TX profile.
+    essbCoachModel_ = new EssbCoachModel(this);
+    if (auto *we = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_))
+        essbCoachModel_->setEngine(we);
+    essbCoachModel_->setRecorder(recorder_);
+    essbCoachModel_->setFreqProvider([this]() -> qint64 {
+        return stream_ ? stream_->property("rx1FreqHz").toLongLong() : 0;
+    });
+    // A retune moves the DDC centre: re-arm the splatter meter's validity timer.
+    if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_))
+        connect(st, &lyra::ipc::HL2Stream::rx1FreqChanged, essbCoachModel_,
+                &EssbCoachModel::noteRx1FreqChanged);
+
     // #52 plate-reverb model (drives PlatePanel.qml) — last native rack
     // stage, after the Combinator.  Wire-INERT until Stage 3 registers
     // SendpTxPlateProcessor.
@@ -1074,6 +1117,107 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         };
         connect(plateModel_, &PlateModel::bypassChanged, this, save);
         connect(plateModel_, &PlateModel::paramsChanged, this, save);
+    }
+
+    // eSSB practice loop (drives the Practice section of EssbCoachPanel.qml,
+    // "Practice" context property).  Records a 15-30 s clip and loops it
+    // UNKEYED through the native TX rack; the engine plays the post-rack
+    // monitor locally and the coach graphs A (saved rack) vs B (live edits).
+    // Built here: it needs the keyer, the clip bank, the coach and all four
+    // rack models.  The clip never reaches the air: ota=false, the player's
+    // refuse fn (keyIntentOrMox) and the key-intent stop below.
+    {
+        using lyra::tx::PracticeLoop;
+        lyra::tx::PracticeBindings pb;
+        pb.stream = [this]() { return qobject_cast<lyra::ipc::HL2Stream *>(stream_); };
+        // HL2 present + streaming (the stream's running flag), a voice mode,
+        // and not keyed.
+        pb.canRun = [this]() {
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            return st && prefs_ && st->isRunning() && !st->keyIntentOrMox()
+                && lyra::dsp::coach::CoachAdvisor::isVoiceMode(
+                       prefs_->mode().toStdString());
+        };
+        pb.micSource = [this]() { return prefs_ ? prefs_->micSource() : QString(); };
+        pb.captureRack = [this]() {
+            lyra::tx::RackState r;
+            if (eqModel_)         r.eq         = eqModel_->saveState();
+            if (speechModel_)     r.speech     = speechModel_->saveState();
+            if (combinatorModel_) r.combinator = combinatorModel_->saveState();
+            if (plateModel_)      r.plate      = plateModel_->saveState();
+            return r;
+        };
+        pb.applyRack = [this](const lyra::tx::RackState &r) {
+            if (eqModel_)         eqModel_->loadState(r.eq);
+            if (speechModel_)     speechModel_->loadState(r.speech);
+            if (combinatorModel_) combinatorModel_->loadState(r.combinator);
+            if (plateModel_)      plateModel_->loadState(r.plate);
+        };
+        pb.voxEnabled = [this]() {
+            auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_);
+            return st && st->voxEnabled();
+        };
+        // Runs on the GUI thread AND inside the refuse fn on the cm TX
+        // thread: a static, lock-free atomic request (no model pointer read).
+        pb.flushRackTail = &PlateModel::requestTxFlush;
+        practice_ = new PracticeLoop(voiceKeyer_, clipBank_, profiles_, essbCoachModel_,
+                                     qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_),
+                                     std::move(pb), this);
+
+        // A/B edit detection: the same rack signals main.cpp wires to
+        // ProfileManager::refreshModified.  DIRECT (AutoConnection between
+        // GUI-thread objects) on purpose — RackAbSwitch ignores the signals
+        // its own apply emits only while the apply is on the stack, so a
+        // queued delivery would count an A/B flip as an edit.
+        connect(eqModel_, &EqModel::bandsChanged, practice_, &PracticeLoop::noteRackEdit);
+        connect(eqModel_, &EqModel::bypassChanged, practice_, &PracticeLoop::noteRackEdit);
+        connect(eqModel_, &EqModel::makeupDbChanged, practice_, &PracticeLoop::noteRackEdit);
+        connect(speechModel_, &SpeechModel::changed, practice_, &PracticeLoop::noteRackEdit);
+        connect(combinatorModel_, &CombinatorModel::paramsChanged, practice_,
+                &PracticeLoop::noteRackEdit);
+        connect(combinatorModel_, &CombinatorModel::bypassChanged, practice_,
+                &PracticeLoop::noteRackEdit);
+        connect(plateModel_, &PlateModel::paramsChanged, practice_, &PracticeLoop::noteRackEdit);
+        connect(plateModel_, &PlateModel::bypassChanged, practice_, &PracticeLoop::noteRackEdit);
+
+        if (auto *st = qobject_cast<lyra::ipc::HL2Stream *>(stream_)) {
+            // The earliest key intent from any source stops the loop.
+            connect(st, &lyra::ipc::HL2Stream::moxIntentPulse, practice_,
+                    &PracticeLoop::onKeyIntent);
+            // VOX switched on ends practice (VOX could key on the loop).
+            connect(st, &lyra::ipc::HL2Stream::voxEnabledChanged, practice_,
+                    &PracticeLoop::onVoxEnabled);
+            // The stream stopping (disconnect, protocol switch) ends practice
+            // before anything can tear the stream down under the refuse fn.
+            connect(st, &lyra::ipc::HL2Stream::runningChanged, practice_, [this, st]() {
+                if (!st->isRunning()) practice_->stop();
+            });
+        }
+        // Leaving a voice mode ends practice at once (the poll would too).
+        if (prefs_)
+            connect(prefs_, &Prefs::modeChanged, practice_, [this]() {
+                if (!lyra::dsp::coach::CoachAdvisor::isVoiceMode(prefs_->mode().toStdString()))
+                    practice_->stop();
+            });
+        // Quit: stop before the stream closes / goes away (closeEvent also
+        // stops; this covers quit paths that skip it).
+        connect(qApp, &QCoreApplication::aboutToQuit, practice_, &PracticeLoop::stop);
+
+        // The voice keyer shares the recorder and the player: refuse its
+        // Record / Transmit / Review / F-key playback while practice runs.
+        voiceKeyer_->setLockoutFn([this]() {
+            return practice_ && (practice_->recording() || practice_->looping()
+                                 || practice_->countdownSec() > 0);
+        });
+
+        // In practice the coach's passband is the TX filter: [TX low, TX
+        // high], the same two edges main.cpp pushes to setTxBandpass.
+        if (essbCoachModel_)
+            essbCoachModel_->setTxEdgesProvider([this]() -> std::pair<double, double> {
+                if (!prefs_) return {0.0, 0.0};
+                return {static_cast<double>(prefs_->txFilterLow()),
+                        static_cast<double>(prefs_->txBandwidth())};
+            });
     }
 
     // DX-cluster spots (pushed over TCI; drawn on the panadapter).
@@ -1151,6 +1295,15 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
                 if (!msg.isEmpty()) statusBar()->showMessage(msg, 6000);
             });
     connect(desk_, &DeskLink::changed, this, &MainWindow::updateConnState);
+    // The coach measures the radio's own RX1; a desk-side Lyra has no local
+    // receiver to tap.
+    if (essbCoachModel_) {
+        const auto syncCoach = [this] {
+            essbCoachModel_->setAvailable(!(desk_ && desk_->deskSide()));
+        };
+        connect(desk_, &DeskLink::changed, essbCoachModel_, syncCoach);
+        syncCoach();
+    }
     if (auto *rx = qobject_cast<lyra::dsp::WdspEngine *>(wdspEngine_)) {
         rx->setDeskAudioTap([this](const double *lr, int nframes) {
             if (desk_) desk_->offerRxAudio(lr, nframes);
@@ -2555,6 +2708,8 @@ QQuickWidget *MainWindow::makeQuick(const QString &qmlFile) {
     qw->rootContext()->setContextProperty(
         QStringLiteral("Combinator"), combinatorModel_);
     qw->rootContext()->setContextProperty(
+        QStringLiteral("EssbCoach"), essbCoachModel_);
+    qw->rootContext()->setContextProperty(
         QStringLiteral("Plate"), plateModel_);
     qw->rootContext()->setContextProperty(
         QStringLiteral("CwMacros"), cwMacros_);
@@ -2562,6 +2717,8 @@ QQuickWidget *MainWindow::makeQuick(const QString &qmlFile) {
         QStringLiteral("Clips"), clipBank_);
     qw->rootContext()->setContextProperty(
         QStringLiteral("VoiceKeyer"), voiceKeyer_);
+    qw->rootContext()->setContextProperty(
+        QStringLiteral("Practice"), practice_);   // eSSB practice loop
     qw->rootContext()->setContextProperty(
         QStringLiteral("Recorder"), recorder_);   // #201 session recorder
     qw->rootContext()->setContextProperty(
@@ -3162,6 +3319,54 @@ void MainWindow::buildDocks() {
         d->hide();
         new FloatingDockMemory(d, QStringLiteral("ui/cwDecoderDock"),
                                &layoutRestoring_, d);
+    }
+    // eSSB Coach — RX1 audio / splatter measurement panel (EssbCoachModel).
+    // Own floating dock + "eSSB" chip, hidden by default.  The model attaches
+    // its WdspEngine taps only while the panel is open, so a closed panel
+    // costs the audio path one null check.
+    addQuickDock(QStringLiteral("essbcoach"), tr("eSSB Coach"),
+                 QStringLiteral("EssbCoachPanel.qml"),
+                 QStringLiteral("essbcoach"), Qt::BottomDockWidgetArea,
+                 /*resizable=*/true);
+    if (QDockWidget *d = docks_.value(QStringLiteral("essbcoach"))) {
+        d->setFloating(true);
+        d->hide();
+        new FloatingDockMemory(d, QStringLiteral("ui/essbCoachDock"),
+                               &layoutRestoring_, d);
+        // Floating, the header row (Target, Advice for, gear) and the graph
+        // need this much room; presentChipDock opens it at 900x650.  Docked
+        // (main window or the Options rack) the host decides.
+        const auto coachMin = [d](bool floating) {
+            d->setMinimumSize(floating ? QSize(760, 520) : QSize(0, 0));
+        };
+        connect(d, &QDockWidget::topLevelChanged, d, coachMin);
+        coachMin(d->isFloating());
+        if (essbCoachModel_) {
+            // "Open" = the chip/toggle is on AND the dock's window (main window
+            // or the Options rack) is showing.  A dock tabbed behind another is
+            // hidden but still open; the model debounces the false edge.
+            auto syncCoach = [this, d]() {
+                QWidget *w = d->window();
+                essbCoachModel_->setActive(d->toggleViewAction()->isChecked()
+                                           && w && w->isVisible());
+            };
+            connect(d->toggleViewAction(), &QAction::toggled, this, syncCoach);
+            new DockStateWatcher(d, syncCoach, d);
+        }
+        // Closing the coach ends a practice loop / recording (the loop's
+        // graph, A/B controls and Stop live in this panel).  An explicit
+        // close (chip / close button) stops at once; any other way the panel
+        // stops being open (e.g. the Options rack window hidden) stops on the
+        // model's debounced closed edge, so a re-parent / float / tab move
+        // inside the debounce window does not.
+        if (practice_) {
+            connect(d->toggleViewAction(), &QAction::toggled, practice_, [this](bool on) {
+                if (!on) practice_->onCoachClosed();
+            });
+            if (essbCoachModel_)
+                connect(essbCoachModel_, &EssbCoachModel::panelClosed, practice_,
+                        &lyra::tx::PracticeLoop::onCoachClosed);
+        }
     }
     // Voice Keyer (#89 Build 1) — floating clip-message panel (labelled clips,
     // ▶ OTA / ▶ Review / F-keys), chip-summoned like the CW console.  Own dock;
@@ -4637,7 +4842,7 @@ void MainWindow::buildToolbar() {
                     });
         }
         // ---- Options panels: individual chips, OR one "Options" chip ----
-        // (Tuner / CW / CW Dec / Voice Keyer.  CTUN, Freq Cal and WF-ID always
+        // (Tuner / CW / CW Dec / eSSB / Voice Keyer.  CTUN, Freq Cal and WF-ID always
         // stay individual — they are not part of the grouped set.)
         if (!optGrouped) {
         // Tuner launcher — manual-ATU memory panel (operating tool, not a DSP
@@ -4674,6 +4879,17 @@ void MainWindow::buildToolbar() {
                 btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
             }
         }
+        // eSSB Coach launcher — floating RX1 audio coach panel.
+        if (QDockWidget *d = docks_.value(QStringLiteral("essbcoach"))) {
+            QAction *act = d->toggleViewAction();
+            act->setText(tr("eSSB"));
+            tb->addAction(act);
+            if (auto *btn = qobject_cast<QToolButton *>(
+                    tb->widgetForAction(act))) {
+                btn->setObjectName(QStringLiteral("txDspChip"));
+                btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
+            }
+        }
         // Voice Keyer launcher (#89 Build 1) — floating clip-message panel.
         if (QDockWidget *d = docks_.value(QStringLiteral("voicekeyer"))) {
             QAction *act = d->toggleViewAction();
@@ -4691,6 +4907,7 @@ void MainWindow::buildToolbar() {
                                     QStringList{ QStringLiteral("tuner"),
                                                  QStringLiteral("cwconsole"),
                                                  QStringLiteral("cwdecoder"),
+                                                 QStringLiteral("essbcoach"),
                                                  QStringLiteral("voicekeyer") });
             optionsRack_ = orr.first; optionsRackChip_ = orr.second;
         }
@@ -5684,11 +5901,14 @@ void MainWindow::presentChipDock(QDockWidget *d, int slot) {
                        || d->height() < floor.height();
         const bool onScreen = avail.contains(d->frameGeometry().center());
         if (stub || !onScreen) {
-            // The two EQs get a wide default ("freqcal" also contains "eq");
-            // the rest open at their natural size, at most 500×420.
+            // The two EQs get a wide default ("freqcal" also contains "eq"),
+            // the eSSB Coach room for its header row and graph; the rest open
+            // at their natural size, at most 500×420.
             const bool eq = d->objectName() == QLatin1String("txeq")
                          || d->objectName() == QLatin1String("rxeq");
+            const bool coach = d->objectName() == QLatin1String("essbcoach");
             QSize sz = eq ? QSize(920, 480)
+                     : coach ? QSize(900, 650)
                      : hinted ? hint.boundedTo(QSize(500, 420))
                               : QSize(500, 420);
             sz = sz.boundedTo(avail.size());
@@ -6641,6 +6861,8 @@ void MainWindow::storeSessionForExit() {
 
 void MainWindow::closeEvent(QCloseEvent *event) {
     storeSessionForExit();
+    // End a practice loop before the panels and the stream go away.
+    if (practice_) practice_->stop();
 
     // Task #47 — QML null-safety on shutdown teardown.
     //

@@ -4,10 +4,12 @@
 //
 // Gates: bypass = untouched; MIX=0 = dry passthrough; an impulse produces a
 // decaying reverb tail; a longer DECAY holds more tail energy later; finite
-// over a big block at the N8SDR preset (R7/R8).
+// over a big block at the N8SDR preset (R7/R8); requestReset() clears the
+// tail before the next block, even while bypassed (eSSB practice loop).
 
 #include "dsp/Plate.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -110,6 +112,66 @@ int main() {
         for (double v : buf) if (!std::isfinite(v)) finite = false;
         std::printf("finite=%d\n", finite);
         CHECK(finite);
+    }
+
+    // ── requestReset(): the next block starts from a clean state ────────
+    // (eSSB practice loop: the clip's reverb tail must not survive into TX.)
+    {
+        const int N = 4800;
+        Plate p; p.setSampleRate(kFs); p.setMix(1.0); p.setDecayS(5.0);
+        auto clip = sineIQ(700.0, 0.5, 24000);
+        p.processInterleaved(clip.data(), 24000);          // load a long tail
+        auto silent = std::vector<double>(2 * N, 0.0);
+        auto probe = silent;
+        // Without a reset the tail rings into a silent block.
+        {
+            Plate r; r.setSampleRate(kFs); r.setMix(1.0); r.setDecayS(5.0);
+            auto c2 = sineIQ(700.0, 0.5, 24000);
+            r.processInterleaved(c2.data(), 24000);
+            auto s2 = silent;
+            r.processInterleaved(s2.data(), N);
+            const double tail = energy(s2, 0, N);
+            std::printf("no reset: tail energy=%.4e\n", tail);
+            CHECK(tail > 1e-6);
+        }
+        p.requestReset();
+        p.processInterleaved(probe.data(), N);
+        double maxAbs = 0.0;
+        for (double v : probe) maxAbs = std::max(maxAbs, std::fabs(v));
+        std::printf("after requestReset: silent block max=%.3e\n", maxAbs);
+        CHECK(maxAbs == 0.0);                                // dry (silence) only
+
+        // A flushed plate behaves exactly like a fresh one.
+        auto x1 = sineIQ(1000.0, 0.3, N), x2 = x1;
+        p.requestReset();
+        p.processInterleaved(x1.data(), N);
+        Plate f; f.setSampleRate(kFs); f.setMix(1.0); f.setDecayS(5.0);
+        f.processInterleaved(x2.data(), N);
+        bool same = true;
+        for (size_t i = 0; i < x1.size(); ++i) if (x1[i] != x2[i]) same = false;
+        std::printf("flushed == fresh: %d\n", same);
+        CHECK(same);
+    }
+    // ── requestReset() is consumed even while bypassed ──────────────────
+    {
+        const int N = 4800;
+        Plate p; p.setSampleRate(kFs); p.setMix(1.0); p.setDecayS(5.0);
+        auto clip = sineIQ(700.0, 0.5, 24000);
+        p.processInterleaved(clip.data(), 24000);
+        p.requestReset();
+        p.setBypass(true);
+        auto b = sineIQ(500.0, 0.2, 256), ref = b;
+        p.processInterleaved(b.data(), 256);               // bypassed: untouched
+        bool same = true;
+        for (size_t i = 0; i < b.size(); ++i) if (b[i] != ref[i]) same = false;
+        CHECK(same);
+        p.setBypass(false);
+        auto silent = std::vector<double>(2 * N, 0.0);
+        p.processInterleaved(silent.data(), N);
+        double maxAbs = 0.0;
+        for (double v : silent) maxAbs = std::max(maxAbs, std::fabs(v));
+        std::printf("reset while bypassed, then on: silent max=%.3e\n", maxAbs);
+        CHECK(maxAbs == 0.0);
     }
 
     std::printf(g_fail ? "\n%d CHECK(s) FAILED\n" : "\nALL PASS\n", g_fail);

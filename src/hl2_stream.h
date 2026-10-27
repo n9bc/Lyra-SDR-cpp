@@ -937,6 +937,16 @@ public:
     // TX-0c-fsm — true while the radio is wire-level keyed (post-keydown
     // settle, pre-keyup-clear).  Read by the UI red-on-air indicator.
     bool    moxActive()  const { return moxActive_; }
+    // eSSB practice loop — true while any key is requested (the last
+    // requestMox(on, source) call, recorded before the inhibit checks, so a
+    // blocked keydown still counts) or the wire MOX bit is up.  Lock-free
+    // (atomic reads only): safe from the cm TX thread, where it is the clip
+    // player's refuse function.  Reads mox_ rather than moxActive_, which is
+    // a plain bool owned by this QObject's thread.
+    bool    keyIntentOrMox() const noexcept {
+        return keyIntent_.load(std::memory_order_acquire) ||
+               mox_.load(std::memory_order_acquire);
+    }
     // #105 — CW message-level keyed state for UI consumers (the meter
     // flip).  QSK CW keys the PA at the gateware and deliberately leaves
     // the wire MOX bit (moxActive_) low, so the UI needs a separate signal
@@ -2304,6 +2314,7 @@ private:
     // at MOX=0/PA-off the datagram is byte-identical to RX.  A later TX
     // phase wires these into the C&C round-robin under MOX gating.
     std::atomic<bool>    mox_{false};          // C0 bit 0 (RF transmit)
+    std::atomic<bool>    keyIntent_{false};    // last requestMox(on) (keyIntentOrMox)
     std::atomic<quint32> txFreqHz_{7074000};   // TX NCO -> 0x02/0x08/0x0a
     // SPLIT — VFO B (the split TX VFO) + the split-on flag.  txFreqHz_
     // tracks vfoBHz_ when splitEnabled_, else rx1FreqHz_ (the simplex

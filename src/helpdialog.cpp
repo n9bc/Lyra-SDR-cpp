@@ -69,6 +69,7 @@ const QHash<QString, QString> &topicHeads() {
         {QStringLiteral("cwdecoder"),
          QStringLiteral("Reading CW — the RX decoder")},
         {QStringLiteral("tuner"),     QStringLiteral("Tuner (manual ATU memory)")},
+        {QStringLiteral("essbcoach"), QStringLiteral("eSSB Coach")},
         {QStringLiteral("profiles"),
          QStringLiteral("Profiles (TX/RX chain presets)")},
         // Header "Options" toggle chips with no dock (right-click → help).

@@ -1207,6 +1207,10 @@ void HL2Stream::open(const QString &ip) {
     twoToneEnabled_.store(false, std::memory_order_relaxed);
     noiseEnabled_.store(false, std::memory_order_relaxed);
     requestedMox_  = false;
+    // eSSB practice loop — the key intent goes with requestedMox_, or a
+    // key held across a stream stop/start would block practice until the
+    // operator keyed and unkeyed (keyIntentOrMox).
+    keyIntent_.store(false, std::memory_order_release);
     fsmRunning_    = false;
     if (moxActive_) { moxActive_ = false; emit moxActiveChanged(false); }
     if (txSafetyTimer_ && txSafetyTimer_->isActive()) txSafetyTimer_->stop();
@@ -1634,6 +1638,10 @@ void HL2Stream::close() {
     twoToneEnabled_.store(false, std::memory_order_relaxed);
     noiseEnabled_.store(false, std::memory_order_relaxed);
     requestedMox_  = false;
+    // eSSB practice loop — the key intent goes with requestedMox_, or a
+    // key held across a stream stop/start would block practice until the
+    // operator keyed and unkeyed (keyIntentOrMox).
+    keyIntent_.store(false, std::memory_order_release);
     fsmRunning_    = false;
     if (moxActive_) {
         moxActive_ = false;
@@ -4323,6 +4331,10 @@ int HL2Stream::pushWaterfallIdAudio(const QString &callsign, double level,
 }
 
 void HL2Stream::requestMox(bool on, PttSource source) {
+    // eSSB practice loop — record the key intent FIRST, before the inhibit /
+    // convert / xvtr checks, so a blocked keydown still refuses the clip
+    // injector (keyIntentOrMox).  Over-refusing is the safe side.
+    keyIntent_.store(on, std::memory_order_release);
     // #94 External TX Inhibit — hard lockout at the single keying funnel.
     // Block EVERY keydown intent (covers Manual / HW-PTT / TCI / CW / TUN /
     // Auto-ID — they all route through here).  Keyup (on=false) ALWAYS passes

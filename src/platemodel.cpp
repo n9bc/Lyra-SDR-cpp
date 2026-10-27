@@ -35,6 +35,11 @@ void PlateModel::txProcessCb(int nSamples, double *iqPairs) {
     if (e) e->processInterleaved(iqPairs, nSamples);
 }
 
+void PlateModel::requestTxFlush() noexcept {
+    auto *e = s_txEngine.load(std::memory_order_acquire);
+    if (e) e->requestReset();
+}
+
 void PlateModel::setBypass(bool on) {
     if (on == bypass_) return;
     bypass_ = on; plate_.setBypass(on); emit bypassChanged();

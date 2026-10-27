@@ -51,6 +51,10 @@ public:
                                    // player itself does not process audio.
         double gainLin   = 1.0;    // Linear gain applied to played samples,
                                    // ahead of the modulator (ALC still caps).
+        bool   loop      = false;  // Wrap to the clip start seamlessly (no
+                                   // gap, no Draining, no key) — eSSB practice
+                                   // loop.  Never allowed with ota: play()
+                                   // refuses loop && ota.
     };
 
     // Keying seam.  on=true → assert the key (PttSource::Keyer); on=false →
@@ -60,15 +64,23 @@ public:
     // HwPtt) currently owns the key, in which case the keyer must not play /
     // must abort.  May be empty (treated as "not blocked").
     using BlockedFn = std::function<bool()>;
+    // Practice-loop air guard.  Returns true if a key is requested / MOX is
+    // active, in which case a NON-OTA clip must never run: fillBlock() goes
+    // Idle (no key toggle) and returns false BEFORE writing any sample, so the
+    // adapter keeps live mic in the buffer.  Ignored for OTA clips (they keep
+    // their own BlockedFn discipline).  May be empty.  Called under the mutex
+    // from the TX thread — must be cheap and non-blocking (e.g. atomic reads).
+    using RefuseFn = std::function<bool()>;
 
     ClipRecorderPlayer() = default;
 
     void setKeyFn(KeyFn fn)        { std::lock_guard<std::mutex> lk(mtx_); keyFn_ = std::move(fn); }
     void setBlockedFn(BlockedFn f) { std::lock_guard<std::mutex> lk(mtx_); blockedFn_ = std::move(f); }
+    void setRefuseFn(RefuseFn f)   { std::lock_guard<std::mutex> lk(mtx_); refuseFn_ = std::move(f); }
 
     // Begin playing a mono 48 kHz clip.  Returns false (no-op) if a clip is
-    // already playing, `mono` is null/empty, or (OTA) a higher-priority
-    // source owns the key.  On OTA it asserts the key immediately; samples
+    // already playing, `mono` is null/empty, `loop && ota`, or (OTA) a
+    // higher-priority source owns the key.  On OTA it asserts the key immediately; samples
     // then flow as fillBlock() is pumped.
     bool play(std::shared_ptr<const std::vector<float>> mono, PlayOptions opt);
 
@@ -92,6 +104,11 @@ public:
     bool keyed()   const { std::lock_guard<std::mutex> lk(mtx_); return keyHeld_; }
     // Playback position in [0, 1]; 0 when idle.
     double progress() const;
+    // Loop passes completed since play() (0 at play(), +1 per wrap).  Atomic,
+    // lock-free: safe for a GUI poll while the TX thread pumps fillBlock.
+    unsigned passCount() const noexcept { return passCount_.load(std::memory_order_relaxed); }
+    // Length of the active clip in samples; 0 when idle.
+    std::size_t clipSamples() const { std::lock_guard<std::mutex> lk(mtx_); return clip_ ? clip_->size() : 0; }
     // The bypass flag of the clip currently playing (for the injection
     // adapter to route to the TX-DSP bypass).  false when idle.
     bool activeBypassDsp() const { std::lock_guard<std::mutex> lk(mtx_); return state_ != State::Idle && opt_.bypassDsp; }
@@ -126,8 +143,10 @@ private:
     bool        keyHeld_ = false;
     std::atomic<bool>   active_{false};   // Playing || Draining (lock-free hint)
     std::atomic<double> gainLin_{1.0};    // live playback gain (rideable during OTA)
+    std::atomic<unsigned> passCount_{0};  // loop wraps since play()
     KeyFn       keyFn_;
     BlockedFn   blockedFn_;
+    RefuseFn    refuseFn_;
 };
 
 } // namespace lyra::tx

@@ -38,7 +38,7 @@ namespace lyra::wire { class P2RxBridge; }
 namespace lyra::hardware { class ActiveFrontEndModel; }
 namespace lyra::profile { class ProfileManager; class CompanionLauncher; }
 namespace lyra::cat { class SerialPtt; class SerialCwKey; class CatServer; }
-namespace lyra::tx { class ClipBank; class VoiceKeyer; }
+namespace lyra::tx { class ClipBank; class VoiceKeyer; class PracticeLoop; }
 namespace lyra::recorder { class RecorderEngine; class SessionConverter; }
 namespace lyra::ui {
 
@@ -47,6 +47,7 @@ class CwMacroModel;
 class EqModel;
 class SpeechModel;
 class CombinatorModel;
+class EssbCoachModel;
 class PlateModel;
 class TunerMemory;
 
@@ -520,8 +521,10 @@ private:
     CwMacroModel               *cwMacros_ = nullptr;  // #176 CW macro bank (CwConsolePanel.qml + F-keys)
     lyra::tx::ClipBank         *clipBank_ = nullptr;  // #89 voice-keyer clip bank (Clips ctx prop)
     lyra::tx::VoiceKeyer       *voiceKeyer_ = nullptr;// #89 voice keyer controller (VoiceKeyerPanel.qml + F-keys)
+    lyra::tx::PracticeLoop     *practice_ = nullptr;  // eSSB practice loop ("Practice" ctx prop, EssbCoachPanel.qml)
     SpeechModel                *speechModel_ = nullptr; // #88 speech rack (SpeechPanel.qml)
     CombinatorModel            *combinatorModel_ = nullptr; // #51 combinator (CombinatorPanel.qml)
+    EssbCoachModel             *essbCoachModel_ = nullptr;  // eSSB Coach (EssbCoachPanel.qml, "EssbCoach" ctx prop)
     PlateModel                 *plateModel_ = nullptr;     // #52 plate reverb (PlatePanel.qml)
     lyra::profile::ProfileManager *profiles_ = nullptr; // TX/RX profile engine (Settings→Profiles)
     lyra::profile::CompanionLauncher *companion_ = nullptr; // #193 launch digital app on profile pick

@@ -105,6 +105,7 @@ void VoiceKeyer::setLive(bool on) {
 
 void VoiceKeyer::play(const QString &id, bool ota) {
     if (!live_ || !bank_ || !player_) return;   // gated on the operator opt-in
+    if (lockout_ && lockout_()) return;         // practice owns the player
     if (!ota && !reviewReady()) return;         // local Review lands in Stage C
     auto samples = bank_->loadSamples(id);
     if (!samples || samples->empty()) return;
@@ -156,6 +157,7 @@ void VoiceKeyer::onPollTick() {
 // same global + per-clip gain as OTA. ──
 void VoiceKeyer::reviewLocal(const QString &id) {
     if (!bank_) return;
+    if (lockout_ && lockout_()) return;           // practice is playing / recording
     stopReview();                                 // restart cleanly if re-clicked
     auto samples = bank_->loadSamples(id);
     if (!samples || samples->empty()) return;
@@ -221,6 +223,7 @@ void VoiceKeyer::stopReview() {
 // cancels it (the panel routes that here).
 void VoiceKeyer::startRecord(int kind) {
     if (!recorder_ || recording_) return;
+    if (lockout_ && lockout_()) return;   // practice owns the recorder
     if (counting_) { cancelCountdown(); return; }
     if (recordDelaySec_ > 0) {
         pendingKind_  = kind;
@@ -236,6 +239,7 @@ void VoiceKeyer::startRecord(int kind) {
 
 void VoiceKeyer::startRecordNow(int kind) {
     if (!recorder_ || recording_) return;
+    if (lockout_ && lockout_()) return;   // practice started during the countdown
     const int maxSamples = recordMaxSec_ * ClipRecorder::sampleRate();
     recorder_->start(kind == 1 ? ClipRecorder::Source::Rx : ClipRecorder::Source::Mic,
                      maxSamples);

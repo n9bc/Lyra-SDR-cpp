@@ -18,6 +18,10 @@
 #include "wire/Ivac.h"   // #158 — create_ivac / destroy_ivac / xvacOUT / xvacIN / ivacGet
 #include "dsp/ParamEq.h"     // #59 — RX EQ engine (processMonoDup / bypassed)
 #include "dsp/EqAnalyzer.h"  // #59 — RX EQ analyzer feed (pre/post)
+#include "dsp/coach/CoachAdvisor.h"   // eSSB Coach — isVoiceMode (tap gate)
+#include "dsp/coach/CoachAnalyzer.h"  // eSSB Coach — pre-RX-EQ audio tap
+#include "dsp/coach/SplatterMeter.h"  // eSSB Coach — RX1 IQ tap
+#include "dsp/MonitorRouting.h"       // eSSB practice — monitor route decision
 #include "wire/CMaster.h" // #158 Stage 4 — SendpInboundVacTxAudio (VAC-in seam)
 #include "rig/RigScope.h" // #2 — per-rig audio-route scoping (scope::rigKey / migrate)
 #include <QDataStream>
@@ -1302,6 +1306,13 @@ bool WdspEngine::openRx1()
                     cfg_.tDelayDown, cfg_.tSlewDown,
                     cfg_.block);
     opened_ = true;
+    // eSSB Coach — the fresh channel has WDSP's create_rxa defaults; the
+    // setters below update the mirror as they push.
+    coachRxa_ = lyra::dsp::coach::RxaState{};
+    coachRxa_.dspSize = cfg_.dspSize;
+    coachRxa_.dspRate = cfg_.dspRate;
+    coachRxa_.outRate = cfg_.outRate;
+    coachPublishRxa();
     applyDspFilterTypes();   // #159 — apply per-family filter type on open
     // Binaural OFF (arg 0) => WDSP panel.copy=1 => I copied to Q at the
     // panel output => mono on BOTH L/R regardless of any upstream stage
@@ -1429,6 +1440,9 @@ bool WdspEngine::openRx1()
     // when Outbound first fires on PC path) and BEFORE
     // SetChannelState(channel,1) below (AAMix initialised, but
     // dormant since active=0 + nactive=0 -> no mix_main yet).
+    // eSSB Coach — restart the AGC-alignment schedule for the fresh channel
+    // (new iobuffs) and the fresh AAMix, before either thread can run.
+    coachAgcReset();
     if (aaMix_ != nullptr) {
         // Defensive: a previous closeRx1 should have cleared this.
         lyra::wire::destroy_aamix(aaMix_, 0);
@@ -2546,6 +2560,7 @@ void WdspEngine::recomputePassband()
 // (RXA setters are safe alongside fexchange0 — WDSP serializes internally).
 void WdspEngine::setRxShiftHz(double hz)
 {
+    rxShiftHz_.store(hz, std::memory_order_relaxed);   // eSSB Coach mirror
     if (!opened_ || !wdsp_) return;
     const WdspApi &api = wdsp_->api();
     if (!api.SetRXAShiftFreq || !api.SetRXAShiftRun) return;
@@ -2571,6 +2586,8 @@ void WdspEngine::applyModeFilter()
     const WdspApi &api = wdsp_->api();
     if (api.SetRXAMode) {
         api.SetRXAMode(channel_, modeToWdsp(mode_));
+        coachRxa_.mode = modeToWdsp(mode_);   // eSSB Coach mirror
+        coachPublishRxa();
     }
     double lo, hi;
     computePassband(&lo, &hi);
@@ -2640,6 +2657,8 @@ void WdspEngine::applyDspFilterTypes()
     const int fi = static_cast<int>(fam);
     if (api.RXASetMP) {
         api.RXASetMP(channel_, dspFiltMp_[fi][0] ? 1 : 0);
+        coachRxa_.bp1MinPhase = dspFiltMp_[fi][0];   // eSSB Coach mirror (bp1 MP)
+        coachPublishRxa();
         if (rx2Opened_) {
             const DspFamily fam2 = dspFamilyForMode(modeRx2_);
             const int fi2 = static_cast<int>(fam2);
@@ -2948,6 +2967,10 @@ void WdspEngine::setMode(const QString &m)
         return;
     }
     mode_ = m;
+    // eSSB Coach — outside a voice mode the coach gets no-information blocks
+    // (audio-thread atomic, set here alongside mode_).
+    coachVoiceMode_.store(lyra::dsp::coach::CoachAdvisor::isVoiceMode(m.toStdString()),
+                          std::memory_order_relaxed);
     // #59 RX EQ digital-mode auto-bypass — audio-thread-safe atomic, set here
     // on the UI thread alongside mode_ (mirrors the TX rack's DIGU/DIGL gate;
     // avoids reading the mode_ QString from the audio thread).
@@ -3636,6 +3659,14 @@ void WdspEngine::setMonVolume(double v)
     }
 }
 
+// eSSB practice loop — GUI thread.  Stores the flag and nothing else: the
+// monitor ring is owned by the TX thread (push) and the audio thread (pop /
+// flush); dispatchAudioFrame flushes it whenever neither route is active.
+void WdspEngine::setPracticeActive(bool on)
+{
+    practiceActive_.store(on, std::memory_order_relaxed);
+}
+
 void WdspEngine::setTxMuted(bool m)
 {
     // Live MOX-driven mute — wired in main.cpp from
@@ -3678,9 +3709,20 @@ void WdspEngine::applyTxMuted_(bool m)
     // zero-gain while muted, so the OFF fixed-gain value is inaudible during TX.
     // Called on the main thread (moxActiveChanged / rxResumeTimer_); SetRXAAGCMode
     // is already called main-thread during live RX (pushAgcMode), so safe.
+    if (!m) {
+        // eSSB Coach — keep the taps held off kCoachTxHoldMs past the un-mute
+        // (coachTxGated).  Stored before txMuted_ clears so there is no gap.
+        const auto until = std::chrono::steady_clock::now()
+                           + std::chrono::milliseconds(kCoachTxHoldMs);
+        coachTxHoldUntilNs_.store(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      until.time_since_epoch()).count(),
+                                  std::memory_order_relaxed);
+    }
     if (opened_ && wdsp_ && wdsp_->api().SetRXAAGCMode) {
         if (m) {
             wdsp_->api().SetRXAAGCMode(channel_, kAgcModeOff);
+            coachRxa_.agcMode = kAgcModeOff;   // eSSB Coach mirror
+            coachPublishRxa();
             if (rx2Opened_)
                 wdsp_->api().SetRXAAGCMode(rx2Channel_, kAgcModeOff);
         } else {
@@ -3691,7 +3733,8 @@ void WdspEngine::applyTxMuted_(bool m)
         // Stop RX2 with RX1 on keydown (PS mixer garbage on DDC1 while keyed).
         wdsp_->api().SetChannelState(rx2Channel_, m ? 0 : 1, 0);
     }
-    const bool prev = txMuted_.exchange(m, std::memory_order_relaxed);
+    // release: a reader that sees txMuted_ == false also sees the hold above.
+    const bool prev = txMuted_.exchange(m, std::memory_order_release);
     if (prev != m) emit txMutedChanged();
 }
 
@@ -3789,6 +3832,14 @@ void WdspEngine::pushNrState()
     };
     apply(channel_);
     if (rx2Opened_) apply(rx2Channel_);
+    // eSSB Coach mirror.  SetRXAEMNRPosition moves bp1 too (emnr.c:1322-1331).
+    if (api.SetRXAEMNRPosition) {
+        coachRxa_.emnrPosition = 1;
+        coachRxa_.bp1Position = 1;
+    }
+    coachRxa_.emnrRun = emnrOn;
+    coachRxa_.nnrRun = nnrOn;
+    coachPublishRxa();
 }
 
 bool WdspEngine::nnrAvailable() const
@@ -3821,6 +3872,9 @@ void WdspEngine::pushAgcMode()
     };
     apply(channel_);
     if (rx2Opened_) apply(rx2Channel_);
+    coachRxa_.agcMode = mode;   // eSSB Coach mirror
+    if (api.SetRXAAGCFixed) coachRxa_.fixedGainDb = kAgcFixedGainDb;
+    coachPublishRxa();
 }
 
 void WdspEngine::setNrEnabled(bool on)
@@ -3933,6 +3987,19 @@ void WdspEngine::pushAgcThresh()
     };
     apply(channel_);
     if (rx2Opened_) apply(rx2Channel_);
+    // eSSB Coach mirror: var_gain from the slope (SetRXAAGCSlope,
+    // wcpAGC.c:537-542), max_gain as WDSP now holds it (SetRXAAGCThresh
+    // derives it, wcpAGC.c:503-515).
+    if (api.SetRXAAGCSlope)
+        coachRxa_.varGain = std::pow(10.0, static_cast<double>(kAgcSlope) / 200.0);
+    if (api.GetRXAAGCTop) {
+        double top = coachRxa_.maxGainDb;
+        api.GetRXAAGCTop(channel_, &top);
+        coachRxa_.maxGainDb = top;
+    } else {
+        coachRxa_.maxGainDb = NAN;   // unknown -> applied gain unknown
+    }
+    coachPublishRxa();
 }
 
 // No-persist core: clamp/store/push + emit, no QSettings write.  The latch
@@ -4108,6 +4175,8 @@ void WdspEngine::pushAnfState()
     };
     apply(channel_);
     if (rx2Opened_) apply(rx2Channel_);
+    coachRxa_.anfRun = anfEnabled_;   // eSSB Coach mirror
+    coachPublishRxa();
 }
 
 void WdspEngine::pushLmsState()
@@ -4126,6 +4195,8 @@ void WdspEngine::pushLmsState()
     };
     apply(channel_);
     if (rx2Opened_) apply(rx2Channel_);
+    coachRxa_.anrRun = lmsEnabled_;   // eSSB Coach mirror
+    coachPublishRxa();
 }
 
 void WdspEngine::setAnfEnabled(bool on)
@@ -4416,6 +4487,10 @@ void WdspEngine::pushApfState()
     apply(channel_, mode_);
     if (haveRx2_.load(std::memory_order_relaxed))
         apply(rx2Channel_, modeRx2_);
+    // eSSB Coach mirror (the bi-quad peaking filter is xspeak).
+    coachRxa_.speakRun = apfEnabled_ && (mode_ == QLatin1String("CWU") ||
+                                         mode_ == QLatin1String("CWL"));
+    coachPublishRxa();
 }
 
 void WdspEngine::setApfEnabled(bool on)
@@ -5078,10 +5153,14 @@ void WdspEngine::txMonitorTapCb(int nsamples, double *buff)
     if (self == nullptr || buff == nullptr || nsamples <= 0) {
         return;
     }
-    // Only fill the ring when MON is on — saves the copy on every TX block
-    // when the operator isn't monitoring, and keeps the ring from
+    // Only fill the ring when MON is on or practice runs — saves the copy on
+    // every TX block when nobody is listening, and keeps the ring from
     // accumulating latency (dispatchAudioFrame also flushes it when idle).
-    if (!self->monEnabled_.load(std::memory_order_relaxed)) {
+    const auto route = lyra::dsp::routeMonitor(
+        self->monEnabled_.load(std::memory_order_relaxed),
+        self->txMuted_.load(std::memory_order_relaxed),
+        self->practiceActive_.load(std::memory_order_relaxed));
+    if (!route.fillTap) {
         return;
     }
     // Stack scratch sized to the mic block (xcm_insize, typ. <= 1024).  Clamp
@@ -5155,6 +5234,262 @@ void WdspEngine::setRxEqEngine(lyra::dsp::ParamEq *eng,
 {
     rxEqAnalyzer_.store(analyzer, std::memory_order_release);
     rxEq_.store(eng, std::memory_order_release);
+}
+
+// eSSB Coach — point the read-only RX1 audio / IQ taps at the coach's
+// analyzer + splatter meter (nullptr to detach).  release-store so the audio
+// and RX worker threads see fully-prepared objects.
+void WdspEngine::setCoachTaps(lyra::dsp::coach::CoachAnalyzer *a,
+                              lyra::dsp::coach::SplatterMeter *s)
+{
+    coachSplatter_.store(s, std::memory_order_release);
+    coachAnalyzer_.store(a, std::memory_order_release);
+}
+
+bool WdspEngine::coachTxGated() const
+{
+    if (txMuted_.load(std::memory_order_acquire)) return true;
+    const long long now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    return now < coachTxHoldUntilNs_.load(std::memory_order_relaxed);
+}
+
+// ── eSSB Coach: AGC gain alignment ──────────────────────────────────────────
+//
+// The coach removes our AGC from the audio it measures, so it needs the
+// RXA_AGC_GAIN that applied to each audio block.  WDSP 2.00 (what
+// tools/build_wdsp_macos.sh builds) gives a FIXED schedule for RX1, because
+// Lyra opens the channel with block=1 (bfo; RxConfig::block):
+//
+//  * Each fexchange0 call copies in_size IQ frames into r1.  Every
+//    N = dsp_insize / in_size calls it releases Sem_BuffReady
+//    (iobuffs.c:480-485), so call N*j+N-1 hands DSP block j to wdspmain.
+//    dsp_insize = dsp_size*in_rate/dsp_rate (channel.c:40-42).
+//  * wdspmain runs dexchange then xrxa (main.c:39-47).  dexchange FIRST
+//    pushes the PREVIOUS xrxa output into r2 (iobuffs.c:589-594), so
+//    dexchange(j) carries xrxa(j-1).  xrxa(j) then writes RXA_AGC_GAIN once,
+//    as 20*log10 of the AGC gain at the end of the block
+//    (RXA.c:650-655 -> meter.c:98-99).
+//  * r2 starts with (DSP_MULT-1)*r2_size = dsp_outsize frames of silence,
+//    i.e. N output blocks (iobuffs.c:409-416, comm.h:108).  Every call takes
+//    one out_size block from r2_outidx and blocks on Sem_OutReady, which only
+//    dexchange refills, by N per DSP block (iobuffs.c:494-513, 595-600).  So
+//    calls 0..2N-1 return silence, and calls N(j+2)..N(j+2)+N-1 return exactly
+//    xrxa(j)'s audio.  The schedule does not depend on thread timing.
+//  * Only SetChannelState / a channel rebuild resets the iobuffs
+//    (flush_iobuffs, iobuffs.c:443-461).  RX1 does that only in openRx1 /
+//    closeRx1; Lyra does not call RXASetNC, SetDSPBuffsize or the rate
+//    setters.  Every rate change is closeRx1 + openRx1, so openRx1 is the one
+//    resync point, together with the fresh AAMix.  ANY new RX1 call that
+//    stops, flushes or rebuilds the channel must call coachAgcReset() too.
+//  * AAMix is a single-input FIFO.  Each xMixAudio queues one out_size block
+//    (AAMix.cpp:239-279), and mix_main runs one Outbound -> dispatchAudioFrame
+//    per block (AAMix.cpp:40-45), so gain i pairs with Outbound i.  The ring
+//    is seq-tagged, so a dropped push degrades to NaN instead of shifting.
+//
+// The one thing the schedule does NOT pin down is WHEN xrxa(j) finishes.  The
+// N-1 calls after the hand-off do not wait for it: Sem_OutReady already holds
+// their tokens.  gain(j) is read just before call N(j+1)+N-1, the call that
+// starts xrxa(j+1), so xrxa(j+1) cannot have overwritten it.  But a burst of
+// IQ (calls back to back) could reach that point before xrxa(j) is done.
+// So the reading is trusted only if at least half a DSP block of real time
+// (dsp_size/dsp_rate/2, ~43 ms) has passed since the hand-off.  When IQ
+// arrives in real time this gap is (N-1)/N of a block, ~80 ms at 192 kHz.
+// An untrusted reading is NaN.
+//
+// Two more corrections, both from lyra::dsp::coach (RxaAgcModel.{h,cpp},
+// unit-tested in scratch/test_essb_coach.cpp, source lines cited there):
+//  * The meter is NOT the applied gain.  RXA_AGC_GAIN reads
+//    20*log10(volts/out_target), the AGC's envelope over its target
+//    (wcpAGC.c:338), while the multiplier applied is
+//    (out_target - slope_constant*min(0, log10(volts/max_input))) / volts
+//    (wcpAGC.c:339-341).  So it is roughly the NEGATIVE of the applied gain.
+//    rxaAgcAppliedGainDb() inverts it exactly from the AGC parameters, and
+//    handles FIXD (fixed_gain, meter stale) and FM (AGC not run).
+//  * The stages after xwcpagc delay the audio but not the gain:
+//    rxaPostAgcLatencySamples() gives that latency.  For Lyra it is EMNR at
+//    position 1, 3072 samples, plus bp1 at position 1 when it runs, 2047.5.
+//    It is NaN for stages it cannot derive (NNR, min-phase bp1, APF bi-quad).
+//    The gain for an output block is the applied gain interpolated, between
+//    the block-end readings, at the time that block's centre sample left the
+//    AGC.
+// coachRxa_ mirrors the RX1 RXA state.  Every RX1 setter that changes it calls
+// coachPublishRxa(), and the RX worker picks it up once per DSP block.  A
+// change in latency or AGC mapping distrusts knots from before the change,
+// so those blocks read NaN until the history refills (about 2-4 DSP blocks).
+// The alignment is derived from the WDSP source the build compiles
+// (CMake defines LYRA_WDSP_FROM_INTREE_SOURCE only on the branch that builds
+// WDSP from source).  With a prebuilt wdsp.dll / system libwdsp.so its
+// assumptions are unverified.  The coach then gets the spec's fallback: an
+// uncorrected (0 dB) gain, never NaN, so tonal and bandwidth measurement still
+// run, with coachAgcAligned() false so compression advice is withheld.
+#if defined(LYRA_WDSP_FROM_INTREE_SOURCE)
+static constexpr bool kCoachAgcFromSource = true;
+#else
+static constexpr bool kCoachAgcFromSource = false;
+#endif
+
+WdspEngine::CoachAgcState WdspEngine::coachAgcState() const
+{
+    if (!kCoachAgcFromSource) return CoachAgcState::PrebuiltWdsp;
+    if (coachAgcSynced_.load(std::memory_order_relaxed)) return CoachAgcState::Aligned;
+    lyra::dsp::coach::RxaState st;
+    {
+        std::lock_guard<std::mutex> lk(coachRxaMtx_);
+        st = coachRxaPub_;
+    }
+    return std::isnan(lyra::dsp::coach::rxaPostAgcLatencySamples(st))
+               ? CoachAgcState::UnknownLatency : CoachAgcState::Resyncing;
+}
+
+void WdspEngine::coachAgcReset()
+{
+    // dsp_insize / dsp_outsize as WDSP computes them (channel.c:39-47).
+    const int dspIn = cfg_.inRate >= cfg_.dspRate
+                          ? cfg_.dspSize * (cfg_.inRate / cfg_.dspRate)
+                          : cfg_.dspSize / (cfg_.dspRate / cfg_.inRate);
+    const int dspOut = cfg_.outRate >= cfg_.dspRate
+                           ? cfg_.dspSize * (cfg_.outRate / cfg_.dspRate)
+                           : cfg_.dspSize / (cfg_.dspRate / cfg_.outRate);
+    // The schedule above needs a whole number of calls per DSP block, and the
+    // same number of output blocks per DSP block.
+    const bool whole = cfg_.inSize > 0 && outSize_ > 0 && dspIn > 0 &&
+                       dspIn % cfg_.inSize == 0 && dspOut % outSize_ == 0 &&
+                       dspIn / cfg_.inSize == dspOut / outSize_;
+    coachCallsPerBlock_ = whole ? dspIn / cfg_.inSize : 0;
+    coachOutSize_ = outSize_;
+    coachDspOut_ = dspOut;
+    coachCalls_ = 0;
+    coachTrigAt_ = std::chrono::steady_clock::time_point{};
+    coachMinSettle_ = std::chrono::nanoseconds(static_cast<long long>(
+        0.5e9 * cfg_.dspSize / cfg_.dspRate));
+    {
+        std::lock_guard<std::mutex> lk(coachRxaMtx_);
+        coachRxaRx_ = coachRxaPub_;
+        coachRxaSeen_ = coachRxaGen_.load(std::memory_order_relaxed);
+    }
+    coachLatency_ = lyra::dsp::coach::rxaPostAgcLatencySamples(coachRxaRx_);
+    coachValidFrom_ = 0;
+    for (int i = 0; i < kCoachKnots; ++i) {
+        coachKnotVal_[i] = NAN;
+        coachKnotTag_[i] = -1;
+    }
+    coachPushSeq_ = 0;
+    coachPopSeq_ = 0;
+    coachRingHead_.store(0, std::memory_order_relaxed);
+    coachRingTail_.store(0, std::memory_order_relaxed);
+    coachAgcSynced_.store(false, std::memory_order_relaxed);
+}
+
+// GUI thread.  Called after every RX1 setter that changes coachRxa_.
+void WdspEngine::coachPublishRxa()
+{
+    std::lock_guard<std::mutex> lk(coachRxaMtx_);
+    coachRxaPub_ = coachRxa_;
+    coachRxaGen_.fetch_add(1, std::memory_order_release);
+}
+
+// Applied AGC gain (dB) at the end of DSP block j, or NaN.
+double WdspEngine::coachKnot(long long j) const
+{
+    if (j < 0 || j < coachValidFrom_) return NAN;
+    const int i = static_cast<int>(j % kCoachKnots);
+    return coachKnotTag_[i] == j ? coachKnotVal_[i] : NAN;
+}
+
+// RX worker, under channelMtx_, immediately before each fexchange0 call.
+// Returns the applied AGC gain (dB) for the audio this call returns, or NaN.
+double WdspEngine::coachAgcBeforeExchange()
+{
+    if (!kCoachAgcFromSource) return 0.0;      // unaligned fallback (see above)
+    const int n = coachCallsPerBlock_;
+    if (n <= 0) return NAN;
+    const long long c = coachCalls_++;
+    const long long m = c / n;                 // call block
+    const int phase = static_cast<int>(c % n);
+    if (phase == n - 1) {
+        // (1) Pick up a newer RXA-state mirror.  The GUI thread publishes only
+        // after its WDSP setter returned, so every xrxa that starts after this
+        // point (xrxa(m) on, started by this call) ran with it.  xrxa(m-1) may
+        // not have.  So on a change that moves the latency or the AGC mapping,
+        // only knots j >= m are trusted.  A small max-gain move (Auto AGC-T
+        // re-tracks, < 1 dB) shifts the mapping by a few hundredths of a dB,
+        // so it is applied without the hold.
+        if (coachRxaGen_.load(std::memory_order_acquire) != coachRxaSeen_ &&
+            coachRxaMtx_.try_lock()) {
+            const lyra::dsp::coach::RxaState nw = coachRxaPub_;
+            coachRxaSeen_ = coachRxaGen_.load(std::memory_order_relaxed);
+            coachRxaMtx_.unlock();
+            const double nl = lyra::dsp::coach::rxaPostAgcLatencySamples(nw);
+            const auto &od = coachRxaRx_;
+            const bool sameLat = (std::isnan(nl) && std::isnan(coachLatency_)) || nl == coachLatency_;
+            const bool hold = !sameLat || nw.mode != od.mode || nw.agcMode != od.agcMode ||
+                              nw.fixedGainDb != od.fixedGainDb || nw.varGain != od.varGain ||
+                              !(std::fabs(nw.maxGainDb - od.maxGainDb) < 1.0);
+            coachRxaRx_ = nw;
+            coachLatency_ = nl;
+            if (hold) coachValidFrom_ = std::max(coachValidFrom_, m);
+        }
+        // (2) This call hands block m to wdspmain.  Read gain(m-1) first
+        // (settle guard: see above), converted to the gain actually applied.
+        const auto now = std::chrono::steady_clock::now();
+        const WdspApi &api = wdsp_->api();
+        const long long j = m - 1;
+        double v = NAN;
+        if (j >= 0 && j >= coachValidFrom_ && api.GetRXAMeter &&
+            now - coachTrigAt_ >= coachMinSettle_)
+            v = lyra::dsp::coach::rxaAgcAppliedGainDb(
+                api.GetRXAMeter(channel_, 4), coachRxaRx_);   // 4 = RXA_AGC_GAIN
+        if (j >= 0) {
+            coachKnotVal_[j % kCoachKnots] = v;
+            coachKnotTag_[j % kCoachKnots] = j;
+        }
+        coachTrigAt_ = now;
+    }
+    // This call returns xrxa(m-2)'s audio, output block `phase` of it.  Its
+    // centre sample left the AGC coachLatency_ samples earlier; interpolate
+    // the applied gain there between the block-end knots.
+    if (m < 2 || !std::isfinite(coachLatency_) || coachDspOut_ <= 0) return NAN;
+    const double B = coachDspOut_;
+    const double tau = static_cast<double>(m - 2) * B +
+                       (phase + 0.5) * coachOutSize_ - coachLatency_;
+    const double q = tau / B;
+    const long long i1 = static_cast<long long>(std::floor(q));
+    const double frac = q - static_cast<double>(i1);
+    const double g0 = coachKnot(i1 - 1);   // gain at AGC time i1*B
+    const double g1 = coachKnot(i1);       // gain at AGC time (i1+1)*B
+    if (!std::isfinite(g0) || !std::isfinite(g1)) return NAN;
+    return g0 + (g1 - g0) * frac;
+}
+
+// RX worker, right before the xMixAudio that queues this call's output.
+void WdspEngine::coachAgcPush(double gainDb)
+{
+    const long long seq = coachPushSeq_++;
+    const unsigned h = coachRingHead_.load(std::memory_order_relaxed);
+    const unsigned t = coachRingTail_.load(std::memory_order_acquire);
+    if (h - t >= kCoachGainRing) return;   // full: the consumer sees NaN for it
+    coachGainRing_[h % kCoachGainRing] = CoachGainSlot{seq, gainDb};
+    coachRingHead_.store(h + 1, std::memory_order_release);
+}
+
+// Mix thread, once per dispatchAudioFrame (= once per AAMix Outbound).
+double WdspEngine::coachAgcPop()
+{
+    const long long k = coachPopSeq_++;
+    unsigned t = coachRingTail_.load(std::memory_order_relaxed);
+    const unsigned h = coachRingHead_.load(std::memory_order_acquire);
+    double g = NAN;
+    while (t != h) {
+        const CoachGainSlot &e = coachGainRing_[t % kCoachGainRing];
+        if (e.seq < k) { ++t; continue; }   // stale (should not happen)
+        if (e.seq == k) { g = e.gainDb; ++t; }
+        break;                              // e.seq > k: this block's push was dropped
+    }
+    coachRingTail_.store(t, std::memory_order_release);
+    coachAgcSynced_.store(kCoachAgcFromSource && std::isfinite(g),
+                          std::memory_order_relaxed);
+    return kCoachAgcFromSource ? g : 0.0;   // fallback is never NaN
 }
 
 void WdspEngine::setRxRecordTap(std::function<void(const double *, int)> tap)
@@ -5344,6 +5679,41 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
         }
     }
 
+    // eSSB Coach — RX1 audio tap.  READ-ONLY: copies the L channel (RX1 in
+    // both single-RX mono-dup and SUB stereo) into a fixed thread_local
+    // buffer; `audio` and every stage below are untouched.  It sits ABOVE the
+    // RX EQ block on purpose, so the coach measures the other station's audio
+    // regardless of the operator's RX EQ curve.  The AGC gain comes from the
+    // delay line in feedIq (coachAgcBeforeExchange): the gain our AGC applied
+    // to THIS block's audio (converted from RXA_AGC_GAIN and shifted by the
+    // post-AGC latency), or NaN when unknown (resync, an untrusted reading, an
+    // underivable stage), which the coach treats as "no information".  It is
+    // also forced to NaN while we transmit (coachTxGated: keyed, the un-mute
+    // delay and a hold after it) and outside a voice mode, so neither our own
+    // TX nor CW/digital audio enters a measurement.  Popped every block,
+    // attached or not, so the ring stays in step with the AAMix FIFO.
+    // Detached = one atomic load + pop.  While the practice loop runs the RX
+    // feed is skipped (the gain is still popped): the coach is fed the
+    // post-rack practice audio instead, below the monitor drain.
+    // practiceNow is read once so both feed points agree for this block.
+    const bool practiceNow = practiceActive_.load(std::memory_order_relaxed);
+    {
+        double coachGainDb = coachAgcPop();
+        if (coachTxGated() || !coachVoiceMode_.load(std::memory_order_relaxed))
+            coachGainDb = NAN;
+        if (auto *coachAn = coachAnalyzer_.load(std::memory_order_acquire);
+            coachAn && nframes > 0 && !practiceNow) {
+            constexpr int kCoachMaxBlk = 4096;
+            thread_local double coachBuf[kCoachMaxBlk];
+            for (int pos = 0; pos < nframes; pos += kCoachMaxBlk) {
+                const int chunk = std::min(nframes - pos, kCoachMaxBlk);
+                for (int k = 0; k < chunk; ++k)
+                    coachBuf[k] = audio[2 * (pos + k)];
+                coachAn->feed(coachBuf, chunk, coachGainDb);
+            }
+        }
+    }
+
     // #59 RX EQ — shape post-RXA audio BEFORE tees.  Single-RX is
     // mono-dup (L==R); SUB has RX1 on L and RX2 on R — EQ those
     // independently.  processMonoDup copies L onto R and would wipe RX2.
@@ -5403,21 +5773,49 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
 
     // #90 TX monitor — drain the post-rack tap ONCE per block into monScratch_
     // (mono), shared by Route 1 (HL2 jack, in the output loop below) and
-    // Route 2 (VAC stream-2 feed in the tee block).  monActive = MOX up + MON
-    // on.  An underrun zero-pads (never blocks); when inactive the ring is
-    // flushed so the next key-up is fresh + low-latency.  Pre-WDSP-ALC/bandpass
-    // by design (your rack processing, not the radio's corrective ALC).
-    const bool monActive = monEnabled_.load(std::memory_order_relaxed) &&
-                           txMuted_.load(std::memory_order_relaxed);
-    if (monActive) {
+    // Route 2 (VAC stream-2 feed in the tee block).  routeMonitor() decides:
+    // monRoute.remote = MOX up + MON on (Routes 2 and 3, unchanged);
+    // monRoute.local = that, or the practice loop (Route 1 only — practice
+    // audio never reaches VAC or TCI).  An underrun zero-pads (never blocks);
+    // when neither is active the ring is flushed so the next key-up is fresh
+    // + low-latency.  Pre-WDSP-ALC/bandpass by design (your rack processing,
+    // not the radio's corrective ALC).
+    const auto monRoute = lyra::dsp::routeMonitor(
+        monEnabled_.load(std::memory_order_relaxed),
+        txMuted_.load(std::memory_order_relaxed),
+        practiceNow);
+    if (monRoute.local || monRoute.remote) {
         if (static_cast<int>(monScratch_.size()) != nframes) {
             monScratch_.assign(static_cast<size_t>(nframes), 0.0);
         } else {
             std::fill(monScratch_.begin(), monScratch_.end(), 0.0);
         }
-        monitorRing_.pop(monScratch_.data(), static_cast<size_t>(nframes));
+        // Practice plays a looped clip, not a live voice, so it can afford a
+        // 50 ms jitter cushion (popPrimed) that rides out the TX pump's
+        // packet-paced bursts; MON while keyed keeps the plain low-latency pop.
+        const bool practiceOnly = practiceNow && !monRoute.remote;
+        if (!practiceOnly) practicePrimed_ = false;
+        if (practiceOnly)
+            monitorRing_.popPrimed(monScratch_.data(), static_cast<size_t>(nframes),
+                                   kPracticePrimeSamples, practicePrimed_);
+        else
+            monitorRing_.pop(monScratch_.data(), static_cast<size_t>(nframes));
     } else {
         monitorRing_.clear();
+        practicePrimed_ = false;
+    }
+
+    // eSSB practice loop — coach feed of the post-rack practice audio
+    // (monScratch_, mono, just drained) in place of RX audio.  No AGC acts on
+    // it, so the gain is 0 dB; the voice-mode gate and coachTxGated() still
+    // force NaN (a keyed practice has already stopped).
+    if (practiceNow && nframes > 0 &&
+        static_cast<int>(monScratch_.size()) == nframes) {
+        double practiceGainDb = 0.0;
+        if (coachTxGated() || !coachVoiceMode_.load(std::memory_order_relaxed))
+            practiceGainDb = NAN;
+        if (auto *coachAn = coachAnalyzer_.load(std::memory_order_acquire))
+            coachAn->feed(monScratch_.data(), nframes, practiceGainDb);
     }
 
     // #90 Route 3 — TCI RX-audio stream tap (centralized here with the jack +
@@ -5431,7 +5829,7 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
     if (tciAudioOn_.load(std::memory_order_relaxed)) {
         QByteArray b(nframes * int(sizeof(float)), Qt::Uninitialized);
         float *d = reinterpret_cast<float *>(b.data());
-        if (monActive) {
+        if (monRoute.remote) {
             const double mv = monVolume_.load(std::memory_order_relaxed);
             for (int f = 0; f < nframes; ++f)
                 d[f] = static_cast<float>(monScratch_[static_cast<size_t>(f)] * mv);
@@ -5502,7 +5900,7 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
             // never starves.  Unscaled: SetIVACmonVol applies the Monitor
             // level on the mixer side, and SetIVACmox/SetIVACmon route RX vs
             // monitor (RX muted out of the VAC on the air when MON is on).
-            if (monActive &&
+            if (monRoute.remote &&
                 static_cast<int>(monScratch_.size()) == nframes) {
                 if (static_cast<int>(vacMonStereo_.size()) != 2 * nframes) {
                     vacMonStereo_.assign(static_cast<size_t>(2 * nframes), 0.0);
@@ -5599,9 +5997,10 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
                          * (hl2Out_ ? kHl2OutAtten : 1.0);
     for (int f = 0; f < nframes; ++f) {
         double l, r;
-        if (monActive) {
+        if (monRoute.local) {
             // #90 monitor: mono self-listen, same on both channels; no BIN /
-            // balance (those are RX niceties).  Replaces the muted RX entirely.
+            // balance (those are RX niceties).  Replaces the muted RX entirely
+            // (and, in the practice loop, the unmuted RX on this output).
             const double m = monScratch_[static_cast<size_t>(f)] * monGain;
             l = m;
             r = m;
@@ -5766,6 +6165,7 @@ void WdspEngine::feedIq(const double *iq, int nframes)
             reducer_->process(blockPtr, cfg_.inSize, cleanBuf_.data());
             dspPtr = cleanBuf_.data();
         }
+        const double coachGainDb = coachAgcBeforeExchange();   // eSSB Coach, read-only
         api.fexchange0(channel_, dspPtr, outBuf_.data(), &fexErr_);
 
         // Step 5: panadapter sees post-NB IQ (blockPtr), not NR-C-cleaned
@@ -5820,6 +6220,14 @@ void WdspEngine::feedIq(const double *iq, int nframes)
             for (int i = 0; i < n; ++i) d[i] = static_cast<float>(accum_[size_t(i)]);
             emit tciIqBlock(b, cfg_.inRate);
         }
+
+        // eSSB Coach — splatter tap: the post-noise-blanker IQ block
+        // (blockPtr, what the panadapter shows), read-only.  Not fed while we
+        // transmit (coachTxGated); the coach model restarts the meter on
+        // each key edge.  Detached = one atomic load.
+        if (auto *coachSp = coachSplatter_.load(std::memory_order_acquire);
+            coachSp && !coachTxGated())
+            coachSp->feed(blockPtr, cfg_.inSize);
 
         // Peak |sample| across L+R as the audio-level proxy (Step 3d
         // is a measurement step — no playback).  20*log10(peak) dBFS.
@@ -5884,6 +6292,7 @@ void WdspEngine::feedIq(const double *iq, int nframes)
         // then-reopen race window; skip the push (one block of
         // silence ~21 ms, operator-imperceptible).
         if (aaMix_ != nullptr) {
+            coachAgcPush(coachGainDb);   // eSSB Coach: pairs 1:1 with this block
             lyra::wire::xMixAudio(aaMix_, 0, /*stream*/ 0,
                                   outBuf_.data());
         }

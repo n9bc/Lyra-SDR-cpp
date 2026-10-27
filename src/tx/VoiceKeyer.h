@@ -32,7 +32,9 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
 #include <memory>
+#include <utility>
 
 class QTimer;
 
@@ -116,6 +118,12 @@ public:
     // disables Transmit / Review / Record while it is off.
     void setLive(bool on);
 
+    // Lockout (eSSB practice loop): while it returns true, Transmit / Review /
+    // Record and the F-key playback are refused, because practice shares the
+    // recorder and the player.  MainWindow feeds it PracticeLoop's busy state.
+    // Empty = never locked out.
+    void setLockoutFn(std::function<bool()> fn) { lockout_ = std::move(fn); }
+
     // The injector — B1 wires player()->fillBlock() into the mic funnel + sets
     // its KeyFn/BlockedFn seams (MainWindow, once, before the Ep6 thread runs).
     ClipRecorderPlayer *player() const { return player_.get(); }
@@ -165,6 +173,7 @@ private:
     int      countdownSec_ = 0;
     bool     counting_     = false;
     int      pendingKind_  = 0;    // record source captured when the countdown began
+    std::function<bool()> lockout_;  // practice busy (setLockoutFn)
 };
 
 } // namespace lyra::tx

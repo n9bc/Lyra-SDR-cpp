@@ -45,6 +45,7 @@
 #include "dsp/CwDecoder.h"     // #173 CW-5a — RX CW decoder (value member)
 #include "dsp/deepfist/NeuralCwDecoder.h" // DeepFist neural CW decoder (2nd engine)
 #include "dsp/CwArbiter.h"          // Auto-engine ownership arbiter (Phase 1)
+#include "dsp/coach/RxaAgcModel.h"  // eSSB Coach — RXA post-AGC model (value members)
 #include "dsp/deepfist/ScpLocal.h"  // Phase 3: RBN-confirmed local call list
 #include "dsp/deepfist/CwCaptureHarvester.h"  // Phase 2: training harvest
 #include "dsp/deepfist/CwCompareCapture.h"   // Compare-mode training capture
@@ -71,6 +72,14 @@ class AudioRing;
 // dsp/EqAnalyzer.h (included in the .cpp).
 class ParamEq;
 class EqAnalyzer;
+
+// eSSB Coach — the receive-side measurement engines (owned by the coach
+// model in lyra::ui).  WdspEngine only feeds them through read-only taps;
+// full types in dsp/coach/CoachAnalyzer.h + dsp/coach/SplatterMeter.h.
+namespace coach {
+class CoachAnalyzer;
+class SplatterMeter;
+}
 
 // Captured noise profile (slice 2) + reducer (slice 3).  Held by
 // unique_ptr; only the .cpp needs the complete types.
@@ -425,6 +434,7 @@ public:
     double balance()  const { return balance_.load(std::memory_order_relaxed); }
     bool   monEnabled() const { return monEnabled_.load(std::memory_order_relaxed); }
     double monVolume()  const { return monVolume_.load(std::memory_order_relaxed); }
+    bool   practiceActive() const { return practiceActive_.load(std::memory_order_relaxed); }
     // Output-list index: 0 = HL2 audio jack, 1..N = PC devices.
     int    audioDeviceIndex() const {
         return hl2Out_ ? 0 : deviceIndex_ + 1;
@@ -589,6 +599,11 @@ public:
     Q_INVOKABLE void setBalance(double b);     // -1 (L) .. +1 (R)
     Q_INVOKABLE void setMonEnabled(bool on);   // #90 TX monitor toggle
     Q_INVOKABLE void setMonVolume(double v);   // #90 monitor level 0..1
+    // eSSB practice loop — while on, the post-rack monitor plays on the local
+    // output (Route 1 only, even with MON off and unkeyed) and feeds the
+    // coach analyzer in place of RX audio.  VAC/TCI keep carrying RX.  GUI
+    // thread; stores the atomic and nothing else (not persisted).
+    Q_INVOKABLE void setPracticeActive(bool on);
 
     // RX DSP operator controls.  Getters are cheap reads of the
     // persisted state; setters store, persist (QSettings), push to WDSP
@@ -1031,6 +1046,50 @@ public:
     // a digital (DIGU/DIGL) mode.  The analyzer is fed pre/post for the panel.
     void setRxEqEngine(ParamEq *eng, EqAnalyzer *analyzer);
 
+    // eSSB Coach — attach the coach's audio analyzer + splatter meter
+    // (nullptr detaches either).  Release-stored atomics, same idiom as
+    // setRxEqEngine.  Both taps are READ-ONLY: the analyzer gets a copy of
+    // RX1 (L) audio in dispatchAudioFrame, taken BEFORE the RX EQ block, with
+    // the AGC gain (dB) applied to that block (NaN = unknown; see
+    // coachAgcAligned); the meter gets RX1's post-noise-blanker interleaved
+    // IQ block (cfg_.inSize frames at iqRate(), what the panadapter shows)
+    // in feedIq.  With both null each tap costs one atomic load.
+    // LIFETIME: detaching does NOT wait for a feed() already in flight on the
+    // audio / RX worker thread, so callers must keep the analyzer and meter
+    // alive for the app's lifetime (never delete them after detaching).
+    void setCoachTaps(coach::CoachAnalyzer *a, coach::SplatterMeter *s);
+    // Last value passed to setRxShiftHz (Hz; 0 = shift off).  Any thread.
+    double rxShiftHz() const { return rxShiftHz_.load(std::memory_order_relaxed); }
+    // RX1 IQ rate (Hz) the splatter tap is fed at.  Any thread.
+    int iqRate() const { return inRateAtomic_.load(std::memory_order_relaxed); }
+    // True while the AGC gain handed to the coach with each audio block is
+    // the gain WDSP applied to that block's audio.  feedIq converts the
+    // RXA_AGC_GAIN reading to the applied gain and delays it by the channel's
+    // fixed output latency plus the post-AGC stages' latency (see the
+    // alignment note at coachAgcBeforeExchange in wdsp_engine.cpp).  False
+    // during the resync after a channel open / rate change (the first two
+    // DSP blocks), whenever a reading could not be trusted, or if the
+    // channel geometry has no fixed schedule.  Those blocks carry NaN, and
+    // the coach withholds compression metrics for them.  Always false on
+    // builds whose WDSP is not compiled from the source tree (prebuilt
+    // wdsp.dll / libwdsp.so; see LYRA_WDSP_FROM_INTREE_SOURCE).  Those builds
+    // pass an uncorrected 0 dB gain instead of NaN.  Any thread.
+    bool coachAgcAligned() const { return coachAgcSynced_.load(std::memory_order_relaxed); }
+    // Why the coach is (not) aligned.  UnknownLatency = in-tree build, but a
+    // post-AGC stage runs whose delay is not derivable (neural NR, ...): the
+    // compression readings are really unavailable.  PrebuiltWdsp = no
+    // correction by construction (readings are valid with AGC Off).
+    // Resyncing = in-tree, known latency, just not locked yet.  GUI thread.
+    enum class CoachAgcState { Aligned, PrebuiltWdsp, UnknownLatency, Resyncing };
+    CoachAgcState coachAgcState() const;
+    // True while the coach taps are held off for our own transmit: txMuted_
+    // (MOX keyed, plus the rxResumeDelayMs_ un-mute delay after unkey) and
+    // kCoachTxHoldMs after that, while the TX-coupled tail and the restored
+    // AGC settle.  While true the analyzer is fed NaN gain (no-information
+    // blocks) and the splatter meter is not fed.  Any thread, no allocation.
+    bool coachTxGated() const;
+    static constexpr int kCoachTxHoldMs = 300;
+
     // #89 Stage C2 — RX recorder tap.  Installed once (before the audio thread
     // starts) with the interleaved mono-dup RX audio (post-RX-DSP "what you
     // heard", 48 kHz) that dispatchAudioFrame produces, AFTER the RX-EQ block.
@@ -1439,6 +1498,13 @@ private:
     // #90 TX monitor (Stage 1: persisted + UI; consumed in Stage 3).
     std::atomic<bool>   monEnabled_{false};
     std::atomic<double> monVolume_{0.5};
+    // eSSB practice loop (setPracticeActive).  Read by txMonitorTapCb (cm TX
+    // thread) and dispatchAudioFrame (audio thread) via routeMonitor().
+    std::atomic<bool>   practiceActive_{false};
+    // Audio thread only: the practice monitor's jitter cushion is full
+    // (MonitorRing::popPrimed).  kPracticePrimeSamples = 50 ms at 48 kHz.
+    bool practicePrimed_ = false;
+    static constexpr std::size_t kPracticePrimeSamples = 2400;
     // Panadapter zoom (1.0 = full span).  Written from the UI/main
     // thread; read by spanHz() (UI) + copySpectrum() (crop).
     std::atomic<double> zoom_{1.0};
@@ -1654,6 +1720,58 @@ private:
     // mutable scratch the const RX audio is EQ'd into before the tees.
     std::atomic<lyra::dsp::ParamEq *>    rxEq_{nullptr};
     std::atomic<lyra::dsp::EqAnalyzer *> rxEqAnalyzer_{nullptr};
+    // eSSB Coach taps (coach-model-owned; see setCoachTaps) + the
+    // setRxShiftHz mirror rxShiftHz() reads.
+    std::atomic<coach::CoachAnalyzer *>  coachAnalyzer_{nullptr};
+    std::atomic<coach::SplatterMeter *>  coachSplatter_{nullptr};
+    std::atomic<double>                  rxShiftHz_{0.0};
+    // coachTxGated(): end of the post-unkey hold (steady_clock ns since its
+    // epoch, set on the GUI thread in applyTxMuted_(false)), and whether the
+    // RX1 mode is a voice mode (CoachAdvisor::isVoiceMode, set in setMode);
+    // outside a voice mode the analyzer is fed NaN gain too.
+    std::atomic<long long>               coachTxHoldUntilNs_{0};
+    std::atomic<bool>                    coachVoiceMode_{true};
+    // eSSB Coach AGC alignment (wdsp_engine.cpp, coachAgc*).  RX worker
+    // (under channelMtx_): the fexchange0 call schedule + the one-DSP-block
+    // gain delay line.  The gain for each output block crosses to the mix
+    // thread through a seq-tagged SPSC ring pushed next to xMixAudio and
+    // popped once per dispatchAudioFrame.  Reset only in openRx1, while no
+    // RX worker / mix thread touches them.
+    void coachAgcReset();
+    double coachAgcBeforeExchange();   // RX worker: gain for this call's output
+    void coachAgcPush(double gainDb);  // RX worker: next to xMixAudio
+    double coachAgcPop();              // mix thread: once per dispatchAudioFrame
+    double coachKnot(long long j) const;   // RX worker: applied gain at end of DSP block j
+    // GUI thread: publish coachRxa_ (the RXA-state mirror every RX1 setter
+    // that affects the post-AGC chain or the AGC updates) to the RX worker.
+    void coachPublishRxa();
+    struct CoachGainSlot { long long seq; double gainDb; };
+    static constexpr unsigned kCoachGainRing = 64;   // power of two
+    static constexpr int kCoachKnots = 8;            // DSP blocks of gain history
+    // GUI-thread mirror of RX1's RXA state + its published copy (coachRxaMtx_;
+    // the RX worker only try_locks it, once per DSP block).
+    coach::RxaState       coachRxa_;
+    mutable std::mutex    coachRxaMtx_;
+    coach::RxaState       coachRxaPub_;
+    std::atomic<unsigned> coachRxaGen_{0};
+    // RX worker copy + what it implies.
+    coach::RxaState coachRxaRx_;
+    unsigned  coachRxaSeen_ = 0;
+    double    coachLatency_ = 0.0;       // post-AGC latency, dsp samples; NaN = unknown
+    long long coachValidFrom_ = 0;       // first DSP block whose knot is trusted
+    double    coachKnotVal_[kCoachKnots] = {};
+    long long coachKnotTag_[kCoachKnots] = {};
+    int       coachOutSize_ = 0, coachDspOut_ = 0;   // frames per call / per DSP block
+    int       coachCallsPerBlock_ = 0;   // N = dsp_insize / in_size; 0 = no schedule
+    long long coachCalls_ = 0;           // fexchange0 calls since the channel started
+    std::chrono::steady_clock::time_point coachTrigAt_{};
+    std::chrono::nanoseconds coachMinSettle_{0};
+    long long coachPushSeq_ = 0;         // RX worker
+    long long coachPopSeq_  = 0;         // mix thread
+    CoachGainSlot coachGainRing_[kCoachGainRing] = {};
+    std::atomic<unsigned> coachRingHead_{0};   // written by the RX worker
+    std::atomic<unsigned> coachRingTail_{0};   // written by the mix thread
+    std::atomic<bool>     coachAgcSynced_{false};
     std::atomic<bool>                    rxEqModeBypass_{false};
     std::function<void(const double *, int)> rxRecordTap_;   // #89 C2 RX recorder tap
     std::vector<double>                  rxEqBuf_;

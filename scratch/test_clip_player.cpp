@@ -8,6 +8,7 @@
 
 #include "tx/ClipRecorderPlayer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -126,6 +127,95 @@ int main() {
         CHECK(!p.play(std::make_shared<std::vector<float>>(), o), "empty clip refused");
         CHECK(p.play(ramp(1000), o), "first play accepted");
         CHECK(!p.play(ramp(10), o), "second play refused while playing");
+        p.stop();
+    }
+
+    // ── 6. Loop (eSSB practice): seamless wrap, no key, pass counter ──
+    {
+        ClipRecorderPlayer p;
+        int keyCalls = 0;
+        p.setKeyFn([&](bool) { ++keyCalls; });
+        ClipRecorderPlayer::PlayOptions o; o.ota = false; o.loop = true;
+        CHECK(p.play(ramp(10), o), "loop play accepted");
+        CHECK(p.clipSamples() == 10, "clipSamples() reports clip length");
+        CHECK(p.passCount() == 0, "passCount 0 at play()");
+        std::vector<double> buf(2 * 25, 9.0);
+        CHECK(p.fillBlock(25, buf.data()), "loop block active");
+        bool seq = true;
+        for (int i = 0; i < 25; ++i)
+            if (std::fabs(buf[2 * i] - 0.01 * ((i % 10) + 1)) > 1e-6 || buf[2 * i + 1] != 0.0) seq = false;
+        CHECK(seq, "loop wraps with no gap (ramp[0..9] x2 + ramp[0..4])");
+        CHECK(p.passCount() == 2, "passCount == 2 after two wraps");
+        CHECK(p.active() && p.playing(), "still active after wraps");
+        CHECK(keyCalls == 0, "loop made no KeyFn call");
+        p.stop();
+        CHECK(p.clipSamples() == 0, "clipSamples() 0 when idle");
+    }
+
+    // ── 7. Loop + OTA is refused (never loop onto the air) ──
+    {
+        ClipRecorderPlayer p;
+        ClipRecorderPlayer::PlayOptions o; o.ota = true; o.loop = true;
+        CHECK(!p.play(ramp(10), o), "play(ota+loop) refused");
+        CHECK(!p.playing(), "not playing after refused ota+loop");
+    }
+
+    // ── 8. RefuseFn: stop + revert to live mic, buffer untouched ──
+    {
+        ClipRecorderPlayer p;
+        int keyCalls = 0, refuseCalls = 0;
+        p.setKeyFn([&](bool) { ++keyCalls; });
+        p.setRefuseFn([&] { return ++refuseCalls >= 2; });
+        ClipRecorderPlayer::PlayOptions o; o.ota = false; o.loop = true;
+        CHECK(p.play(ramp(10), o), "refuse test: play accepted");
+        std::vector<double> buf(2 * 8, 9.0);
+        CHECK(p.fillBlock(8, buf.data()) && std::fabs(buf[0] - 0.01) < 1e-6, "1st block carries clip samples");
+        std::fill(buf.begin(), buf.end(), 9.0);
+        CHECK(!p.fillBlock(8, buf.data()), "2nd block refused -> returns false");
+        bool untouched = true;
+        for (double v : buf) if (v != 9.0) untouched = false;
+        CHECK(untouched, "refused block leaves buffer untouched (live mic flows)");
+        CHECK(!p.active() && !p.playing(), "refuse -> idle");
+        CHECK(keyCalls == 0, "refuse made no KeyFn call");
+    }
+
+    // ── 8b. Refuse with an outside owner: the player only drops its ref ──
+    // (eSSB practice: PracticeLoop holds the clip, so the cm-thread refuse
+    // path never frees it.)  The refuse fn's side effect (the Plate flush
+    // request) runs once per refused block.
+    {
+        ClipRecorderPlayer p;
+        int flushes = 0;
+        bool refuse = false;
+        p.setRefuseFn([&] { if (!refuse) return false; ++flushes; return true; });
+        auto hold = ramp(10);
+        const float *data = hold->data();
+        ClipRecorderPlayer::PlayOptions o; o.ota = false; o.loop = true;
+        CHECK(p.play(hold, o), "hold test: play accepted");
+        CHECK(hold.use_count() == 2, "player shares the held clip");
+        std::vector<double> buf(2 * 4, 9.0);
+        CHECK(p.fillBlock(4, buf.data()), "hold test: 1st block plays");
+        refuse = true;
+        CHECK(!p.fillBlock(4, buf.data()), "hold test: refused block");
+        CHECK(flushes == 1, "refusal ran the flush side effect once");
+        CHECK(hold.use_count() == 1, "refuse dropped only the player's reference");
+        CHECK(hold->data() == data && hold->size() == 10 && std::fabs((*hold)[9] - 0.10f) < 1e-6f,
+              "held clip still intact after refuse");
+        CHECK(p.passCount() == 0 && p.clipSamples() == 0, "refuse -> idle, no clip, no pass");
+        CHECK(!p.fillBlock(4, buf.data()) && flushes == 1, "idle: refuse fn not consulted again");
+    }
+
+    // ── 9. RefuseFn is ignored for OTA (own BlockedFn discipline) ──
+    {
+        ClipRecorderPlayer p;
+        std::vector<bool> keys;
+        p.setKeyFn([&](bool on) { keys.push_back(on); });
+        p.setRefuseFn([] { return true; });
+        ClipRecorderPlayer::PlayOptions o; o.ota = true;
+        CHECK(p.play(ramp(50), o), "OTA play accepted with refuse fn set");
+        std::vector<double> buf(2 * 8, 9.0);
+        CHECK(p.fillBlock(8, buf.data()) && std::fabs(buf[0] - 0.01) < 1e-6, "OTA ignores refuse fn");
+        CHECK(p.active() && keys.size() == 1, "OTA still active, key untouched");
         p.stop();
     }
 

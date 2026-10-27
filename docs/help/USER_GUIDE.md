@@ -566,6 +566,7 @@ Dummy load first.
 - [CW operating (paddle, keyboard, TCI)](#cw-operating-paddle-keyboard-tci)
   - [Reading CW — the RX decoder](#reading-cw--the-rx-decoder)
 - [Tuner (manual ATU memory)](#tuner-manual-atu-memory)
+- [eSSB Coach](#essb-coach)
 - [Frequency calibration (WWV / time station)](#frequency-calibration-wwv--time-station)
 - [Profiles (TX/RX chain presets)](#profiles-txrx-chain-presets)
   - [How to create a profile](#how-to-create-a-profile)
@@ -980,7 +981,8 @@ The strip across the top, between the menu bar and the panels:
   (the mic-rack panels — EQ / Speech / Combinator / Plating), **RX DSP:**
   (RX EQ), and **Options:** — **CTUN** (centre-tune lock), **Tuner** (the
   manual-ATU [tuning memory](#tuner-manual-atu-memory)), **CW** / **CW Dec**
-  (the CW console and the RX decoder), **WF-ID** (arm the waterfall
+  (the CW console and the RX decoder), **eSSB** (the [eSSB Coach](#essb-coach)
+  audio and splatter meter), **WF-ID** (arm the waterfall
   callsign ID), **PureSignal** (the compact PS dock), and **Amp View**
   (the PS transfer-curve plot). A lit chip means that panel is open, or
   that toggle is on. **PureSignal** and **Amp View** sit at the **end**
@@ -1075,7 +1077,7 @@ control panels in a row beneath).
   so you can't disturb your arrangement by accident during operating.
   The move cursor disappears on locked title bars as a reminder.
 - **Panels you open from the header chips** (TX Speech / EQ / Combinator /
-  Plating, RX EQ, Tuner, CW, CW Dec, Voice Keyer, Recorder, Freq Cal,
+  Plating, RX EQ, Tuner, CW, CW Dec, eSSB, Voice Keyer, Recorder, Freq Cal,
   PureSignal, Amp View) open as floating windows, and dock like any other
   panel. A floating one only docks where the cyan highlight
   shows — an edge, or onto another panel; let go anywhere else and it stays
@@ -3506,6 +3508,134 @@ match tiles for a compact at-a-glance reminder.
 > The match is by **dial (carrier) frequency** — it reads the same in USB or
 > LSB, which is correct: an antenna tuner matches the RF frequency, not the
 > sideband.
+
+---
+
+## eSSB Coach
+
+The **eSSB Coach** listens to the audio you *receive* from another station and
+tells you, in plain words, how their signal sounds: too much bass, too little
+top end, a narrow or over-wide passband, squashed or pumping audio, and
+splatter past the channel edge. Use it on a friend's eSSB signal to help them
+(or yourself, on a loop-back) tune a TX chain. Open it from the header —
+**Options: → eSSB**. It opens as a floating panel and docks like any other.
+
+**It measures RX1 on the local radio only.** It pauses while you transmit
+(from the moment the radio has switched to transmit — about 65 ms after
+you key — until shortly after receive audio comes back, and the panel
+says "Transmitting"), so your own signal never enters a reading. It also
+ignores audio while RX1 is in a CW, digital or FM mode. It does not look at RX2,
+and in desk mode it shows "not available" because the radio is not where you
+are sitting. If no receive audio is arriving at all, the panel says so
+instead of giving readings.
+
+**Workflow.**
+
+1. Tune to the station and pick a **Target** (eSSB, or a curve you captured
+   earlier). Choose **Advice for: Lyra** (names Lyra's own controls) or
+   **Other** (plain wording for any rig).
+2. Press **Baseline: Start** and let the other station talk. Press **Stop**
+   when the readout shows enough speech. The graph now shows the
+   baseline against the target.
+3. Ask them to change one thing, then press **Re-check: Start**, let them
+   talk again, and press **Stop**. Each zone (Bass, Low-mid, Body, Upper,
+   Top) shows its change, for example "Bass −4 dB".
+4. If the new sound is better, press **Make baseline** so it becomes the
+   reference for the next change. **Reset** clears everything.
+
+Keep your **AF gain and squelch steady** while measuring, and do not retune.
+
+**Reading the graph.** Bars are the live audio; the solid orange line is the
+current average and the dim line is the baseline. The cyan line and shaded
+band are the target and its tolerance. Greyed areas are outside *your* RX
+filter, which Lyra cannot judge, and dashed lines mark the measured passband
+edges. Below the graph: how much speech and what SNR the answer is based on,
+the edges and which tier they match, gap-to-speech, gap rise and crest factor
+(the compression readings), and the splatter status. Until there is enough
+clean speech the panel says why instead of giving advice.
+
+**The AGC note.** Your own AGC changes the level of what you hear, which can
+look like the other station's pumping or noise. On macOS Lyra corrects for its
+own AGC, so the compression readings stay trustworthy. When it cannot — a noise
+reduction stage with an unknown delay is running — the compression readings
+show a dash and the panel says why. On Windows and Linux the correction is not
+available yet: set **AGC to Off** (Lyra's Off is a fixed gain) to get
+compression readings there (and anywhere the panel asks for it).
+
+**Splatter needs a quiet neighbour.** The splatter reading compares the energy
+just outside the channel edge with the signal peak, so it is only meaningful
+when the frequency next to the signal is otherwise quiet. A busy band can
+look like splatter; check a clear neighbouring frequency to confirm. In AM
+the reading shows "not measured in AM": the carrier dominates the channel,
+so the comparison would not mean anything. After a retune or an over, the
+reading needs about 3 s of signal before it shows again.
+
+**Other buttons.**
+
+- **Freeze** holds the display.
+- **Capture as target** saves the baseline as a new named target (and
+  **Delete target** removes a captured one).
+- **Record** starts the session recorder, and each Stop of a baseline or
+  re-check also writes a measurement report next to the recording.
+- The **gear** opens the thresholds (minimum speech and SNR, compression
+  limits and the five zone edges); **Defaults** restores them.
+
+Hiding the panel (its chip, its close button, or closing the Options window it
+sits in) stops the measurement: a baseline or re-check that was running pauses
+and does not count the time the panel was hidden, and the panel tells you when
+you open it again. Moving it, floating it or tabbing it behind another panel
+keeps measuring.
+
+### Practice loop
+
+The **Practice** section beside the graph lets you tune your *own* TX rack
+(Speech, EQ, Combinator, Plate) without going on the air. You record a short
+clip of your voice, then Lyra plays it round and round through the rack and
+you hear the result in your headphones while the coach graphs it. It needs an
+HL2 that is connected and receiving, in a voice mode (USB, LSB, DSB, AM or
+SAM); otherwise the panel says what is missing.
+
+1. Press **Record** and talk normally for **15–30 s** (recording stops by
+   itself at 30 s; a clip shorter than 15 s is not kept). If the voice keyer
+   has a get-set countdown, it runs first. The clip is recorded from your
+   selected mic source and appears at the top of the clip picker.
+2. Pick the clip and press **Loop**. Wear **headphones**: the processed audio
+   plays on your local output (MON does not need to be on), so speakers would
+   feed back into the mic. Press **Stop** to end it.
+3. **A | B** flips between **A**, the rack saved in your active profile, and
+   **B**, your live edits. Each side's curve appears on the graph after one
+   full pass of the clip played on that side; changing a rack control clears
+   B's curve until the next full pass. A/B needs an active profile that has a
+   saved rack.
+4. When B sounds better, press **Save**. It writes B into the active profile,
+   B becomes the new A, and, if the session recorder is running, a practice
+   report is written next to the recording. Saving the active profile from
+   anywhere else (the front panel or Settings) also makes the saved rack the
+   new A.
+
+**The radio never transmits the clip.** Practice plays unkeyed, and any key
+request — MOX, PTT, TCI or the voice keyer — stops the loop at once
+(the panel says the radio keyed). The Plate's reverb of the clip is cleared
+at the same moment, so none of it follows you on the air. **VOX must be
+off:** practice will not record or loop while VOX is on, and turning VOX on
+stops it (the panel says "Turn VOX off to use practice."), because VOX could
+key the radio on the loop or on your voice. While practice is recording or
+looping, the voice keyer's Record, Transmit, Review and F-keys do nothing,
+because they share the same recorder and player.
+
+**What is not in the loop.** Practice hears the native rack only. The
+**leveler, ALC and TX filter** are not in the loop, and neither are **mic
+gain and PHROT**, so the final on-air sound can still differ a little. For the
+same reason the splatter reading shows "Not measured in practice", and
+Baseline and Re-check are disabled while practice runs (A takes the baseline
+slot and B the re-check slot).
+
+Practice also stops when you close the coach panel (or the Options window it
+sits in), press **Reset**, turn VOX on, leave a voice mode, or the radio stops
+streaming; each of these puts B back live if you were on A. Loading a
+different profile also ends practice, but keeps the profile you loaded: your
+unsaved B edits are discarded, as any profile load does. Moving, floating or
+tabbing the panel does not stop it.
 
 ---
 

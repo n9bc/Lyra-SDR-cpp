@@ -35,6 +35,10 @@ public:
     ~PlateModel() override;
 
     static void txProcessCb(int nSamples, double *iqPairs);
+    // Flush the TX plate's delay lines at the start of its next TX block
+    // (Plate::requestReset).  Lock-free, allocation-free: callable from the
+    // GUI or the cm TX thread.  No-op before the model exists.
+    static void requestTxFlush() noexcept;
 
     // Live single instance (#49 profile capture/apply bridge).
     static PlateModel *instance() { return s_self; }
