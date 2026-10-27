@@ -779,13 +779,14 @@ Rectangle {
                     var b = nearest(m.x, m.y)
                     if (b >= 0) eq.setBandEnabled(b, !eq.bandEnabled(b))
                 }
-                WheelHandler {
-                    onWheel: (ev) => {
-                        var i = eq.selectedBand
-                        if (i < 0) return
-                        var q = eq.bandQ(i) * (ev.angleDelta.y > 0 ? 1.15 : 0.87)
-                        eq.setBandQ(i, q)
-                    }
+                // The MouseArea's own wheel signal, accepted, so the panel's
+                // ScrollView (bodyScroll) never takes the wheel from the graph.
+                onWheel: (ev) => {
+                    ev.accepted = true
+                    var i = eq.selectedBand
+                    if (i < 0 || ev.angleDelta.y === 0) return
+                    var q = eq.bandQ(i) * (ev.angleDelta.y > 0 ? 1.15 : 0.87)
+                    eq.setBandQ(i, q)
                 }
             }
         }
