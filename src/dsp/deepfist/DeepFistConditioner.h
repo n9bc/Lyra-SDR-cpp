@@ -40,6 +40,14 @@ public:
     // Applies a Hann window and smooths across calls via an EMA (alpha ~0.3).
     float detectTone(const float* audio, int n);
 
+    // Impulse noise blanker, run on the 3200 Hz window BEFORE condition() —
+    // port of DeepFist tools/despike.py.  A sample whose |x| exceeds k x the
+    // median |x| of the surrounding 8 ms is a crash / key click (brief,
+    // broadband), not tone (sustained: during key-down the local median is
+    // already the tone level), so it and 0.5 ms either side are zeroed.
+    // Neutral on clean audio.  Returns audio of the same length and scale.
+    std::vector<float> despike(const float* audio, int n) const;
+
     // Isolate + normalise one CW signal (auto tone lock).  Returns audio of the
     // same length at kSr, peak ~1.  For n < 4096 returns the input unchanged.
     std::vector<float> condition(const float* audio, int n);

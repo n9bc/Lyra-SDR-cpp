@@ -322,6 +322,12 @@ void NeuralCwDecoder::workerLoop() {
         const char* e = std::getenv("LYRA_CW_SPACEFILTER");
         return model_.profile().wordSpaceFilter && !(e && e[0] == '0');
     }();
+    // Drop decoded ',' / '.' for models whose profile asks for it (DeepFist:
+    // on real audio they are ~always gap noise); LYRA_CW_STRIPPUNCT=0 keeps them.
+    const bool stripPunct = [this] {
+        const char* e = std::getenv("LYRA_CW_STRIPPUNCT");
+        return model_.profile().stripPunct && !(e && e[0] == '0');
+    }();
     SenderSpacing spacing;
     std::vector<KeyRun> marks, gaps;    // this tick's window
     double wordGapS = 0.0;
@@ -557,6 +563,8 @@ void NeuralCwDecoder::workerLoop() {
         for (size_t i = 0; i < fr.ids.size(); ++i) {
             const int id = fr.ids[i];
             if (id <= 0 || id >= nTok) continue;
+            if (stripPunct && (model_.tokens()[id] == "," || model_.tokens()[id] == "."))
+                continue;
             lastDecode.push_back(
                 {winStart + (static_cast<double>(fr.frames[i]) / denom) * kWindowS, id});
         }

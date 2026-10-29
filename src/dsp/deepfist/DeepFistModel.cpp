@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 
@@ -186,6 +187,17 @@ bool DeepFistModel::infer(const float* audio, int n,
     // fldigi-style conditioner FIRST (exp14+ models are trained on conditioned,
     // single-signal, 600 Hz-centred, level-normalised audio — train==inference).
     // DeepCW is trained on raw audio, so its profile skips it.
+    // De-spike first, on the raw window (tci_decode order: despike, then
+    // condition); the keying gate upstream of this still sees the raw audio.
+    // LYRA_CW_DESPIKE=0 turns it off for A/B.
+    static const bool despikeEnv = [] {
+        const char* e = std::getenv("LYRA_CW_DESPIKE");
+        return !(e && e[0] == '0');
+    }();
+    if (profile_.despike && despikeEnv) {
+        despikeScratch_ = cond_.despike(audio, n);
+        audio = despikeScratch_.data();
+    }
     const float* condAudio = audio;
     if (profile_.conditioner) {
         condScratch_ = cond_.condition(audio, n);

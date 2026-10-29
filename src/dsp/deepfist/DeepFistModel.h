@@ -42,9 +42,13 @@ struct NeuralModelProfile {
     bool wordSpaceFilter;      // drop spaces in letter-length gaps (NeuralCwDecoder);
                                // DeepFist only — it splits loose fists into letters,
                                // and its space timing is what the filter assumes
+    bool despike;              // blank impulse crashes before the conditioner
+                               // (DeepFist's tci_decode does; ARRL crash CER 15.1->9.7%)
+    bool stripPunct;           // drop decoded ',' and '.' — DeepFist emits them
+                               // as gap noise on real audio (tci_decode strip_punct)
 
-    static NeuralModelProfile deepFist() { return {"DeepFist", "deepfist", true,  true,  false, true};  }
-    static NeuralModelProfile deepCw()   { return {"DeepCW",   "deepcw",   false, false, true,  false}; }
+    static NeuralModelProfile deepFist() { return {"DeepFist", "deepfist", true,  true,  false, true,  true,  true};  }
+    static NeuralModelProfile deepCw()   { return {"DeepCW",   "deepcw",   false, false, true,  false, false, false}; }
 };
 
 class DeepFistModel {
@@ -106,6 +110,7 @@ private:
     NeuralModelProfile       profile_ = NeuralModelProfile::deepFist();
     std::vector<std::string> tokens_;   // id -> text, blank ("") at id 0
     int                      blankIndex_ = 0;  // the model's own blank class
+    std::vector<float>       despikeScratch_;
     std::vector<float>       condScratch_;
     std::vector<float>       specScratch_;
     std::vector<float>       tmScratch_;  // time-major copy of the tile (DeepCW)

@@ -80,6 +80,39 @@ float DeepFistConditioner::detectTone(const float* audio, int n) {
     return toneEma_;
 }
 
+std::vector<float> DeepFistConditioner::despike(const float* audio, int n) const {
+    constexpr float kSpikeK      = 5.0f;   // spike = |x| > k x local median |x|
+    constexpr float kSpikeWinMs  = 8.0f;   // median baseline window
+    constexpr float kSpikeGuardMs = 0.5f;  // also blank this much either side
+    std::vector<float> y(audio, audio + std::max(0, n));
+    if (n < 8) return y;
+
+    std::vector<float> ax(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) ax[i] = std::fabs(audio[i]);
+    const int w = std::max(3, static_cast<int>(kSr * kSpikeWinMs / 1000.0f) | 1);
+    const int h = w / 2;
+    std::vector<float> win(static_cast<size_t>(w));
+    std::vector<char>  spike(static_cast<size_t>(n), 0);
+    bool any = false;
+    for (int i = 0; i < n; ++i) {
+        for (int j = -h; j <= h; ++j) {
+            int k = i + j;                                // scipy 'reflect' edges
+            if (k < 0) k = -k - 1;
+            else if (k >= n) k = 2 * n - k - 1;
+            win[j + h] = ax[k];
+        }
+        std::nth_element(win.begin(), win.begin() + h, win.end());
+        if (ax[i] > kSpikeK * (win[h] + 1e-6f)) { spike[i] = 1; any = true; }
+    }
+    if (!any) return y;
+    const int g = static_cast<int>(kSr * kSpikeGuardMs / 1000.0f);
+    for (int i = 0; i < n; ++i) {
+        if (!spike[i]) continue;
+        for (int k = std::max(0, i - g); k <= std::min(n - 1, i + g); ++k) y[k] = 0.0f;
+    }
+    return y;
+}
+
 std::vector<float> DeepFistConditioner::condition(const float* audio, int n) {
     return conditionAt(audio, n, detectTone(audio, n));
 }
