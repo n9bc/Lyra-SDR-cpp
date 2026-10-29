@@ -54,6 +54,7 @@
 #include "dsp/ZeroBeat.h"       // zero-beat carrier-offset tuning aid (value member)
 
 class QAudioSink;
+class QThread;
 
 // P0.c direct port — the reference `aamix, *AAMIX` twin typedef
 // (full definition in wire/AAMix.h; repeating the typedef against
@@ -1438,9 +1439,15 @@ private:
     // audioSink_ is the QAudioSink driving the chosen output device.
     // audioMtx_ guards the audioRing_/audioSink_ pointers so the RX
     // worker's push() never races a main-thread device switch / teardown.
+    // The sink and ring live on audioThread_ (audioCtx_ is their thread
+    // context): Qt pulls the ring into the sink's 40 ms buffer on the
+    // sink's own thread, and on the GUI thread a slow QML frame starved
+    // it — CoreAudio then played hard-zero gaps (audible pops).
     std::mutex          audioMtx_;
     AudioRing          *audioRing_ = nullptr;
     QAudioSink         *audioSink_ = nullptr;
+    QThread            *audioThread_ = nullptr;
+    QObject            *audioCtx_ = nullptr;
     std::vector<qint16> pcm16_;
     // P2 radio-speaker tee (setRadioAudioSink) — mutex-guarded; the
     // dispatch-path lock is uncontended except during set/clear.

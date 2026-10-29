@@ -40,6 +40,7 @@
 #include <QIODevice>
 #include <QMediaDevices>
 #include <QSettings>
+#include <QThread>
 
 #include <algorithm>
 #include <chrono>
@@ -879,6 +880,15 @@ void WdspEngine::shutdown()
     cwHarvestRun_.store(false);
     if (cwHarvestWorker_.joinable()) cwHarvestWorker_.join();
     closeRx1();
+    stopAudio();   // closeRx1 skips it when RX never opened
+    if (audioThread_) {
+        delete audioCtx_;          // idle: its sink/ring are already gone
+        audioCtx_ = nullptr;
+        audioThread_->quit();
+        audioThread_->wait();
+        delete audioThread_;
+        audioThread_ = nullptr;
+    }
 }
 
 void WdspEngine::emitLog(const QString &line)
@@ -3465,28 +3475,40 @@ bool WdspEngine::startAudio()
         if (audioSink_) {
             return true;  // already up
         }
-        audioRing_ = new AudioRing(capFrames);
-        audioRing_->prefillSilence(prefillFrames);
-        audioRing_->open(QIODevice::ReadOnly);
-
-        audioSink_ = new QAudioSink(dev, fmt, this);
-        // Cap the device buffer so audio latency stays low (else Qt's
-        // large default makes audio lag the panadapter).  Must be set
-        // before start().
-        audioSink_->setBufferSize(
-            cfg_.outRate * kSinkBufferMs / 1000 * 2 *
-            static_cast<int>(sizeof(qint16)));
-        // WASAPI session / Windows per-app mixer. Separate from Lyra Vol
-        // and AF (those live in audio/volume). A new QAudioSink otherwise
-        // opens at 1.0 every Stop/Start or relaunch.
-        {
-            const double osVol = std::clamp(
-                QSettings().value(QStringLiteral("audio/sinkVolume"), 1.0)
-                    .toDouble(),
-                0.0, 1.0);
-            audioSink_->setVolume(osVol);
+        // Dedicated playback thread, created once and kept across device
+        // switches (see audioThread_ in the header for why not the GUI
+        // thread).
+        if (!audioThread_) {
+            audioThread_ = new QThread;
+            audioThread_->setObjectName(QStringLiteral("lyra-audio-out"));
+            audioThread_->start(QThread::TimeCriticalPriority);
+            audioCtx_ = new QObject;
+            audioCtx_->moveToThread(audioThread_);
         }
-        audioSink_->start(audioRing_);   // pull mode
+        const int sinkBytes = cfg_.outRate * kSinkBufferMs / 1000 * 2 *
+                              static_cast<int>(sizeof(qint16));
+        QMetaObject::invokeMethod(audioCtx_, [&] {
+            audioRing_ = new AudioRing(capFrames);
+            audioRing_->prefillSilence(prefillFrames);
+            audioRing_->open(QIODevice::ReadOnly);
+
+            audioSink_ = new QAudioSink(dev, fmt);
+            // Cap the device buffer so audio latency stays low (else Qt's
+            // large default makes audio lag the panadapter).  Must be set
+            // before start().
+            audioSink_->setBufferSize(sinkBytes);
+            // WASAPI session / Windows per-app mixer. Separate from Lyra Vol
+            // and AF (those live in audio/volume). A new QAudioSink otherwise
+            // opens at 1.0 every Stop/Start or relaunch.
+            {
+                const double osVol = std::clamp(
+                    QSettings().value(QStringLiteral("audio/sinkVolume"), 1.0)
+                        .toDouble(),
+                    0.0, 1.0);
+                audioSink_->setVolume(osVol);
+            }
+            audioSink_->start(audioRing_);   // pull mode
+        }, Qt::BlockingQueuedConnection);
     }
 
     emitLog(QStringLiteral(
@@ -3500,20 +3522,24 @@ bool WdspEngine::startAudio()
 void WdspEngine::stopAudio()
 {
     // sink->stop() quiesces Qt's audio thread (no more readData) before
-    // we delete the ring; audioMtx_ blocks the RX worker's push().
+    // we delete the ring; audioMtx_ blocks the RX worker's push().  Both
+    // objects belong to audioThread_, so they are torn down there.
     std::lock_guard<std::mutex> lk(audioMtx_);
-    if (audioSink_) {
-        QSettings().setValue(QStringLiteral("audio/sinkVolume"),
-                             audioSink_->volume());
-        audioSink_->stop();
-        delete audioSink_;
-        audioSink_ = nullptr;
-    }
-    if (audioRing_) {
-        audioRing_->close();
-        delete audioRing_;
-        audioRing_ = nullptr;
-    }
+    if (!audioCtx_) return;
+    QMetaObject::invokeMethod(audioCtx_, [this] {
+        if (audioSink_) {
+            QSettings().setValue(QStringLiteral("audio/sinkVolume"),
+                                 audioSink_->volume());
+            audioSink_->stop();
+            delete audioSink_;
+            audioSink_ = nullptr;
+        }
+        if (audioRing_) {
+            audioRing_->close();
+            delete audioRing_;
+            audioRing_ = nullptr;
+        }
+    }, Qt::BlockingQueuedConnection);
 }
 
 double WdspEngine::volumeDb() const
