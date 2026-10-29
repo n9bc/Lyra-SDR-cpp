@@ -579,7 +579,11 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     // pipeline.  Stand-alone: no Auto arbiter, no training harvest; on its own
     // it shares the neural text + WPM surfaces, in Compare it has its own.
     deepCw_.setSampleRate(cfg_.outRate);
+    // Neural mode: DeepCW runs unseen and lends DeepFist its word spaces.
+    deepCw_.setSpacePublisher(&cwSpaceTimeline_);
+    neuralCw_.setSpaceSource(&cwSpaceTimeline_);
     deepCw_.onText = [this](const std::string& s) {
+        if (cwEngine_.load(std::memory_order_relaxed) == 1) return;   // lender only
         const QString t = QString::fromUtf8(s.c_str(), static_cast<int>(s.size()));
         if (cwEngine_.load(std::memory_order_relaxed) == 4) {
             if (cwCompareCapture_) cwCompareCapture_->feedText(3, s);
@@ -589,6 +593,7 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
         }
     };
     deepCw_.onWpm = [this](int wpm) {
+        if (cwEngine_.load(std::memory_order_relaxed) == 1) return;   // lender only
         if (cwEngine_.load(std::memory_order_relaxed) == 4)
             emit cwCompareWpm(3, wpm);
         else
@@ -2910,6 +2915,8 @@ void WdspEngine::setCwDecodeEngine(int engine)
             if (!e.isEmpty()) errs << e;
         }
         setCwModelError(errs.join(QStringLiteral(" · ")));
+        cwBorrowSpace_.store(false, std::memory_order_relaxed);
+        neuralCw_.setBorrowSpacing(false);    // Compare shows DeepFist raw
         cwDecoder_.reset();
         if (neuralCw_.ready()) neuralCw_.reset();
         if (deepCw_.ready())   deepCw_.reset();
@@ -2928,9 +2935,19 @@ void WdspEngine::setCwDecodeEngine(int engine)
         const QString err = ensureCwModel(deepCw);
         setCwModelError(err);
         if (!err.isEmpty()) return;   // keep current engine
+        // Neural: DeepCW lends DeepFist its word spaces when its model loads
+        // (optional — DeepFist keeps its own spacing without it, so a missing
+        // DeepCW model is not an error here).  LYRA_CW_BORROWSPACE=0 = off.
+        static const bool borrowEnv = qgetenv("LYRA_CW_BORROWSPACE") != "0";
+        const bool borrow = engine == 1 && borrowEnv && ensureCwModel(true).isEmpty();
+        cwBorrowSpace_.store(false, std::memory_order_relaxed);
+        neuralCw_.setBorrowSpacing(borrow);
         // Reset every consumer BEFORE storing the new engine, so the audio tap
         // (which only feeds them once cwEngine_ flips) never sees stale state.
+        // The lender is reset with DeepFist so their audio clocks agree.
         (deepCw ? deepCw_ : neuralCw_).reset();
+        if (borrow) deepCw_.reset();
+        cwBorrowSpace_.store(borrow, std::memory_order_relaxed);
         if (engine == 2) {
             cwDecoder_.reset();
             cwArbiter_.reset();
@@ -2938,6 +2955,8 @@ void WdspEngine::setCwDecodeEngine(int engine)
         cwEngine_.store(engine, std::memory_order_relaxed);
     } else {
         cwEngine_.store(0, std::memory_order_relaxed);
+        cwBorrowSpace_.store(false, std::memory_order_relaxed);
+        neuralCw_.setBorrowSpacing(false);
         cwDecoder_.reset();
         setCwModelError({});
     }
@@ -3237,6 +3256,8 @@ void WdspEngine::feedRemoteCwAudio(const qint16 *pcm, int nframes)
         neuralCw_.process(remoteCwMono_.data(), nframes);
     } else if (eng == 1) {
         neuralCw_.process(remoteCwMono_.data(), nframes);
+        if (cwBorrowSpace_.load(std::memory_order_relaxed))
+            deepCw_.process(remoteCwMono_.data(), nframes);    // spacing lender
     } else {
         cwDecoder_.process(remoteCwMono_.data(), nframes);
     }
@@ -5665,6 +5686,8 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
             neuralCw_.process(cwMonoBuf_.data(), nframes);
         } else if (eng == 1) {
             neuralCw_.process(cwMonoBuf_.data(), nframes);
+            if (cwBorrowSpace_.load(std::memory_order_relaxed))
+                deepCw_.process(cwMonoBuf_.data(), nframes);   // spacing lender
         } else if (eng == 3) {
             deepCw_.process(cwMonoBuf_.data(), nframes);
         } else if (eng == 4) {

@@ -44,6 +44,7 @@
 #include "dsp/MonitorRing.h"   // #90 — TX-monitor SPSC ring (value member)
 #include "dsp/CwDecoder.h"     // #173 CW-5a — RX CW decoder (value member)
 #include "dsp/deepfist/NeuralCwDecoder.h" // DeepFist neural CW decoder (2nd engine)
+#include "dsp/deepfist/CwSpaceTimeline.h" // DeepCW word spaces lent to DeepFist
 #include "dsp/CwArbiter.h"          // Auto-engine ownership arbiter (Phase 1)
 #include "dsp/coach/RxaAgcModel.h"  // eSSB Coach — RXA post-AGC model (value members)
 #include "dsp/deepfist/ScpLocal.h"  // Phase 3: RBN-confirmed local call list
@@ -1794,6 +1795,11 @@ private:
     // 3 = DeepCW (operator-supplied e04 model on the same streaming pipeline;
     // stand-alone, not part of Auto), 4 = Compare (all three at once, each to
     // its own cwCompareText window).
+    // In Neural mode DeepCW also runs unseen and lends DeepFist its word
+    // spaces through cwSpaceTimeline_ (declared first: it outlives both
+    // workers).  cwBorrowSpace_ gates feeding DeepCW there (audio thread).
+    lyra::dsp::CwSpaceTimeline           cwSpaceTimeline_;
+    std::atomic<bool>                    cwBorrowSpace_{false};
     lyra::dsp::NeuralCwDecoder           neuralCw_;
     lyra::dsp::NeuralCwDecoder           deepCw_;
     QString                              cwModelError_;

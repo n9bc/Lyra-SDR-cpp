@@ -22,16 +22,28 @@ constexpr int    kTickMs    = 400;          // re-decode ~2.5x/s (tci_decode tic
 constexpr double kGuardBase = 1.3;          // commit delay at normal speeds
 constexpr double kGuardSlow = 2.4;          // max guard at very slow speeds (<=15 WPM)
 constexpr int    kMinSamp   = kSr;          // need >=1 s buffered before decoding
-constexpr float  kKeyingMin = 12.0f;        // min keying ratio (p90/p10) to decode
-                                            // (DeepFist squelch.py, validated on Lyra
-                                            // captures: dead air ~4, keyed CW 12-600+)
-                                            // — gates dead air / steady carriers so we
-                                            // don't hallucinate characters on no signal
+constexpr float  kKeyingMin = 9.0f;         // min keying ratio (p90/p10) to decode
+                                            // (DeepFist squelch.py: dead air ~4, keyed
+                                            // CW 12-600+) — gates dead air / steady
+                                            // carriers so we don't hallucinate on no
+                                            // signal.  12 cut both models off below
+                                            // ~9 dB SNR (500 Hz) although they copy to
+                                            // ~6 dB; white noise reads ~4.7.
 constexpr double kMatchTolS = 0.2;          // max shift of one char between windows
                                             // (measured <=0.06 s once settled; an "EE"
                                             // pair at 20 WPM is 0.24 s apart)
 
 constexpr double kSpaceSlackS = 0.05;        // envelope delay at a gap's edges
+
+// Borrowed spacing (CwSpaceTimeline).  The publisher (DeepCW) places its chars
+// later than DeepFist by a lag measured from letters both decoded; until enough
+// pairs are seen, the typical value.  A letter is held until the publisher has
+// settled its audio plus a margin for spike jitter, or given up on after
+// kBorrowWaitS (publisher stalled) and spaced by our own filter instead.
+constexpr double kBorrowLagS    = 0.35;
+constexpr double kBorrowMarginS = 0.25;
+constexpr double kBorrowWaitS   = 3.0;
+constexpr double kPairTolS      = 0.3;      // pairing search slack each side
 
 // One decoded character: estimated audio time (s) and token id.
 struct TimedChar {
@@ -165,8 +177,7 @@ public:
         std::vector<double> g;
         for (double d : gaps_)
             if (d >= 2.0 * dit && d <= 20.0 * dit) g.push_back(std::log(d / dit));
-        const double standard = 5.0 * dit;           // halfway between 3 and 7 dits
-        if (g.size() < 5) return standard;
+        if (g.size() < 5) return 0.0;                  // not enough data to judge
 
         // Split letter gaps from word gaps on log length at the point that
         // best separates the two groups (Otsu), then put the threshold
@@ -182,9 +193,9 @@ public:
             const double between = double(k) * double(n - k) * (m2 - m1) * (m2 - m1);
             if (between > best) { best = between; c1 = m1; c2 = m2; }
         }
-        if (c2 - c1 < std::log(1.5)) return standard;   // no clear word gaps yet
+        if (c2 - c1 < std::log(1.5)) return 0.0;        // no clear bimodal split
         const double thr = std::exp(0.5 * (c1 + c2)) * dit;
-        return std::clamp(thr, 4.5 * dit, 12.0 * dit);
+        return std::clamp(thr, 4.0 * dit, 12.0 * dit);
     }
 
 private:
@@ -202,17 +213,23 @@ private:
     double lastMarkEnd_ = -1.0, lastGapEnd_ = -1.0;
 };
 
-// Whether a space the model emitted at time `t` is a real word space: the
-// key-up gap it falls in must be at least `wordGapS`.  DeepFist puts its
-// space ~0.1 s into the gap; `slack` allows for envelope delay at the edges.
-// No gap found, or no judgement yet (wordGapS 0) -> trust the model.
+// Whether a space the model emitted at time `t` is a real word space: at
+// least one key-up gap overlapping `t` (within `slack`) must be >= wordGapS.
+// The CTC space frame often lands near a mark-gap boundary, and the slack
+// can overlap both a short intra-character gap and the adjacent word gap;
+// checking ALL matching gaps avoids dropping the space because the short gap
+// happened to come first in chronological order.
 bool isWordSpace(double t, const std::vector<KeyRun>& gaps, double wordGapS,
                  double slack) {
     if (wordGapS <= 0.0) return true;
-    for (const KeyRun& g : gaps)
-        if (t >= g.start - slack && t <= g.end + slack)
-            return g.end - g.start >= wordGapS;
-    return true;
+    bool inAnyGap = false;
+    for (const KeyRun& g : gaps) {
+        if (t >= g.start - slack && t <= g.end + slack) {
+            if (g.end - g.start >= wordGapS) return true;
+            inAnyGap = true;
+        }
+    }
+    return !inAnyGap;           // no gap at all -> trust the model
 }
 }  // namespace
 
@@ -253,6 +270,7 @@ void NeuralCwDecoder::reset() {
     total3200_  = 0;
     committedT_ = 0.0;
     ++gen_;                     // discard any in-flight worker result
+    if (CwSpaceTimeline* pub = spacePub_.load()) pub->reset();
 }
 
 void NeuralCwDecoder::process(const float* mono, int nframes) {
@@ -307,21 +325,105 @@ void NeuralCwDecoder::workerLoop() {
     SenderSpacing spacing;
     std::vector<KeyRun> marks, gaps;    // this tick's window
     double wordGapS = 0.0;
+    std::deque<int> wpmHist;            // last few per-tick speed estimates
+
+    // Borrowed spacing: letters committed but not yet shown, each with whether
+    // our own spacing wanted a space before it (the fallback), plus the pause
+    // markers (id < 0) that must come out in order.  outT = time of the last
+    // letter shown (-1: none since a pause); outSpace = the text shown last
+    // ended in a space.
+    struct Held { TimedChar c; bool ownSpace; };
+    std::vector<Held> held;
+    bool   ownSpaceNext = false;
+    double outT = -1.0;
+    double outMatchT = -1.0;            // the publisher's time for outT's letter
+    bool   outSpace = true;
+    std::deque<double> lagHist;         // publisher - our time, matched letters
+    double lag = kBorrowLagS;
 
     // Append `fresh` to the transcript text and the committed history, and
     // raise committedT_ to the newest.  A space that falls in a letter-length
     // gap stays in the history (so the next window still lines up) but is
     // left out of the text.  Caller holds mx_.
-    auto commit = [&](const std::vector<TimedChar>& fresh, std::string& text) {
+    auto commit = [&](const std::vector<TimedChar>& fresh, std::string& text,
+                      bool borrow) {
         const auto& toks = model_.tokens();
+        CwSpaceTimeline* pub = spacePub_.load();
         for (const TimedChar& c : fresh) {
             const std::string& tok = toks[static_cast<size_t>(c.id)];
             committed.push_back(c);
             committedT_ = std::max(committedT_, c.t);
-            if (spaceFilter && tok == " " &&
-                !isWordSpace(c.t, gaps, wordGapS, kSpaceSlackS))
+            if (pub) pub->publish(c.t, tok);
+            const bool keep = !(spaceFilter && tok == " " &&
+                                !isWordSpace(c.t, gaps, wordGapS, kSpaceSlackS));
+            if (borrow) {
+                if (tok == " ") ownSpaceNext = ownSpaceNext || keep;
+                else { held.push_back({c, ownSpaceNext}); ownSpaceNext = false; }
                 continue;
+            }
+            if (keep) text += tok;
+        }
+    };
+
+    // Borrowed spacing: show the held letters the publisher has caught up
+    // with, each preceded by a space when the publisher put one between its
+    // copy of that letter and its copy of the previous letter shown.  Letters
+    // are paired (same token, nearest the expected time, in order) because the
+    // two models time a letter differently by its length — one fixed lag put
+    // spaces a letter off ("D ES58W").  The lag only centres the search.
+    auto release = [&](std::string& text, double audioEnd, CwSpaceTimeline& src) {
+        const auto& toks = model_.tokens();
+        while (!held.empty()) {
+            const Held h = held.front();
+            if (h.c.id < 0) {                   // pause marker
+                if (!outSpace) { text += ' '; outSpace = true; }
+                outT = outMatchT = -1.0;
+                held.erase(held.begin());
+                continue;
+            }
+            const std::string& tok = toks[static_cast<size_t>(h.c.id)];
+            const double need = h.c.t + lag + kBorrowMarginS;
+            bool space;
+            double matchT;
+            if (src.settled() >= need) {
+                // The publisher's copy: same letter, after the previous pair,
+                // nearest the expected time.
+                double best = -1.0;
+                // Short letters (E, T) can even come out earlier in the
+                // publisher, so the search reaches back to our own time.
+                const double lo = std::max(std::min(h.c.t, h.c.t + lag) - kPairTolS,
+                                           outMatchT + 1e-6);
+                for (const CwSpaceTimeline::Char& o :
+                     src.lettersIn(lo, h.c.t + lag + kPairTolS))
+                    if (o.tok == tok &&
+                        (best < 0.0 || std::abs(o.t - h.c.t - lag) < std::abs(best - h.c.t - lag)))
+                        best = o.t;
+                if (best >= 0.0) {
+                    matchT = best;
+                    lagHist.push_back(best - h.c.t);
+                    if (lagHist.size() > 31) lagHist.pop_front();
+                    if (lagHist.size() >= 5) {
+                        std::vector<double> v(lagHist.begin(), lagHist.end());
+                        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+                        lag = v[v.size() / 2];
+                    }
+                } else {
+                    matchT = h.c.t + lag;       // the models disagree on this letter
+                }
+                const double from = outMatchT >= 0.0 ? outMatchT : outT + lag;
+                space = outT >= 0.0 && src.spaceIn(from, matchT);
+            } else if (audioEnd - h.c.t > kBorrowWaitS) {
+                space = h.ownSpace && outT >= 0.0;   // publisher stalled
+                matchT = h.c.t + lag;
+            } else {
+                break;                              // wait for the publisher
+            }
+            if (space && !outSpace) text += ' ';
             text += tok;
+            outT = h.c.t;
+            outMatchT = matchT;
+            outSpace = false;
+            held.erase(held.begin());
         }
     };
 
@@ -345,7 +447,21 @@ void NeuralCwDecoder::workerLoop() {
             committed.clear();
             lastDecode.clear();
             spacing.clear();
+            wpmHist.clear();
+            held.clear();
+            ownSpaceNext = false;
+            outT = outMatchT = -1.0;
+            outSpace = true;
             histGen = gen;
+        }
+        CwSpaceTimeline* src = spaceSrc_.load();
+        const bool borrow = src && borrowSpacing_.load();
+        if (!borrow && !held.empty()) {         // borrowing switched off: flush
+            std::string rest;
+            for (const Held& h : held)
+                if (h.c.id >= 0) rest += model_.tokens()[static_cast<size_t>(h.c.id)];
+            held.clear();
+            if (!rest.empty() && onText) onText(rest);
         }
 
         const double winStart = audioEnd - kWindowS;
@@ -381,20 +497,39 @@ void NeuralCwDecoder::workerLoop() {
             {
                 std::lock_guard<std::mutex> lk(mx_);
                 if (gen != gen_) continue;
-                commit(newChars(committed, lastDecode, audioEnd, committedT_), flush);
+                commit(newChars(committed, lastDecode, audioEnd, committedT_), flush,
+                       borrow);
                 committedT_ = std::max(committedT_, audioEnd - kGuardBase);
+                if (CwSpaceTimeline* pub = spacePub_.load()) pub->setSettled(audioEnd);
             }
             lastDecode.clear();
-            if (!flush.empty() && onText) onText(flush);
             // Emit ONE space at the start of a pause so text across the gap
             // doesn't run together (mirrors tci_decode's idle-gap space).
-            if (!idleGap_) { idleGap_ = true; if (onText) onText(" "); }
+            // Borrowing: queue it behind the letters still held.
+            const bool pauseStart = !idleGap_;
+            idleGap_ = true;
+            if (borrow) {
+                if (pauseStart) held.push_back({{audioEnd, -1}, false});
+                release(flush, audioEnd, *src);
+            } else if (pauseStart) {
+                flush += ' ';
+            }
+            if (!flush.empty() && onText) onText(flush);
             continue;
         }
         idleGap_ = false;   // keyed signal present again
 
         // Estimated RX speed (WPM) from the keying envelope; emit on change.
-        const int wpm = model_.keyingWpm(window.data(), kWindow);
+        // Median of the last 5 ticks (~2 s): one window caught in a deep fade
+        // can misread, and it would jump the readout and the guard below.
+        int wpm = model_.keyingWpm(window.data(), kWindow);
+        if (wpm > 0) {
+            wpmHist.push_back(wpm);
+            if (wpmHist.size() > 5) wpmHist.pop_front();
+            std::vector<int> h(wpmHist.begin(), wpmHist.end());
+            std::nth_element(h.begin(), h.begin() + h.size() / 2, h.end());
+            wpm = h[h.size() / 2];
+        }
         if (onWpm) {
             const int d = wpm > lastWpm_ ? wpm - lastWpm_ : lastWpm_ - wpm;
             if (wpm > 0 && d >= 2) { lastWpm_ = wpm; onWpm(wpm); }
@@ -434,8 +569,10 @@ void NeuralCwDecoder::workerLoop() {
         {
             std::lock_guard<std::mutex> lk(mx_);
             if (gen != gen_) continue;          // reset() happened mid-decode
-            commit(newChars(committed, lastDecode, settleTo, committedT_), emit);
+            commit(newChars(committed, lastDecode, settleTo, committedT_), emit, borrow);
+            if (CwSpaceTimeline* pub = spacePub_.load()) pub->setSettled(settleTo);
         }
+        if (borrow) release(emit, audioEnd, *src);
         if (!emit.empty() && onText) onText(emit);
 
         if (onCalls && !calls.empty()) {

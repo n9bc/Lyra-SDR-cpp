@@ -33,6 +33,7 @@
 #include <thread>
 #include <vector>
 
+#include "dsp/deepfist/CwSpaceTimeline.h"
 #include "dsp/deepfist/DeepFistModel.h"
 #include "dsp/deepfist/DeepFistResampler.h"
 #include "dsp/deepfist/DeepFistRescore.h"
@@ -100,6 +101,17 @@ public:
     // leaving it null costs nothing.
     std::function<void(float ratio)> onKeying;
 
+    // Word spacing lent between two decoders on the same audio (see
+    // CwSpaceTimeline).  A publisher records every char it commits.  A source
+    // decoder, while borrowing is on, keeps its own letters but takes the word
+    // spaces between them from the timeline, holding each letter until the
+    // publisher has settled that audio (falls back to its own spacing if the
+    // publisher stops keeping up).  Wire the timeline before audio is fed;
+    // reset() both decoders together so their audio clocks agree.
+    void setSpacePublisher(CwSpaceTimeline* tl) { spacePub_.store(tl); }
+    void setSpaceSource(CwSpaceTimeline* tl) { spaceSrc_.store(tl); }
+    void setBorrowSpacing(bool on) { borrowSpacing_.store(on); }
+
     // hot path (audio thread) — decimate + buffer only; no inference here.
     void process(const float* mono, int nframes);
     void reset();
@@ -113,6 +125,9 @@ private:
     DeepFistScp       scp_;             // callsign DB for the lattice rescorer
     DeepFistResampler decim_{48000.0, 3200.0};
     std::atomic<float> blankPen_{0.0f}; // CTC blank penalty (live, UI↔worker)
+    std::atomic<CwSpaceTimeline*> spacePub_{nullptr};   // publish commits here
+    std::atomic<CwSpaceTimeline*> spaceSrc_{nullptr};   // borrow spaces from here
+    std::atomic<bool>             borrowSpacing_{false};
 
     // Shared rolling window (audio thread writes, worker reads), under mx_.
     std::mutex          mx_;

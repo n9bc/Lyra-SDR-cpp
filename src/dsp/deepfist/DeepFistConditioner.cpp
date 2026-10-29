@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace lyra::dsp {
 
@@ -191,43 +192,95 @@ std::vector<float> DeepFistConditioner::keyingEnvelope(const float* audio, int n
 float DeepFistConditioner::estimateWpm(const float* audio, int n, float tone) const {
     if (!audio || n < kToneNfft) return 0.0f;
     const float sr = static_cast<float>(kSr);
-    const float pi = static_cast<float>(kPi);
-    const float alpha = 1.0f - std::exp(-2.0f * pi * (kCondBwHz * 0.5f) / sr);
-    const float ds = std::sin(-2.0f * pi * tone / sr);
-    const float dc = std::cos(-2.0f * pi * tone / sr);
-    float pr = 1.0f, pj = 0.0f, bI = 0.0f, bQ = 0.0f, cI = 0.0f, cQ = 0.0f;
+    const std::vector<float> env = keyingEnvelope(audio, n, tone);
 
-    std::vector<float> env(static_cast<size_t>(n));
-    float peak = 1e-9f;
-    for (int k = 0; k < n; ++k) {
-        const float s = audio[k];
-        const float di = s * pr, dq = s * pj;
-        bI += alpha * (di - bI); bQ += alpha * (dq - bQ);
-        cI += alpha * (bI - cI); cQ += alpha * (bQ - cQ);
-        const float e = std::sqrt(cI * cI + cQ * cQ);
-        env[static_cast<size_t>(k)] = e;
-        peak = std::max(peak, e);
-        const float npr = pr * dc - pj * ds, npj = pr * ds + pj * dc;
-        pr = npr; pj = npj;
-    }
+    // On/off threshold halfway between the key-up and key-down levels (10th /
+    // 90th percentiles, as keyingRatio), with hysteresis so noise riding on
+    // the envelope can't chatter one element into several.  A half-peak
+    // threshold let a single noise spike or a fading peak lift the bar until
+    // real elements broke into slivers — the readout then pinned at 60 WPM.
+    std::vector<float> s(env);
+    std::nth_element(s.begin(), s.begin() + n / 10, s.end());
+    const float lo = s[static_cast<size_t>(n / 10)];
+    std::nth_element(s.begin(), s.begin() + (n - 1 - n / 10), s.end());
+    const float hi = s[static_cast<size_t>(n - 1 - n / 10)];
+    if (hi <= lo) return 0.0f;
+    const float mid = 0.5f * (lo + hi), hyst = 0.15f * (hi - lo);
 
-    // Threshold at half peak → on/off; collect "on" run lengths (samples).
-    const float thr = 0.5f * peak;
-    std::vector<int> onRuns;
+    // Alternating run lengths (samples); runs[0] is a mark when startOn.
+    std::vector<int> runs;
+    bool on = env[0] > mid;
+    const bool startOn = on;
     int run = 0;
     for (int k = 0; k < n; ++k) {
-        if (env[static_cast<size_t>(k)] > thr) ++run;
-        else { if (run > 0) onRuns.push_back(run); run = 0; }
+        const float e = env[static_cast<size_t>(k)];
+        const bool o = on ? (e > mid - hyst) : (e > mid + hyst);
+        if (o != on) { runs.push_back(run); run = 0; on = o; }
+        ++run;
     }
-    if (run > 0) onRuns.push_back(run);
-    if (onRuns.size() < 3) return 0.0f;
+    runs.push_back(run);
 
-    // Dot length ≈ short elements: 20th percentile of the on-run lengths (robust
-    // against dashes being 3× longer and against stray clicks).
-    std::sort(onRuns.begin(), onRuns.end());
-    const int dotSamp = onRuns[onRuns.size() / 5];
-    if (dotSamp <= 0) return 0.0f;
-    const float dotMs = dotSamp * 1000.0f / sr;
+    // Bridge dropouts inside an element (gaps under 10 ms), then keep the
+    // complete marks (not touching either window edge) of 15 ms or more —
+    // shorter is a blip (a 60 WPM dit is 20 ms) — each with the gap after it
+    // (0 when that gap runs into the window end).
+    const int bridge = static_cast<int>(0.010f * sr), blip = static_cast<int>(0.015f * sr);
+    struct Elem { int mark, gap; };
+    std::vector<Elem> elems;
+    int cur = 0;
+    bool curEdge = startOn;            // the first mark touches the window start
+    for (size_t i = 0; i < runs.size(); ++i) {
+        const bool isMark = (i % 2 == 0) == startOn;
+        if (isMark) { cur += runs[i]; continue; }
+        const bool edgeGap = (i == 0) || (i + 1 == runs.size());
+        if (!edgeGap && runs[i] < bridge && cur > 0) { cur += runs[i]; continue; }
+        if (cur > 0 && !curEdge && cur >= blip) elems.push_back({cur, edgeGap ? 0 : runs[i]});
+        cur = 0;
+        curEdge = false;
+    }
+    // A mark still open here touches the window end — length unknown, skip.
+    if (elems.size() < 6) return 0.0f;
+
+    // Dits vs dahs: split log mark lengths at the point that best separates
+    // two groups (Otsu).  A clear split (dahs ~3x dits) gives the dit from
+    // both groups (dah/3 counts too); no clear split = one element type, read
+    // as dits (EEE, 5NN — far commoner than all-dah runs).
+    std::vector<double> lg;
+    for (const Elem& e : elems) lg.push_back(std::log(static_cast<double>(e.mark)));
+    std::sort(lg.begin(), lg.end());
+    const size_t cnt = lg.size();
+    double total = 0.0;
+    for (double x : lg) total += x;
+    double best = -1.0, left = 0.0;
+    size_t split = 1;
+    for (size_t k = 1; k < cnt; ++k) {
+        left += lg[k - 1];
+        const double m1 = left / k, m2 = (total - left) / (cnt - k);
+        const double between = double(k) * double(cnt - k) * (m2 - m1) * (m2 - m1);
+        if (between > best) { best = between; split = k; }
+    }
+    const double g1 = std::exp(std::accumulate(lg.begin(), lg.begin() + split, 0.0) / split);
+    const double g2 = std::exp(std::accumulate(lg.begin() + split, lg.end(), 0.0) / (cnt - split));
+    double dit = (g2 / g1 >= 2.0 && g2 / g1 <= 4.5)
+        ? (g1 * split + (g2 / 3.0) * (cnt - split)) / cnt
+        : std::exp(lg[cnt / 2]);
+
+    // Refine on mark + in-letter gap: a fade or a weak signal shortens the
+    // marks above threshold and lengthens the gaps by the same amount, but
+    // their sum stays 2 dits (dit) or 4 (dah).
+    std::vector<double> fromPeriod;
+    for (const Elem& e : elems) {
+        if (e.gap <= 0 || e.gap > 2.0 * dit) continue;      // letter/word gap
+        const double p = e.mark + e.gap;
+        const double units = (p < 3.0 * dit) ? 2.0 : 4.0;
+        if (p > 1.4 * dit && p < 5.5 * dit) fromPeriod.push_back(p / units);
+    }
+    if (fromPeriod.size() >= 4) {
+        std::nth_element(fromPeriod.begin(), fromPeriod.begin() + fromPeriod.size() / 2,
+                         fromPeriod.end());
+        dit = fromPeriod[fromPeriod.size() / 2];
+    }
+    const float dotMs = static_cast<float>(dit) * 1000.0f / sr;
     const float wpm = 1200.0f / dotMs;                // PARIS: dot(ms) = 1200/wpm
     return std::clamp(wpm, 5.0f, 60.0f);
 }

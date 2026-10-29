@@ -54,9 +54,10 @@ public:
     float keyingRatio(const float* audio, int n, float toneHz) const;
 
     // Estimate CW speed (WPM) from the keying envelope of the tone: threshold
-    // the baseband envelope, measure the "on" element durations, take the dot
-    // length (short elements) and WPM = 1200 / dot_ms (PARIS).  Returns 0 when
-    // there isn't enough keying to judge.  Approximate — for the panel readout.
+    // the baseband envelope (hysteresis about the key-up/key-down midpoint),
+    // measure the complete "on" elements, split them into dits and dahs and
+    // WPM = 1200 / dot_ms (PARIS).  Returns 0 when there isn't enough keying
+    // to judge.  Approximate — for the panel readout and the settle guard.
     float estimateWpm(const float* audio, int n, float toneHz) const;
 
     // The isolated tone's baseband envelope, one value per input sample (same
