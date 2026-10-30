@@ -43,7 +43,8 @@ HelpCard::HelpCard(MainWindow *host, HelpHint *hint, Prefs *prefs,
     setAutoFillBackground(false);
     setFocusPolicy(Qt::NoFocus);
     setMouseTracking(true);
-    setCursor(Qt::SizeAllCursor);
+    // Not Qt::SizeAllCursor: Qt 6.11's Cocoa backend aborts building it.
+    setCursor(Qt::OpenHandCursor);
     setMinimumWidth(kCardWidth);
     setMaximumWidth(kCardWidth);
 

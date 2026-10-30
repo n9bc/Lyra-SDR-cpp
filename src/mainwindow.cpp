@@ -75,6 +75,8 @@
 #include <QShowEvent>
 #include <QDebug>
 #include <QEvent>
+#include <QStyleOptionToolBar>
+#include <QHoverEvent>
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
@@ -260,6 +262,35 @@ inline const QCursor &moveCursor() {
     }();
     return c;
 }
+
+// A movable QToolBar sets Qt::SizeAllCursor over its drag handle on
+// HoverMove, and Qt 6.11's Cocoa backend aborts building that cursor
+// (QImage::toCGImage of its mono bitmap -> CGImageCreate trap) — hovering
+// the Main toolbar's grip crashed Lyra.  Take over the toolbar's HoverMove
+// and show our own painted move cursor instead.
+class ToolBarHandleCursor : public QObject {
+public:
+    using QObject::QObject;
+    bool eventFilter(QObject *o, QEvent *e) override {
+        auto *tb = qobject_cast<QToolBar *>(o);
+        if (!tb || e->type() != QEvent::HoverMove)
+            return QObject::eventFilter(o, e);
+        QStyleOptionToolBar opt;
+        opt.initFrom(tb);
+        opt.features = tb->isMovable() ? QStyleOptionToolBar::Movable
+                                       : QStyleOptionToolBar::None;
+        opt.state |= tb->orientation() == Qt::Horizontal ? QStyle::State_Horizontal
+                                                         : QStyle::State_None;
+        const QRect handle =
+            tb->style()->subElementRect(QStyle::SE_ToolBarHandle, &opt, tb);
+        const QPoint pos = static_cast<QHoverEvent *>(e)->position().toPoint();
+        if (tb->isMovable() && handle.contains(pos))
+            tb->setCursor(moveCursor());
+        else
+            tb->unsetCursor();
+        return true;   // QToolBar's own handler would set Qt::SizeAllCursor
+    }
+};
 
 // Panels summoned by the header chip-strip (TX/RX DSP, CW console / decoder,
 // Voice Keyer, Tuner, Freq Cal, Recorder, PureSignal, Amp View, Diversity) — hidden by
@@ -4599,6 +4630,7 @@ void MainWindow::buildToolbar() {
     QToolBar *tb = addToolBar(tr("Main"));
     tb->setObjectName(QStringLiteral("main_toolbar"));
     tb->setMovable(true);
+    tb->installEventFilter(new ToolBarHandleCursor(tb));
     tb->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
     startStopAction_ = tb->addAction(tr("▶  Start"));
