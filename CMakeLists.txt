@@ -18,7 +18,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Lyra
-    VERSION 0.25.31
+    VERSION 0.25.32
     DESCRIPTION "Lyra Sheliak — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
     LANGUAGES CXX)
 
@@ -1039,6 +1039,14 @@ target_include_directories(test_profile PRIVATE src)
 target_link_libraries(test_profile PRIVATE Qt6::Core)
 if(MSVC)
     target_compile_options(test_profile PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+add_executable(test_ps_host_tx EXCLUDE_FROM_ALL
+    scratch/test_ps_host_tx.cpp
+)
+target_include_directories(test_ps_host_tx PRIVATE src)
+if(MSVC)
+    target_compile_options(test_ps_host_tx PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 add_executable(test_ps_att_hunt EXCLUDE_FROM_ALL
