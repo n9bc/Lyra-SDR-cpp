@@ -18,7 +18,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Lyra
-    VERSION 0.25.29
+    VERSION 0.25.31
     DESCRIPTION "Lyra Sheliak — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
     LANGUAGES CXX)
 
@@ -1041,27 +1041,22 @@ if(MSVC)
     target_compile_options(test_profile PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
-# UPSTREAM OMISSION (v0.25.0): the target is registered but
-# scratch/test_puresignal_ddc_map.cpp was never committed — it is absent from
-# origin/lyra-p2, origin/main and the v0.25.0 tag while its 28 sibling
-# scratch/ tests are tracked.  add_executable() on a missing source aborts the
-# CMake *generate* step, so this breaks configure on every platform, not just
-# macOS.  The target is EXCLUDE_FROM_ALL and never builds by default, so
-# guarding it costs nothing.  Remove the guard once upstream commits the file.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scratch/test_puresignal_ddc_map.cpp")
-    add_executable(test_puresignal_ddc_map EXCLUDE_FROM_ALL
-        scratch/test_puresignal_ddc_map.cpp
-        src/ps/DdcMap.cpp
-    )
-    target_include_directories(test_puresignal_ddc_map PRIVATE src)
-    target_link_libraries(test_puresignal_ddc_map PRIVATE Qt6::Core)
-    if(MSVC)
-        target_compile_options(test_puresignal_ddc_map PRIVATE /utf-8 /Zc:preprocessor)
-    endif()
-else()
-    message(STATUS
-        "test_puresignal_ddc_map: skipped — scratch/test_puresignal_ddc_map.cpp "
-        "missing upstream (v0.25.0)")
+add_executable(test_ps_att_hunt EXCLUDE_FROM_ALL
+    scratch/test_ps_att_hunt.cpp
+)
+target_include_directories(test_ps_att_hunt PRIVATE src)
+if(MSVC)
+    target_compile_options(test_ps_att_hunt PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+add_executable(test_puresignal_ddc_map EXCLUDE_FROM_ALL
+    scratch/test_puresignal_ddc_map.cpp
+    src/ps/DdcMap.cpp
+)
+target_include_directories(test_puresignal_ddc_map PRIVATE src)
+target_link_libraries(test_puresignal_ddc_map PRIVATE Qt6::Core)
+if(MSVC)
+    target_compile_options(test_puresignal_ddc_map PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 # P2 Phase B — Saturn / ANAN G2 control-plane session bench test.
