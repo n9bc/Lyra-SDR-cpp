@@ -3,6 +3,7 @@
 #include "P2RxBridge.h"
 
 #include "FrameComposer.h"
+#include "P2TuneHz.h"
 #include "P2Session.h"
 #include "P2TxCmaster.h"
 #include "Router.h"
@@ -80,12 +81,14 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
                 buf.resize(static_cast<std::size_t>(n) * 2);
                 const auto *u =
                     reinterpret_cast<const unsigned char *>(iq.constData());
+                // Per frame, not per sample: 1.0 while PS is live (192 kHz
+                // pair stream), else the 48 kHz one-ADC trim.
+                const double scale = sess->iqSampleScale();
                 for (int i = 0, k = 0; i < n; ++i, k += 6) {
                     const auto iRaw = static_cast<qint32>(
                         (u[k]     << 24) | (u[k + 1] << 16) | (u[k + 2] << 8));
                     const auto qRaw = static_cast<qint32>(
                         (u[k + 3] << 24) | (u[k + 4] << 16) | (u[k + 5] << 8));
-                    const double scale = sess->iqSampleScale();
                     buf[2 * static_cast<std::size_t>(i)]     =
                         iRaw / 2147483648.0 * scale;
                     buf[2 * static_cast<std::size_t>(i) + 1] =
@@ -327,9 +330,10 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
         emit runningChanged();
     });
 
-    // VFO + RIT follow: HL2Stream stays the tuning authority (see
-    // header); the DDC mirrors the RIT-adjusted effective RX
-    // frequency exactly as the P1 path's pushEffectiveRxFreq does.
+    // VFO / RIT / CTUN follow: HL2Stream stays the tuning authority
+    // (see header).  DDC0 matches P1 pushEffectiveRxFreq: locked at
+    // ctuneCenterHz when CTUN is on, else dial+RIT.  DUC stays on
+    // the heard/LED TX path (not the frozen pan).
     if (stream_) {
         connect(stream_, &lyra::ipc::HL2Stream::ocBitsChanged, this,
                 [this](int bits) {
@@ -341,6 +345,8 @@ P2RxBridge::P2RxBridge(lyra::ipc::HL2Stream *stream,
         connect(stream_, &lyra::ipc::HL2Stream::rx1FreqChanged, this,
                 [this]() { pushDialToSession(); });
         connect(stream_, &lyra::ipc::HL2Stream::ritChanged, this,
+                [this]() { pushDialToSession(); });
+        connect(stream_, &lyra::ipc::HL2Stream::ctuneChanged, this,
                 [this]() { pushDialToSession(); });
         connect(stream_, &lyra::ipc::HL2Stream::subEnabledChanged, this,
                 [this]() { syncRx2Ddc(); });
@@ -796,10 +802,12 @@ void P2RxBridge::pushDialToSession() {
         if (auto *xv = stream_->xvtrSlots())
             xv->reapplyStoredGain();
     }
-    quint32 rx = stream_->rx1FreqHz();
-    if (stream_->ritEnabled())
-        rx = static_cast<quint32>(
-            std::max<qint64>(0, qint64(rx) + stream_->ritOffsetHz()));
+    // DDC0: CTUN locks the hardware NCO at the pan centre (RIT is in
+    // the WDSP shift, same as P1).  CTUN off: dial + RIT.
+    quint32 rx = p2Ddc0RfHz(stream_->rx1FreqHz(),
+                            stream_->ritEnabled(),
+                            stream_->ritOffsetHz(),
+                            stream_->ctuneCenterHz());
     // Display RF → radio IF (identity when no transverter slot matches),
     // then the existing calibration choke.
     rx = static_cast<quint32>(stream_->ddsHzForRf(rx));
@@ -1159,9 +1167,14 @@ void P2RxBridge::open(const QString &ip, const QString &mac,
     activateTxProducerSeam();
     resetTxUiState();
     rateKhz_ = chooseRateKhz();
-    // Seed DDC0 from the dial (rx/freqHz persists across launches; 0
-    // only on a truly fresh install → park on 20 m).
-    quint32 hz = stream_ ? stream_->rx1FreqHz() : 0;
+    // Seed DDC0 from the CTUN/dial contract (rx/freqHz persists across
+    // launches; 0 only on a truly fresh install → park on 20 m).
+    quint32 hz = stream_
+        ? p2Ddc0RfHz(stream_->rx1FreqHz(),
+                     stream_->ritEnabled(),
+                     stream_->ritOffsetHz(),
+                     stream_->ctuneCenterHz())
+        : 0;
     if (hz == 0) hz = 14'100'000u;
     const int rxIf = stream_ ? stream_->ddsHzForRf(hz) : static_cast<int>(hz);
     const quint32 correctedHz =
@@ -1245,6 +1258,35 @@ void P2RxBridge::open(const QString &ip, const QString &mac,
             qs.setValue(migratedKey, true);
         }
         txDriveLimitPercent_ = std::clamp(stored, 1, 100);
+    }
+    // One-shot: v0.25.16–0.25.31 scaled P2 TX IQ with Drive on top of HP
+    // [345] (drive applied twice). Watts-cap ceilings TUN-learned under
+    // that curve are wrong for unity IQ (same raw drive now gives several
+    // dB more RF), so forget them once per install for this P2 rig and
+    // let TUN re-learn. Same keys as HL2Stream::clearCapLearnForBand
+    // (rig/<id>/pa_gain/<band>/capCeilRaw|capCeilCapW|capSettled); the
+    // rig-scoped prefix keeps HL2 / P1 learn untouched. Runs BEFORE
+    // setTxCalRigId → loadTxPowerCal_ reads them.
+    if (!rigId_.isEmpty()) {
+        QSettings qs;
+        const QString doneKey =
+            rigScopedKey(rigId_, QStringLiteral("p2/psUnityIqCapResetV1"));
+        if (!qs.value(doneKey, false).toBool()) {
+            for (int i = 0; i < lyra::kPaPowerBandCount; ++i) {
+                const char *nm = lyra::paPowerBandName(i);
+                const QString band = (nm && nm[0])
+                    ? QString::fromUtf8(nm) : QString::number(i);
+                qs.setValue(rigScopedKey(rigId_,
+                    QStringLiteral("pa_gain/%1/capCeilRaw").arg(band)), -1);
+                qs.setValue(rigScopedKey(rigId_,
+                    QStringLiteral("pa_gain/%1/capCeilCapW").arg(band)), -1.0);
+                qs.setValue(rigScopedKey(rigId_,
+                    QStringLiteral("pa_gain/%1/capSettled").arg(band)), false);
+            }
+            qs.setValue(doneKey, true);
+            qWarning("P2: unity TX IQ — learned watts-cap ceilings reset for "
+                     "this rig (re-run TUN per band)");
+        }
     }
     // Per-rig auto-arm preference (default off): re-applies the transient
     // bench interlock automatically once the transport reports Ready.

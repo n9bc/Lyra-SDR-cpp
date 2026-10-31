@@ -18,7 +18,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Lyra
-    VERSION 0.25.32
+    VERSION 0.25.34
     DESCRIPTION "Lyra Sheliak — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
     LANGUAGES CXX)
 
@@ -229,6 +229,8 @@ qt_add_executable(lyra
     src/wire/RbpFilter.cpp
     src/wire/FrameComposer.h
     src/wire/FrameComposer.cpp
+    src/wire/Hl2IoBoard.h
+    src/wire/Hl2IoBoard.cpp
     src/wire/Ep6RecvThread.h
     src/wire/Ep6RecvThread.cpp
     src/wire/Router.h
@@ -1041,12 +1043,13 @@ if(MSVC)
     target_compile_options(test_profile PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
-add_executable(test_ps_host_tx EXCLUDE_FROM_ALL
-    scratch/test_ps_host_tx.cpp
+# P1 byte+fixed-gain vs P2 byte-only (unity IQ) TX drive split.
+add_executable(test_tx_drive_split EXCLUDE_FROM_ALL
+    scratch/test_tx_drive_split.cpp
 )
-target_include_directories(test_ps_host_tx PRIVATE src)
+target_include_directories(test_tx_drive_split PRIVATE src)
 if(MSVC)
-    target_compile_options(test_ps_host_tx PRIVATE /utf-8 /Zc:preprocessor)
+    target_compile_options(test_tx_drive_split PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 add_executable(test_ps_att_hunt EXCLUDE_FROM_ALL
@@ -1065,6 +1068,15 @@ target_include_directories(test_puresignal_ddc_map PRIVATE src)
 target_link_libraries(test_puresignal_ddc_map PRIVATE Qt6::Core)
 if(MSVC)
     target_compile_options(test_puresignal_ddc_map PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+add_executable(test_p2_ctune EXCLUDE_FROM_ALL
+    scratch/test_p2_ctune.cpp
+)
+target_include_directories(test_p2_ctune PRIVATE src)
+target_link_libraries(test_p2_ctune PRIVATE Qt6::Core)
+if(MSVC)
+    target_compile_options(test_p2_ctune PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 # P2 Phase B — Saturn / ANAN G2 control-plane session bench test.
@@ -1189,15 +1201,32 @@ if(MSVC)
     target_compile_options(test_oc_control PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
-# HL2IOBoard Pico TX-Hz pack (I2C 0x1D BYTE4..BYTE0).  EXCLUDE_FROM_ALL.
-add_executable(test_hl2_ioboard_i2c EXCLUDE_FROM_ALL
-    scratch/test_hl2_ioboard_i2c.cpp
+# HL2 I/O board sequencer — frame-level harness (plan §5): module-level
+# driver plus the real write_main_loop_hl2.  EXCLUDE_FROM_ALL.
+add_executable(test_hl2_ioboard_frames EXCLUDE_FROM_ALL
+    scratch/test_hl2_ioboard_frames.cpp
+    scratch/hl2_ioboard_test_stubs.cpp
+    src/wire/Hl2IoBoard.h
+    src/wire/Hl2IoBoard.cpp
+    src/wire/FrameComposer.h
+    src/wire/FrameComposer.cpp
+    src/wire/RbpFilter.h
+    src/wire/RbpFilter.cpp
 )
-target_link_libraries(test_hl2_ioboard_i2c PRIVATE Qt6::Core)
-set_target_properties(test_hl2_ioboard_i2c PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+target_include_directories(test_hl2_ioboard_frames PRIVATE src)
+target_link_libraries(test_hl2_ioboard_frames PRIVATE Qt6::Core)
+set_target_properties(test_hl2_ioboard_frames PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
 if(MSVC)
-    target_compile_options(test_hl2_ioboard_i2c PRIVATE /utf-8 /Zc:preprocessor)
+    target_compile_options(test_hl2_ioboard_frames PRIVATE /utf-8 /Zc:preprocessor /W4)
 endif()
+
+# HL2 I/O board — every input-change path publishes the snapshot, and only
+# HL2Stream::publishIoboardState writes it (plan §5 publish_paths_static).
+#   ctest --test-dir build -R hl2_ioboard_publish_paths_static
+enable_testing()
+add_test(NAME hl2_ioboard_publish_paths_static
+         COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR}/src
+                 -P ${CMAKE_SOURCE_DIR}/scratch/hl2_ioboard_publish_paths.cmake)
 
 # TX band-jump rule (src/bands.h bandJumpCrosses): a jump that leaves the
 # current amateur band is refused while transmitting.  Qt Core only;

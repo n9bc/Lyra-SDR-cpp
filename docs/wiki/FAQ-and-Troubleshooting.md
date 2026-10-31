@@ -43,7 +43,8 @@ controllers (sidecar)**.
 **Which digital / SSTV programs are recommended?**
 Lyra does not ship them. **Settings → Apps** lists programs we have tested
 with: [STD](https://github.com/N8SDR1/STD/releases) (N8SDR's digital-modes
-app; pair over TCI / VAC; [details](https://n8sdr1.github.io/STD/)),
+app; connects over TCI, which carries rig control and audio;
+[details](https://n8sdr1.github.io/STD/)),
 [Open SSTV](https://bucknova.github.io/Open-SSTV/),
 [MSHV](http://lz2hv.org/mshv) or [WSJT-X](https://wsjtx.github.io/wsjtx/index.html)
 for FT8/FT4, and [VarAC](https://www.varac-hamradio.com/). Browse to each
@@ -198,19 +199,31 @@ stays on RX during CW so you still see the keyed carrier.
 Stock Pico PWM is **J4 pin 8**, not J3. Xiegu-class amps (XPA125, Micro
 PA50) decode **voltage**, not OC ticks. Analog follows TX frequency on
 Protocol 1 **without** needing **Enable N2ADR / IO board** — that box
-is OC / LPF relays only. Start the radio; Lyra writes TX Hz over I2C
-**0x1D** (same as Thetis/Quisk/SparkSDR). There is **no extra I2C/PWM
-checkbox**. **Leave HL2 Band Volts on J3 off** unless the amp is
+is OC / LPF relays only. Since **v0.25.34** Lyra first looks for the
+board's ID chip at **0x41** (as Thetis / deskHPSDR do) and only then
+writes TX Hz over I2C **0x1D**, every ~0.35 s. Check Settings →
+**Filters / BCD** → **IO board** → Status: **Detected** is what you
+want. **Not detected** with a real board = check the I2C ribbon / bus-2
+wiring. A DIY Pico built without the PCA9536 needs **Force IO board
+present**. **Leave HL2 Band Volts on J3 off** unless the amp is
 actually jumpered to the **fan header**. 0 V on J3 with that box off is
 expected when J3 is GND. Protocol 2 Brick/ANAN do not use the Pico 0x1D
-path. Optional tester switch **`LYRA_NO_IOBOARD_FCODE=1`**:
-[User Guide → How to set LYRA_NO_IOBOARD_FCODE](User-Guide#how-to-set-lyra_no_ioboard_fcode).
+path. The old `LYRA_NO_IOBOARD_FCODE=1` switch is retired — use
+**Send RX frequency codes (13 / 14)** on the same tab:
+[User Guide → HL2 IO board](User-Guide#hl2-io-board-hl2ioboard-pico-i2c-0x1d).
 
-**Filter board stuck on the previous band.**
-Install **v0.25.20**. The voltage is written after the band change
-finishes, and a return to a band already showing on the dial is written
-again. Stock PWM is **J4 pin 8**. Leave **Band Volts on J3** off unless
-the amp is on the fan header. Protocol 2 Brick/ANAN do not use this path.
+**Filter board / band voltage stuck on the previous band.**
+Install **v0.25.34**. Registers are re-sent from a latched snapshot
+every cycle, so a write the Pico misses is repeated ~0.35 s later; a
+band hop reaches the Pico in about 0.2 s. If you use a **transverter**
+chip with an HF-only band-volts amp, **Transverter bands send** =
+**Hold last HF frequency** (default) keeps the amp on the HF band.
+Stock PWM is **J4 pin 8**. Leave **Band Volts on J3** off unless the
+amp is on the fan header. Protocol 2 Brick/ANAN do not use this path.
+For a report, turn on Settings → **Hardware** → **Enable verbose debug
+logging** (also a checkbox in Help → Show Log…), reproduce, then send
+`%APPDATA%\N8SDR\Lyra-cpp\logs\lyra-log.txt` — the lines tagged
+`[iob]` show every write.
 
 **I'm running an amplifier — anything to set first?**
 Yes — configure **TR‑sequencing** and the **RF‑delay / ATT‑on‑TX**

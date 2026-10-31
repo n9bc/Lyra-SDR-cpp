@@ -25,8 +25,11 @@
 #include "wire/MetisFrame.h"    // metis_wire_bind, metis_socket_fd
 #include "wire/ObBuffs.h"       // destroy_obbuffs (P3 — close() ring teardown)
 #include "wire/FrameComposer.h" // §5 control-plane mapping: set_rx_freq / set_tx_freq / set_rx_step_attn_db (P4.b RX side)
+#include "wire/Hl2IoBoard.h"    // HL2 IO-board sequencer (snapshot publish, detection, record ring)
+#include "logbuffer.h"          // Verbose flag for the IO-board record drain
 #include "wire/RbpFilter.h"     // prbpfilter2 RX2-jack ground bit
 #include "wire/TxGain.h"        // SetTXFixedGain/Run — TX power model Stage 2 fine drive
+#include "tx/TxDriveSplit.h"    // P1 byte+gain / P2 byte-only split (unit-tested)
 #include "bands.h"              // amateurBands / bandIndexForFreq — TX power model Stage 3
 #include "bandmemory.h"
 #include "rig/RigScope.h"       // multi-rig Stage 3 — per-rig key routing (cal/)
@@ -67,6 +70,7 @@
 #include <QtGlobal>         // qEnvironmentVariableIntValue
 #include <QMetaObject>
 #include <QSettings>
+#include <QThread>
 #include <Qt>
 #include <algorithm>
 #include <atomic>
@@ -279,10 +283,6 @@ HL2Stream::HL2Stream(QObject *parent) : QObject(parent) {
     autoLnaTimer_.setInterval(kAutoLnaPeriodMs);
     connect(&autoLnaTimer_, &QTimer::timeout,
             this, &HL2Stream::onAutoLnaTick);
-    ioboardSettleTimer_.setSingleShot(true);
-    ioboardSettleTimer_.setInterval(50);
-    connect(&ioboardSettleTimer_, &QTimer::timeout,
-            this, &HL2Stream::onIoboardSettle);
     // Stage 2b2-fix-v2 — HW-PTT-in poll timer (Qt main thread).
     // 50 ms cadence (20 Hz) — fast enough that foot-switch
     // press-to-key feels instantaneous, slow enough that the
@@ -417,9 +417,9 @@ HL2Stream::HL2Stream(QObject *parent) : QObject(parent) {
     // for the restored band (so the board is correct from the first send).
     // Default ON: DeskHPSDR sets filter_board=N2ADR and emits OC on
     // every HL2 (Thetis/Quisk same OC→I²C 0x20 with no extra checkbox).
-    // This checkbox is OC / LPF relays only.  Pico analog (I2C2 0x1D
-    // TX-Hz) always follows on Protocol 1 — same as Thetis IOBoard
-    // setFrequency / Quisk IOBoard HeartBeat.
+    // This checkbox is OC / LPF relays only.  The IO board (I2C2 0x1D) is
+    // driven by the detection-gated periodic sequencer (Hl2IoBoard.h) on
+    // Protocol 1, independent of this box.
     oc_.setFamily(lyra::oc::Family::HermesLite);
     reloadOcFromDisk();
     // RX1 LNA gain (AD9866 PGA) — restore the operator's last setting.
@@ -567,6 +567,24 @@ HL2Stream::HL2Stream(QObject *parent) : QObject(parent) {
     if (lyra::wire::prn != nullptr)
         lyra::wire::set_band_volts_output(
             bandVolts_.load(std::memory_order_relaxed));
+    // HL2 IO board (I2C2 0x1D) policies + the held HF TX Hz used on
+    // transverter bands under "hold last HF".
+    {
+        QSettings s;
+        ioboardForcePresent_ =
+            s.value(QStringLiteral("hw/ioboardForcePresent"), false).toBool();
+        ioboardXvtrAnalog_ =
+            s.value(QStringLiteral("hw/ioboardXvtrAnalog"),
+                    QStringLiteral("holdLastHf")).toString()
+                    == QLatin1String("onAirRf")
+                ? lyra::wire::hl2iob::XvtrPolicy::OnAirRf
+                : lyra::wire::hl2iob::XvtrPolicy::HoldLastHf;
+        ioboardSendRxFcodes_ =
+            s.value(QStringLiteral("hw/ioboardSendRxFcodes"), true).toBool();
+        lastHfTxHz_ =
+            s.value(QStringLiteral("hw/ioboardLastHfTxHz"), 0).toULongLong();
+        lastHfTxHzSaved_ = lastHfTxHz_;
+    }
     // TX-0c-pa-drive — operator-tunable drive DAC level (raw 0..255,
     // UI exposes 0..100 %).  Persisted across launches; NOT cleared on
     // stream open/close — the "volume" knob carries the operator's
@@ -1464,9 +1482,6 @@ void HL2Stream::open(const QString &ip) {
             txFreqHz_.load(std::memory_order_relaxed));
         lyra::wire::set_tx_freq(            // TX NCO + DDC2/3 mirror (case 1/5/6)
             ddsHzForRf(static_cast<quint32>(txRfTune < 0 ? 0 : txRfTune)));
-        pushIoboardTxFreq(true);
-        pushHl2RxPort();
-        pushIoboardRxFcodes();
         lyra::wire::set_rx_step_attn_db(    // LNA gain (case 11 !XmitBit)
             std::clamp(lnaGainDb_.load(std::memory_order_relaxed),
                        kLnaMinDb, kLnaMaxDb) + 12, 0);   // HPSDR P1 +12 bias
@@ -1505,6 +1520,24 @@ void HL2Stream::open(const QString &ip) {
         // (Thetis EnableCWKeyer): cw_enable follows txMode_.  Non-CW at open
         // → stays 0 (TX-inert).  The keyer config above is dormant until set.
         applyCwKeyerEnable();
+    }
+
+    // HL2 IO board (plan §4.6): reset the sequencer and register the
+    // detection-reply sink while single-threaded — before the EP6 reader
+    // and the EP2 writer start — then publish the first snapshot.
+    iobPresentReported_ = false;
+    iobAbsentReported_ = false;
+    iobStaleReported_ = 0;
+    if (!p2DrivePath_.load(std::memory_order_relaxed)) {
+        lyra::wire::hl2iob::init_for_open(ioboardForcePresent_);
+        // Arm the record gate now so cycle-0 records (latch/probe/regs 0-3) are
+        // captured; drainIoboardRecords() only re-syncs it from the stats timer.
+        lyra::wire::hl2iob::set_log_verbose(lyra::ui::LogBuffer::instance().verbose());
+        ep6Thread_.set_i2c_sink([](const uint8_t* c, int n) {
+            if (n >= 5)
+                lyra::wire::hl2iob::on_i2c_reply(c);
+        });
+        publishIoboardState();
     }
 
     ep6Thread_.start(static_cast<int>(socket_));
@@ -1792,8 +1825,8 @@ void HL2Stream::close() {
     }
 
     statsTimer_.stop();
-    ioboardSettleTimer_.stop();
-    ++ioboardEpoch_;
+    lyra::wire::hl2iob::stop();
+    persistLastHfTxHz();
     autoLnaTimer_.stop();
     hwPttTimer_.stop();   // Stage 2b2-fix-v2 — HW-PTT poll
     if (adcOverloadTier_) { adcOverloadTier_ = 0; emit adcOverloadChanged(); }
@@ -1867,6 +1900,10 @@ void HL2Stream::onStatsTick() {
     dgPerSec_   = static_cast<double>(rxWin) * scale;
     txDgPerSec_ = static_cast<double>(txWin) * scale;
     emit statsChanged();
+
+    drainIoboardRecords();
+    pollIoboardSession();
+    updateIoboardStatus();
 
     // TX-0a raw-telemetry probe — env-gated, 5 Hz, main thread.  Logs
     // the decoded raw ADC slots + converted values so the operator can
@@ -2124,14 +2161,10 @@ void HL2Stream::setRx1FreqHz(quint32 hz) {
     if (!splitEnabled_.load(std::memory_order_relaxed)
         && refuseTxBandJump(prev, hz))
         return;
-    if (prev == hz) {
-        if (!splitEnabled_.load(std::memory_order_relaxed))
-            pushIoboardTxFreq();
+    if (prev == hz)
         return;
-    }
     rx1FreqHz_.store(hz, std::memory_order_relaxed);
     QSettings().setValue(QStringLiteral("rx/freqHz"), hz);
-    pushIoboardRxFcodes();
     // NCOs first, then notify.  Protocol 2 mirrors DUC from txFreqHz_
     // on rx1FreqChanged — if that fires before pushEffectiveTxFreq,
     // TX stays on the previous dial (start is correct; any later VFO
@@ -2141,6 +2174,7 @@ void HL2Stream::setRx1FreqHz(quint32 hz) {
         pushEffectiveTxFreq();
     else
         emit txAnalyzerOffsetChanged(txAnalyzerOffsetHz());
+    publishIoboardState();   // after the TX recompute: one word per tune
     emit rx1FreqChanged();
     emit logLine(QStringLiteral("RX1 -> %1 Hz (%2 MHz)")
                  .arg(hz).arg(hz / 1.0e6, 0, 'f', 6));
@@ -2208,7 +2242,7 @@ void HL2Stream::pushEffectiveTxFreq() {
     // The TX-analyzer crop offset (NCO − RX centre) changed — refresh the
     // panadapter so the TX signal paints at the new VFO-B position.
     emit txAnalyzerOffsetChanged(txAnalyzerOffsetHz());
-    pushIoboardTxFreq();
+    publishIoboardState();
 }
 
 // #174 CTUNE — sign of the WDSP RX demod shift.  CONFIRMED +1 correct by the
@@ -2434,7 +2468,7 @@ void HL2Stream::setSplitEnabled(bool on) {
         }
         pushEffectiveRxFreq();
     }
-    pushIoboardRxFcodes();
+    publishIoboardState();
 }
 
 void HL2Stream::setVfoBHz(quint32 hz) {
@@ -2459,7 +2493,7 @@ void HL2Stream::setVfoBHz(quint32 hz) {
         }
         pushEffectiveRxFreq();
     }
-    pushIoboardRxFcodes();
+    publishIoboardState();
 }
 
 bool HL2Stream::txBlocksBandJump(quint32 targetHz, bool sub) {
@@ -2511,7 +2545,7 @@ void HL2Stream::setSubEnabled(bool on) {
     emit logLine(QStringLiteral("SUB %1")
                      .arg(on ? QStringLiteral("on") : QStringLiteral("off")));
     pushEffectiveRxFreq();
-    pushIoboardRxFcodes();
+    publishIoboardState();
 }
 
 void HL2Stream::setDiversityCapable(bool on) {
@@ -2532,7 +2566,7 @@ void HL2Stream::setDiversityArmed(bool on) {
         QSettings().setValue(QStringLiteral("rx/subEnabled"), false);
         emit subEnabledChanged();
         emit logLine(QStringLiteral("SUB off — diversity is on"));
-        pushIoboardRxFcodes();
+        publishIoboardState();
     }
     diversityArmed_.store(on, std::memory_order_relaxed);
     QSettings().setValue(QStringLiteral("diversity/enabled"), on);
@@ -2643,7 +2677,7 @@ void HL2Stream::setRx2FreqHz(quint32 hz) {
     }
     if (subEnabled_.load(std::memory_order_relaxed))
         pushEffectiveRxFreq();
-    pushIoboardRxFcodes();
+    publishIoboardState();
 }
 
 void HL2Stream::setFocusedRx(int rx) {
@@ -2700,7 +2734,7 @@ void HL2Stream::setTxFreqHz(quint32 hz) {
             // lands on the marker like every other TX NCO push.
             lyra::wire::set_tx_freq(ddsHzForRf(static_cast<quint32>(
                 std::max(0, txDdsHzForTune(hz)))));
-        pushIoboardTxFreq();
+        publishIoboardState();
         syncPsAttToTxBand();
         emit logLine(QStringLiteral("TX freq -> %1 Hz (%2 MHz)")
                      .arg(hz).arg(hz / 1.0e6, 0, 'f', 6));
@@ -2924,10 +2958,13 @@ void HL2Stream::restoreFoldedDriveSafely_() {
 }
 
 void HL2Stream::applyTxPower_(int requestedRaw) {
-    // The single TX power chokepoint.  RadioVolume drives BOTH the coarse
-    // AD9866 drive_level byte (round(255·RV)) AND the ChannelMaster txgain
-    // digital fixed gain (SetTXFixedGain(RV)) — exactly as Thetis drives
-    // both from one RadioVolume.  The byte gives the 16 coarse steps; the
+    // The single TX power chokepoint.  On HL2 P1, RadioVolume drives BOTH
+    // the coarse AD9866 drive_level byte (round(255·RV)) AND the
+    // ChannelMaster txgain digital fixed gain (SetTXFixedGain(RV)) —
+    // exactly as Thetis drives both from one RadioVolume.  On P2 only the
+    // byte (HP [345]) carries RV; IQ fixed gain is pinned at unity (see
+    // the block comment at the SetTXFixedGain call below).
+    // The byte gives the 16 coarse steps; the
     // fixed gain fills continuously between them + below the PA floor
     // (sub-watt) and is PureSignal-safe (it's the reference's own TX gain
     // stage, where PS taps post-gain).  The per-band PA Gain shapes RV so
@@ -2977,8 +3014,8 @@ void HL2Stream::applyTxPower_(int requestedRaw) {
     // refine with a CW-keyed servo learn (option B) if the operator wants it.
     const bool p2Path = p2DrivePath_.load(std::memory_order_relaxed);
     // CW fold is HL2 P1 only: that gateware substitutes a keyed carrier and
-    // bypasses IQ fixed-gain. P2 streams host I/Q; copying the fold would
-    // under-drive Brick/ANAN and fight PureSignal's later IQ tap.
+    // bypasses IQ fixed-gain. P2 streams host I/Q at unity (see below);
+    // copying the fold would under-drive Brick/ANAN.
     const bool cwFold = !p2Path && capActive_()
         && (txMode_.load(std::memory_order_relaxed) == 3      // WDSP CWL
          || txMode_.load(std::memory_order_relaxed) == 4);    // WDSP CWU
@@ -2989,19 +3026,55 @@ void HL2Stream::applyTxPower_(int requestedRaw) {
     // over); an ~0.85 amplitude margin (power ~0.85^[2..3]) clears it with a
     // safety cushion.  Protective cap -> deliberately errs low.  Reclaim the
     // residual exactly with a CW-keyed servo learn (option B) if wanted.
-    constexpr double kCwCapHeadroom = 0.85;
-    const double byteRv = cwFold ? rv * rv * kCwCapHeadroom : rv;
-    const int    byte = static_cast<int>(std::lround(255.0 * byteRv));
-    const int emitted = byte < 0 ? 0 : (byte > 255 ? 255 : byte);
+    // The byte / fixed-gain split lives in tx/TxDriveSplit.h (pure, unit-
+    // tested): P1 byte=round(255·byteRv), gain=rv; P2 byte=round(255·rv),
+    // gain=1.0.  kCwCapHeadroom (0.85) is defined there.
+    const lyra::tx::TxDriveSplit split =
+        lyra::tx::splitTxDrive(rv, p2Path, cwFold);
+    const int emitted = split.driveByte;
     txEmittedDriveByte_.store(emitted, std::memory_order_relaxed);
     if (lyra::wire::prn != nullptr)
         lyra::wire::set_drive_level(emitted);
     lyra::wire::SetTXFixedGainRun(0, 1);
-    // Analog HP [345] still carries the byte. Brick3 (and any P2 FPGA that
-    // does not scale the DAC from [345]) sat at ~0.9 W across Drive 0–100 %
-    // while IQ was pinned at unity. Scale IQ with Drive like P1 so 0 % is
-    // silence and the slider is live; at 100 % rv=1 (same as the old pin).
-    lyra::wire::SetTXFixedGain(0, rv, rv);
+    // ------------------------------------------------------------------
+    // P2: TX IQ STAYS AT UNITY.  Watts live on HP [345] ONLY.  DO NOT
+    // SCALE P2 IQ WITH DRIVE AGAIN.
+    //
+    // Both working references keep Protocol-2 TX IQ at unity and put the
+    // drive on the analog byte:
+    //   * deskHPSDR radio.c:2523      `transmitter->do_scale = 0;
+    //                                  transmitter->drive_level = level;`
+    //     ("For most of the radios, just copy the level and switch off
+    //     scaling").  do_scale / drive_iscal are set ONLY for the original
+    //     Penelope and the HermesLite-II (the two radios whose drive byte
+    //     cannot reach the DAC), and transmitter.c:1734 multiplies the IQ
+    //     gain by drive_scale only `if (tx->do_scale)`.
+    //   * Thetis cmaster.cs:1118-1122  `CMSetTXOutputLevelRun`:
+    //     `run = !PennyLanePresent; SetTXFixedGainRun(0, run)` — fixed
+    //     gain is OFF (unity) on every radio that honours the drive byte.
+    //
+    // Why it matters (PureSignal): the radio's TX-DAC replica — the odd
+    // interleaved DDC0 samples / DDC1 — FOLLOWS THE IQ AMPLITUDE, not
+    // [345].  WDSP calcc LCOLLECT sorts samples into amplitude buckets up
+    // to SetPk (0.2899 on P2) and will not finish until every bucket has
+    // filled.  Scaling IQ by rv shrinks the replica by rv: at 40 % drive
+    // the replica peaks ~−18 dB vs SetPk −10.8 dB, buckets 7-15 never
+    // fill, st stays 4, FB 0, cal 0, and the auto-attenuator walks the
+    // coupler pad to 0 dB (Greg VK3KV Brick2, v0.25.16–0.25.31; see
+    // docs/PS_P2_REGRESSION_REPORT.md).  Unity IQ makes the replica reach
+    // SetPk at ANY drive, which is why PS calibrates at partial drive in
+    // deskHPSDR / Thetis on the same radio.
+    //
+    // No PS-state branch here on purpose: a "unity only while PS is
+    // armed" rule would change RF output the moment PS is toggled.
+    //
+    // If a P2 radio is found that does not scale its DAC from [345]
+    // (the v0.25.16 "Brick3 sat at ~0.9 W" motivation), that is a
+    // per-model hardware-profile question for the protocol / profile
+    // layer, NOT a reason to scale IQ here.  Scaling IQ here breaks
+    // PureSignal on every P2 radio that does honour [345].
+    // ------------------------------------------------------------------
+    lyra::wire::SetTXFixedGain(0, split.fixedGain, split.fixedGain);
 
     // Amp-cap live indicator for the TX-panel CAP chip.  Recomputed here
     // because this is the one chokepoint every drive / PA-gain / band / cap
@@ -3027,12 +3100,12 @@ void HL2Stream::applyTxPower_(int requestedRaw) {
 
 void HL2Stream::setP2DrivePath(bool on) {
     const bool was = p2DrivePath_.exchange(on, std::memory_order_relaxed);
+    if (on)
+        lyra::wire::hl2iob::stop();
     applyTxPower_(txDriveLevel_.load(std::memory_order_relaxed));
-    if (was && !on) {
-        pushIoboardTxFreq(true);
-        pushHl2RxPort();
-        pushIoboardRxFcodes();
-    }
+    if (was && !on)
+        publishIoboardState();
+    updateIoboardStatus();
 }
 
 QString HL2Stream::txCalKey_(const QString &logical) const {
@@ -3114,58 +3187,203 @@ void HL2Stream::loadTxPowerCal_() {
     applyTxPower_(txDriveLevel_.load(std::memory_order_relaxed));
 }
 
-void HL2Stream::pushIoboardTxFreq(bool force) {
-    // Protocol 1 only.  Analog is I2C2 slave 0x1D, five TX-Hz bytes,
-    // whether or not the OC filter checkbox is on.
-    (void)force;
-    if (p2DrivePath_.load(std::memory_order_relaxed))
-        return;
-    // Restart the settle window.  The bytes go out from onIoboardSettle,
-    // after this call and the rest of the band-change (mode, OC) have
-    // returned — not while that setup is still running.
-    ++ioboardEpoch_;
-    ioboardSettleTimer_.start();
+// ---- HL2 IO board (I2C2 0x1D) — plan HL2_IOBOARD_REMEDIATION_PLAN §4 ----
+
+lyra::wire::hl2iob::Inputs HL2Stream::ioboardInputs() const {
+    lyra::wire::hl2iob::Inputs in;
+    const quint32 tx = txFreqHz_.load(std::memory_order_relaxed);
+    in.txHz = tx;
+    in.txInXvtrSlot = xvtrMatchingSlot(static_cast<qint64>(tx)) >= 0;
+    in.rx1Hz = rx1FreqHz_.load(std::memory_order_relaxed);
+    in.rx2Hz = rx2FreqHz_.load(std::memory_order_relaxed);
+    in.subEnabled = subEnabled_.load(std::memory_order_relaxed);
+    in.rxPort = hl2RxPort_.load(std::memory_order_relaxed);
+    in.xvtrPolicy = ioboardXvtrAnalog_;
+    in.sendRxCodes = ioboardSendRxFcodes_;
+    return in;
 }
 
-void HL2Stream::onIoboardSettle() {
+void HL2Stream::publishIoboardState() {
     if (p2DrivePath_.load(std::memory_order_relaxed))
         return;
-    const quint64 hz = txFreqHz_.load(std::memory_order_relaxed);
-    const int epoch = ioboardEpoch_;
-    lyra::wire::request_hl2_ioboard_tx_freq(hz);
-    lyra::wire::enqueue_hl2_ioboard_tx_freq(hz);
-    // Band hops only.  0.25.27 had no analog line, so Mike's log looked
-    // like BYTE0–4 never went out (issue #23).  In-band 1 Hz ticks stay quiet.
-    // Above 54 MHz (2 m xvtr) analog is skipped — J4 stays on last HF PWM.
-    {
-        const unsigned char fc = lyra::wire::hl2_ioboard_rx_fcode(hz);
-        static unsigned char lastFc = 0xFF;
-        if (fc != lastFc) {
-            lastFc = fc;
-            if (lyra::wire::hl2_ioboard_analog_hz(hz)) {
-                qInfo("HL2 TX Hz: I2C2 0x1D BYTE0-4 = %llu Hz (dial RF, fcode %u)",
-                      static_cast<unsigned long long>(hz), unsigned(fc));
-            } else {
-                qInfo("HL2 TX Hz: skip analog BYTE0-4 at %llu Hz (VHF / xvtr; "
-                      "J4 keeps last HF PWM, fcode %u)",
-                      static_cast<unsigned long long>(hz), unsigned(fc));
-            }
+    Q_ASSERT(QThread::currentThread() == thread());
+    namespace iob = lyra::wire::hl2iob;
+    const iob::Inputs in = ioboardInputs();
+    // Transverter membership needs the slot table; until it is attached a
+    // VHF dial would look like HF and poison the held value.
+    if (xvtr_)
+        lastHfTxHz_ = iob::update_last_hf(in, lastHfTxHz_);
+    if (in.txInXvtrSlot)
+        persistLastHfTxHz();   // HF -> transverter transition
+    lyra::wire::hl2iob::publish(iob::compute_snapshot(in, lastHfTxHz_));
+}
+
+void HL2Stream::persistLastHfTxHz() {
+    if (lastHfTxHz_ == lastHfTxHzSaved_)
+        return;
+    QSettings().setValue(QStringLiteral("hw/ioboardLastHfTxHz"),
+                         static_cast<qulonglong>(lastHfTxHz_));
+    lastHfTxHzSaved_ = lastHfTxHz_;
+}
+
+HL2Stream::IoboardStatus HL2Stream::ioboardStatus() const {
+    if (p2DrivePath_.load(std::memory_order_relaxed))
+        return IoboardStatus::Protocol2;
+    if (ioboardForcePresent_)
+        return IoboardStatus::ForcedPresent;
+    if (lyra::wire::hl2iob::running() && lyra::wire::hl2iob::present())
+        return IoboardStatus::Detected;
+    return IoboardStatus::NotDetected;
+}
+
+void HL2Stream::updateIoboardStatus() {
+    const IoboardStatus s = ioboardStatus();
+    if (s == ioboardStatusShown_)
+        return;
+    ioboardStatusShown_ = s;
+    emit ioboardStatusChanged();
+}
+
+void HL2Stream::setIoboardXvtrAnalog(bool onAirRf) {
+    const auto p = onAirRf ? lyra::wire::hl2iob::XvtrPolicy::OnAirRf
+                           : lyra::wire::hl2iob::XvtrPolicy::HoldLastHf;
+    if (p == ioboardXvtrAnalog_)
+        return;
+    ioboardXvtrAnalog_ = p;
+    QSettings().setValue(QStringLiteral("hw/ioboardXvtrAnalog"),
+                         onAirRf ? QStringLiteral("onAirRf")
+                                 : QStringLiteral("holdLastHf"));
+    publishIoboardState();
+    emit ioboardSettingsChanged();
+}
+
+void HL2Stream::setIoboardSendRxFcodes(bool on) {
+    if (on == ioboardSendRxFcodes_)
+        return;
+    ioboardSendRxFcodes_ = on;
+    QSettings().setValue(QStringLiteral("hw/ioboardSendRxFcodes"), on);
+    publishIoboardState();
+    emit ioboardSettingsChanged();
+}
+
+void HL2Stream::setIoboardForcePresent(bool on) {
+    if (on == ioboardForcePresent_)
+        return;
+    ioboardForcePresent_ = on;
+    QSettings().setValue(QStringLiteral("hw/ioboardForcePresent"), on);
+    lyra::wire::hl2iob::set_force_present(on);
+    publishIoboardState();
+    updateIoboardStatus();
+    emit ioboardSettingsChanged();
+}
+
+void HL2Stream::pollIoboardSession() {
+    namespace iob = lyra::wire::hl2iob;
+    if (p2DrivePath_.load(std::memory_order_relaxed) || !iob::running())
+        return;
+    auto report = [this](const QString& msg) {
+        emit logLine(msg);
+        qWarning().noquote() << msg;
+    };
+    if (!iobPresentReported_) {
+        if (iob::force_present()) {
+            iobPresentReported_ = true;
+            report(QStringLiteral("[iob] IO board forced present — detection skipped"));
+        } else if (iob::present()) {
+            iobPresentReported_ = true;
+            const iob::Inputs in = ioboardInputs();
+            const iob::Snapshot s = iob::unpack(iob::published());
+            const bool held = s.sendTx && in.txInXvtrSlot
+                && in.xvtrPolicy == iob::XvtrPolicy::HoldLastHf;
+            const QString tx = !s.sendTx ? QStringLiteral("none")
+                : held ? QStringLiteral("held %1").arg(s.txHz)
+                       : QString::number(s.txHz);
+            report(QStringLiteral(
+                "[iob] IO board detected at 0x41 (PCA9536 0x%1) — sending 0x1D "
+                "every ≈346 ms: TX %2 Hz (%3), REG11 %4, REG13/14 %5")
+                .arg(unsigned(iob::last_reply_c4()), 2, 16, QLatin1Char('0'))
+                .arg(tx,
+                     in.xvtrPolicy == iob::XvtrPolicy::HoldLastHf
+                         ? QStringLiteral("hold last HF")
+                         : QStringLiteral("on-air RF"),
+                     s.reg11Alt ? QStringLiteral("2 (Alt RX)")
+                                : QStringLiteral("0 (RF1)"),
+                     s.sendRxCodes ? QStringLiteral("on")
+                                   : QStringLiteral("off")));
+        } else if (!iobAbsentReported_ && iob::probes_sent() >= 3) {
+            iobAbsentReported_ = true;
+            report(QStringLiteral(
+                "[iob] IO board not detected (0x41 did not answer) — 0x1D not "
+                "written; probing every 1.7 s, then every 30 s"));
         }
     }
-    // Second copy.  BYTE0 on the wire is not a Pico latch.  One missed
-    // burst used to stick the previous band until a different frequency
-    // was written.  A newer band click bumps ioboardEpoch_ and this
-    // copy is dropped.
-    QTimer::singleShot(80, this, [this, hz, epoch]() {
-        if (ioboardEpoch_ != epoch)
-            return;
-        if (p2DrivePath_.load(std::memory_order_relaxed))
-            return;
-        if (txFreqHz_.load(std::memory_order_relaxed) != hz)
-            return;
-        lyra::wire::request_hl2_ioboard_tx_freq(hz);
-        lyra::wire::enqueue_hl2_ioboard_tx_freq(hz);
-    });
+    // Stale-snapshot detector: reports, never repairs (one writer only).
+    const std::uint64_t expected =
+        iob::compute_snapshot(ioboardInputs(), lastHfTxHz_);
+    const std::uint64_t published = iob::published();
+    if (expected == published) {
+        iobStaleReported_ = 0;
+    } else if (iobStaleReported_ != expected) {
+        iobStaleReported_ = expected;
+        report(QStringLiteral("[iob] snapshot stale: published 0x%1 expected 0x%2")
+                   .arg(published, 16, 16, QLatin1Char('0'))
+                   .arg(expected, 16, 16, QLatin1Char('0')));
+    }
+}
+
+void HL2Stream::drainIoboardRecords() {
+    namespace iob = lyra::wire::hl2iob;
+    if (p2DrivePath_.load(std::memory_order_relaxed))
+        return;
+    iob::set_log_verbose(lyra::ui::LogBuffer::instance().verbose());
+    iob::Record r;
+    while (iob::pop_record(r)) {
+        const double ms = static_cast<double>(r.t_ns) / 1.0e6;
+        QString line;
+        switch (static_cast<iob::RecKind>(r.kind)) {
+        case iob::RecKind::Latch: {
+            const iob::Snapshot s = iob::unpack(r.word);
+            const QString dash = QStringLiteral("-");
+            line = QStringLiteral("[iob] t=%1 c=%2 latch tx=%3 r11=%4 f13=%5 f14=%6 armed=%7")
+                .arg(ms, 0, 'f', 1).arg(r.cycle)
+                .arg(s.valid && s.sendTx ? QString::number(s.txHz) : dash)
+                .arg(s.valid ? QString::number(unsigned(iob::reg11_value(r.word))) : dash)
+                .arg(s.valid && s.sendRxCodes ? QString::number(unsigned(s.fcode13)) : dash)
+                .arg(s.valid && s.sendRxCodes ? QString::number(unsigned(s.fcode14)) : dash)
+                .arg(unsigned(r.reg));
+            break;
+        }
+        case iob::RecKind::Write:
+            line = QStringLiteral("[iob] t=%1 c=%2 s=%3 W reg=%4 val=0x%5")
+                .arg(ms, 0, 'f', 1).arg(r.cycle).arg(unsigned(r.slot)).arg(unsigned(r.reg))
+                .arg(unsigned(r.val), 2, 16, QLatin1Char('0'));
+            break;
+        case iob::RecKind::Read:
+            line = QStringLiteral("[iob] t=%1 c=%2 s=1 R 0x41 reg=0")
+                .arg(ms, 0, 'f', 1).arg(r.cycle);
+            break;
+        case iob::RecKind::Slip:
+            line = QStringLiteral("[iob] t=%1 slip s=%2 f0=%3 pf1=%4")
+                .arg(ms, 0, 'f', 1).arg(unsigned(r.slot)).arg(int(r.f0)).arg(int(r.pf1));
+            break;
+        case iob::RecKind::Restart:
+            line = QStringLiteral("[iob] t=%1 restart at s=%2")
+                .arg(ms, 0, 'f', 1).arg(unsigned(r.slot));
+            break;
+        case iob::RecKind::Reply:
+            line = QStringLiteral("[iob] reply 0x41: %1 %2 %3 %4 → %5")
+                .arg(unsigned((r.word >> 24) & 0xFF), 2, 16, QLatin1Char('0'))
+                .arg(unsigned((r.word >> 16) & 0xFF), 2, 16, QLatin1Char('0'))
+                .arg(unsigned((r.word >> 8) & 0xFF), 2, 16, QLatin1Char('0'))
+                .arg(unsigned(r.word & 0xFF), 2, 16, QLatin1Char('0'))
+                .arg(r.val ? QStringLiteral("present") : QStringLiteral("absent"));
+            break;
+        }
+        if (!line.isEmpty())
+            qInfo().noquote() << line;
+    }
+    if (const std::uint32_t n = iob::take_dropped_records())
+        qInfo("[iob] %u records dropped", n);
 }
 
 void HL2Stream::setHl2RxPort(int port) {
@@ -3173,47 +3391,8 @@ void HL2Stream::setHl2RxPort(int port) {
     const int prev = hl2RxPort_.exchange(v, std::memory_order_relaxed);
     if (prev == v)
         return;
-    // Only when the SMA mux actually changes.  HF hops that stay on
-    // RF1 must not add I2C2 traffic next to the analog BYTE0–4 burst
-    // (Randy GPA100 / issue #17).
-    pushHl2RxPort();
+    publishIoboardState();
     emit hl2RxPortChanged();
-}
-
-void HL2Stream::pushHl2RxPort() {
-    if (p2DrivePath_.load(std::memory_order_relaxed))
-        return;
-    const unsigned char v = static_cast<unsigned char>(
-        hl2RxPort_.load(std::memory_order_relaxed) == 2 ? 2 : 0);
-    lyra::wire::enqueue_hl2_ioboard_rf_input(v);
-    qInfo("HL2 RX port: I2C2 0x1D register 11 = %u (%s) — analog BYTE0–4 not written",
-          unsigned(v), v == 2 ? "Alt RX" : "RF1");
-}
-
-void HL2Stream::pushIoboardRxFcodes() {
-    // deskHPSDR REG_FCODE_RX1/RX2.  K7MDL Pico GPIO follows rx_band
-    // in receive.  Analog BYTE0–4 and REG 11 are not on this path.
-    // Kill switch: LYRA_NO_IOBOARD_FCODE=1 skips 13/14 only (GPA100
-    // J4 analog and RF1/Alt stay).  Full return: reinstall v0.25.27.
-    if (qEnvironmentVariableIntValue("LYRA_NO_IOBOARD_FCODE") != 0)
-        return;
-    if (p2DrivePath_.load(std::memory_order_relaxed))
-        return;
-    const quint32 rx1 = rx1FreqHz_.load(std::memory_order_relaxed);
-    const unsigned char c1 = lyra::wire::hl2_ioboard_rx_fcode(rx1);
-    unsigned char c2 = c1;
-    if (subEnabled_.load(std::memory_order_relaxed))
-        c2 = lyra::wire::hl2_ioboard_rx_fcode(
-            rx2FreqHz_.load(std::memory_order_relaxed));
-    lyra::wire::enqueue_hl2_ioboard_rx_fcodes(c1, c2);
-    static unsigned char lastC1 = 0xFF;
-    static unsigned char lastC2 = 0xFF;
-    if (c1 != lastC1 || c2 != lastC2) {
-        lastC1 = c1;
-        lastC2 = c2;
-        qInfo("HL2 RX fcode: I2C2 0x1D register 13=%u 14=%u (RX1 dial %u Hz) — analog BYTE0-4 not written",
-              unsigned(c1), unsigned(c2), unsigned(rx1));
-    }
 }
 
 double HL2Stream::paGainForBand(int idx) const {

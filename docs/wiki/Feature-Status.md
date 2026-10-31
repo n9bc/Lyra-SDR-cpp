@@ -1,20 +1,27 @@
 # Feature Status
 
 Where Lyra stands today. Everything marked ✅ is shipped and working in
-**v0.25.32 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
+**v0.25.34 Sheliak** on the **Hermes Lite 2 / 2+** (Protocol 1) and
 **BrickSDR2 / Brick3SDR** (Protocol 2), unless a row says otherwise.
-**v0.25.32** is J4 analog-first, a Protocol 2 PureSignal replica
-tightening, and STD on Settings → Apps, on top of v0.25.31.
-**v0.25.31 Sheliak** is the previous public build.
+**v0.25.34** reworks the HL2 **IO board** (N2ADR HL2IOBoard Pico, I2C
+0x1D) path on Protocol 1: periodic re-send sequencer like deskHPSDR,
+board detection at 0x41 with **Force IO board present**, **Transverter
+bands send** policy, **Send RX frequency codes** checkbox. Protocol 2
+unchanged.
+**v0.25.33 Sheliak** is the previous public build (stability upgrade
+for Protocol 2 — coming from ≤0.25.31, **turn Drive down and walk it
+up before your first TX on a P2 radio**).
 **v0.25.22** remains the long return point.
 
 > **Legend:** ✅ working now · 🚧 in progress · 🗺️ planned (see [Roadmap](Roadmap))
 
-### Last several builds (0.25.16 → 0.25.32)
+### Last several builds (0.25.16 → 0.25.34)
 
 | Build | What landed |
 |---|---|
-| **0.25.32** | J4 analog-first (BYTE0 before fcodes; skip analog want >54 MHz). PureSignal P2 replica tightening (radio TX-DAC when present, host DUC if empty — not Desk-identical on Brick2 until D1 on B2/Greg). Settings → Apps recommended: **STD**. **v0.25.31** is the previous public build |
+| **0.25.34** | **HL2 IO board sequencer** (Protocol 1). Registers 0–4 / 11 / 13 / 14 re-sent from one latched snapshot every ~0.35 s (11 slots × 12 EP2 datagrams, deskHPSDR model); IO frames in the second USB frame, slip one datagram next to gateware case 0 / 10. Band hop → reg-4 commit ≈ 0.2 s. **Detection** via PCA9536 at 0x41 (10 × ~1.7 s, then ~30 s); 0x1D written only once it answers. Settings → Filters / BCD → **IO board**: Status, **Transverter bands send** (Hold last HF / On-air RF), **Send RX frequency codes (13 / 14)** (replaces `LYRA_NO_IOBOARD_FCODE`), **Force IO board present**. REG 11 only 0 / 2; never 0 Hz. Verbose `[iob]` log. Fixes mixed-byte TX Hz, REG 11 stuck after 2 m → HF, RF1 / Alt not sticking, J4 not following. Xvtr / SWL OC rows still queued. **v0.25.33** is the previous public build |
+| **0.25.33** | **Stability upgrade — recommended for all Protocol 2 radios.** P2 TX IQ back at unity (Drive was applied twice since 0.25.16; PureSignal now calibrates at normal drive on Brick2 / Brick3; **same Drive slider = more RF, about +8 dB at 40 % — turn Drive down and walk it up, re-run TUN per band**). CTUN on P2 locks the pan like P1. J4 analog-first (BYTE0 before fcodes; no analog want >54 MHz). PS at 48 kHz on P2. Settings → Apps recommended: **STD**. Experimental PS host-reference path removed. HL2 / P1 unchanged. **v0.25.31** is the previous public build |
+| 0.25.32 | *Tagged, never released* (PureSignal host-replica regression). Its J4 analog-first and STD items shipped in 0.25.33 |
 | **0.25.31** | Minor PureSignal changes for Protocol 2 (FB auto-att; PS ON turns ATT-on-TX on). **v0.25.30** is the previous public build |
 | **0.25.30** | Pico **J4** band volts for Xiegu / XPA125 / Micro PA50. J3 Band Volts stays off. **`LYRA_NO_IOBOARD_FCODE=1`** how-to (set and delete). CW keyer = KEY jack + COM CWX. **v0.25.29** is the previous public build |
 | **0.25.29** | **OC on P2 `[1401]`**, per-rig Off/N2ADR/Custom, empty Xvtr OC rows. No auto Yaesu on the radio DB9. USB-BCD FTDI unchanged. Parked Help balloon. P1 6 m hide. PS/Amp View float size. **v0.25.28** is the previous public build |
@@ -50,7 +57,7 @@ tightening, and STD on Settings → Apps, on top of v0.25.31.
 - ✅ Graphics **crash ladder** (OpenGL → software, MSAA off on software) so a bad GPU driver does not leave Lyra with no window
 - ✅ **MSAA** picker **Off / 2× / 4× / 8×** (Settings → Visuals; default 4×; restart)
 - ✅ **Xvtr** band chips — RF dial (ten-digit LED, ~2.147 GHz), IF NCO, Disable PA default on; Shift+click SUB hop; right-click slot editor. Per-chip LNA (HL2) / ATT (P2) / last mode. Protocol 1 **RF1 vs Alt RX** per chip (I2C 0x1D register 11; analog BYTE0–4 unchanged for GPA100). Band-plan **region does not rewrite** slot MHz — set RF low/high/LO for your allocation. Station table: [User Guide → Which Hermes Lite station is mine?](User-Guide#which-hermes-lite-station-is-mine).
-- ✅ HL2 **N2ADR / IO board** — OC LPF (I2C **0x20**) is the **Enable N2ADR / IO board** checkbox. Filter-board follow is always Protocol 1 TX frequency on I2C **0x1D**, not gated on that box. **v0.25.20 / #17:** a return to a band already on the dial is written again. Leave **Band Volts on J3** off unless the amp is on the fan header.
+- ✅ HL2 **N2ADR / IO board** — OC LPF (I2C **0x20**) is the **Enable N2ADR / IO board** checkbox. The Pico **IO board** (I2C **0x1D**: TX Hz regs 0–4 for J4 band volts, REG 11 RF1 / Alt, RX codes 13 / 14) is **not** gated on that box: since **v0.25.34** it is written every ~0.35 s from a latched snapshot (deskHPSDR model) **once the board is detected at 0x41**, or when **Force IO board present** is ticked (DIY Pico without PCA9536). **Transverter bands send** holds the last HF frequency by default so a J4 band-volts amp does not hop on a 2 m chip. Settings → Filters / BCD → IO board; [User Guide → HL2 IO board](User-Guide#hl2-io-board-hl2ioboard-pico-i2c-0x1d). Leave **Band Volts on J3** off unless the amp is on the fan header.
 - ✅ **OC Control** — Settings → **Filters / BCD**: HF J16 RX/TX pins (Thetis/DeskHPSDR: emit the ticks you set; no auto Yaesu on the radio DB9), named Xvtr rows (empty = pins off), optional USB-BCD FTDI, J3 fan vs analog. Analog BYTE0–4 / REG 11 untouched. Do not add a second tab.
 
 ## Receive (RX)
@@ -77,7 +84,7 @@ tightening, and STD on Settings → Apps, on top of v0.25.31.
 - ✅ TX power / drive, separate **tune drive**, AM carrier level, mic gain + **20 dB mic boost**; Protocol 2 uses analog drive (HP [345]) plus per-band **PA Gain / Full Output / CAP**, including a dedicated **11m** slot
 - ✅ **Separate RX and TX filter lows** (current build) — **RX lo** under **RX BW**, **TX lo** under **TX BW** on the Filters dock (also Settings → Audio). **0–500 Hz**. The lock keeps them equal; unlock and a profile can hold different lows. Older profiles copy the old shared low onto both sides.
 - ✅ Always-on **ALC** + operator **Leveler**, **PHROT** phase rotator
-- ✅ **PureSignal** — adaptive TX predistortion (HL2 / HL2+ coupler mod; BrickSDR2 ADC0 pad; Brick3 rear **PS** jack). Compact dock: ON / 2-tone / **Voice** / ATT / FB / Reset. Engine chips (st / cal / D0 / D1) on **Amp View**. Auto-att persisted **per TX band** (v0.25.16). Attestation in Settings → TX (default off). **v0.25.32** P2 replica tightening: radio TX-DAC when the odd samples have energy, host DUC tap if those samples are empty. Not Desk-identical PS on Brick2 until D1 moves on B2 / Greg.
+- ✅ **PureSignal** — adaptive TX predistortion (HL2 / HL2+ coupler mod; BrickSDR2 ADC0 pad; Brick3 rear **PS** jack). Compact dock: ON / 2-tone / **Voice** / ATT / FB / Reset. Engine chips (st / cal / D0 / D1) on **Amp View**. Auto-att persisted **per TX band** (v0.25.16). Attestation in Settings → TX (default off). **v0.25.33**: Protocol 2 TX IQ stays at unity (watts on the analog drive byte only), so PureSignal calibrates at normal operating drive on Brick2 / Brick3; the reference is the radio's own TX-DAC replica. Same Drive slider now makes more RF on P2 than 0.25.16–0.25.31 — turn Drive down and walk it up.
 - ✅ **Waterfall callsign ID** — paints your call in the SSB passband (ham bands only)
 
 ### Native TX audio rack (studio-in-the-radio)

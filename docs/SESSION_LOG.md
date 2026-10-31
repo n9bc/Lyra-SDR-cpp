@@ -4,7 +4,56 @@ Running EOD log. Newest entry on top. Short rough-outline format.
 
 ---
 
-## 2026-10-29 — v0.25.32 Sheliak RELEASED
+## 2026-10-31 — v0.25.34 Sheliak RELEASED (HL2 IO board sequencer)
+
+HL2 IO board (N2ADR HL2IOBoard Pico, I2C 0x1D) rework, Protocol 1
+only. `f6eb10f` standalone slot sequencer module + frame harness,
+`bf04ef4` hl2_stream switched to the periodic sequencer (write-on-change
+I2C path removed from FrameComposer), `b0289d1` Settings → Filters /
+BCD → IO board group (Transverter bands send, Send RX fcodes, Force
+present, Status line), C3b verbose `[iob]` gate armed at open + 0x41
+warning wording. deskHPSDR model: 11 slots × 12 EP2 datagrams
+(~31.5 ms / slot, ~346 ms / cycle); slot 0 latch, 1 probe 0x41, 2–6
+regs 0–4, 7 REG 11, 8–9 regs 13/14; second-USB-frame placement with a
+one-datagram slip next to gateware case 0 / 10 frames; restart on a
+changed snapshot. Detection: PCA9536 at 0x41, 10 probes at ~1.7 s then
+~30 s. REG 11 only 0 / 2; never 0 Hz. `LYRA_NO_IOBOARD_FCODE` retired.
+Bench on N8SDR HL2+ (no IO board): zero 0x1D traffic absent, forced
+capture correct, restart / power-cycle / live force / fast hops clean,
+Brick3 P2 + PS TX no IO-board activity. Pico-side confirmation from
+testers (K7MDL / W7CPA / DL1VE). Xvtr / SWL OC rows still queued.
+Tag `v0.25.34`. `main` untouched. Mac stays `macos-port`.
+
+## 2026-10-30 — v0.25.33 Sheliak RELEASED (stability upgrade)
+
+Ships the P2 unity-IQ fix below plus `2ae5848` CTUN pan lock on P2,
+`54afb17` J4 analog-first and STD on Apps (both carried from the
+v0.25.32 tag), `12cd393` PS at 48 kHz. Framed operator-facing as a
+stability upgrade recommended for all Protocol 2 radios; drive warning
+(+8 dB at 40 %, +10 dB at 30 %, TUN included; walk Drive up; re-run TUN
+per band) is mandatory in the release body. Star name stays Sheliak
+(series name since 0.25.0). `v0.25.32` tag (`9be343a`) left in place,
+unpublished — that build carried the host-DUC PS replica regression.
+UNRELEASED-ps-p2-unity-iq.md folded into `docs/releases/v0.25.33.md`.
+Tag `v0.25.33`. Do not merge `main`. Mac stays `macos-port`.
+
+## 2026-10-30 — P2 PureSignal root cause: TX IQ scaled with Drive
+
+Four audits agree (docs/PS_P2_REGRESSION_REPORT.md): ac3ad57 (v0.25.16)
+made `SetTXFixedGain(0, rv, rv)` unconditional, so P2 applied Drive
+twice (IQ × HP [345]); the TX-DAC replica followed the IQ and never
+reached SetPk below full drive → st 4, FB 0, cal 0, auto-att pad → 0
+(Greg / Brick2). Three code commits on `feature/wdsp-2.10`:
+`e95b135` P2 IQ at unity (tx/TxDriveSplit.h + test_tx_drive_split, P1
+unchanged, one-shot per-rig cap-ceiling reset `p2/psUnityIqCapResetV1`);
+`a278e9b` revert 94e5056 host DUC tap + `+3` DDC byte; `12cd393`
+iqSampleScale() 1.0 while PS live. No version bump, no tag, no DEV
+rebuild — Rick reads the diff first. Operator warning: same Drive
+position = more RF on P2 (~+8 dB at 40 %). Pre-existing test rot
+noted: test_p2_tx_packets.cpp no longer matches the P2TxWriter API;
+test_p2_g2_profile has a stale "7000DLE profile-locked" assertion.
+
+## 2026-10-29 — v0.25.32 Sheliak tagged (NEVER RELEASED — PS replica regression; superseded by v0.25.33)
 
 J4 analog-first (BYTE0 before fcodes; skip analog want >54 MHz).
 PureSignal P2 replica tightening: radio TX-DAC when odd samples have
