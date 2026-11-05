@@ -387,7 +387,6 @@ Rectangle {
                 Layout.preferredWidth: 50
                 chipActive: false
                 onClicked: {
-                    Gen.deactivate()
                     var msg = Time.cycleNext()
                     if (msg !== "") Status.show(msg, 2500)
                 }

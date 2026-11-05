@@ -45,6 +45,11 @@ int bandIndexForFreq(int hz);
 // out-of-band frequencies in different gaps between bands.  Moves within
 // one gap (e.g. tuning around WWV 10 MHz) do not cross.
 bool bandJumpCrosses(int fromHz, int toHz);
+// Same rule, plus transverter identity: everything above 6 m is one dial
+// region, so a jump between Xvtr slots (2 m -> 70 cm), or into / out of a
+// slot's range, crosses when the matching slot index differs (-1 = none).
+// A slot change re-selects the Xvtr OC masks and LO like a band change.
+bool bandJumpCrosses(int fromHz, int toHz, int fromXvtrSlot, int toXvtrSlot);
 // Index of the broadcast band whose [low,high] contains hz, else -1.
 int broadcastBandIndexForFreq(int hz);
 // Index of the CB band whose [low,high] contains hz, else -1.

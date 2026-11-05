@@ -2149,8 +2149,7 @@ bool HL2Stream::refuseTxBandJump(quint32 fromHz, quint32 toHz) {
         return false;
     if (!txDisplayActive_)
         return false;
-    if (!lyra::bandJumpCrosses(static_cast<int>(fromHz),
-                               static_cast<int>(toHz)))
+    if (!txJumpCrosses(fromHz, toHz))
         return false;
     // Same rule as the one-click jumps (txBlocksJumpFrom): refuse and
     // un-key.  A dial or wheel keeps writing while TX winds down, so only
@@ -2567,9 +2566,15 @@ bool HL2Stream::txBlocksVfoBJump(quint32 targetHz) {
 
 bool HL2Stream::txBlocksJumpFrom(quint32 fromHz, quint32 targetHz) {
     if (!txDisplayActive_) return false;
-    if (!lyra::bandJumpCrosses(int(fromHz), int(targetHz))) return false;
+    if (!txJumpCrosses(fromHz, targetHz)) return false;
     stopTxForBlockedJump();
     return true;
+}
+
+bool HL2Stream::txJumpCrosses(quint32 fromHz, quint32 toHz) const {
+    return lyra::bandJumpCrosses(int(fromHz), int(toHz),
+                                 xvtrMatchingSlot(qint64(fromHz)),
+                                 xvtrMatchingSlot(qint64(toHz)));
 }
 
 void HL2Stream::stopTxForBlockedJump() {

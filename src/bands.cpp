@@ -56,6 +56,10 @@ bool bandJumpCrosses(int fromHz, int toHz) {
     return bandRegionForFreq(fromHz) != bandRegionForFreq(toHz);
 }
 
+bool bandJumpCrosses(int fromHz, int toHz, int fromXvtrSlot, int toXvtrSlot) {
+    return fromXvtrSlot != toXvtrSlot || bandJumpCrosses(fromHz, toHz);
+}
+
 const std::vector<Band> &broadcastBands() {
     // Shortwave broadcast meter bands, matching old Lyra BROADCAST_BANDS.
     static const std::vector<Band> kBc = {

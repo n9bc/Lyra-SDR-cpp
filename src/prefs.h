@@ -923,8 +923,6 @@ private:
     int     fixedTuneDrivePct_ = 25;
     // Task #75 — TCI RX-out gain (dB); default 0 = unity.
     double  tciRxGainDb_ = 0.0;
-    // Task #108 — symmetric INBOUND TCI gain (MSHV → Lyra TXA).
-    // Default 0 dB = unity = byte-identical to pre-#108 behaviour.
     QByteArray remotePwSalt_;
     QByteArray remotePwHash_;
     int     remotePwIters_ = 0;

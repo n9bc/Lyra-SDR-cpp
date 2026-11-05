@@ -975,8 +975,9 @@ public:
     bool    txDisplayActive() const { return txDisplayActive_; }
     // One-click jumps (GEN/TIME/Mem/XVTR, band-plan markers) call this with
     // the target frequency.  True = ignore the jump: we are transmitting and
-    // it would leave the current amateur band (a band change re-selects
-    // filters / OC outputs / PA band under power).  Same-band jumps pass.
+    // it would leave the current amateur band or Xvtr slot (a band change
+    // re-selects filters / OC outputs / PA band / Xvtr LO under power).
+    // Same-band jumps pass.
     // A blocked jump also stops the transmission (stopTxForBlockedJump).
     // Compares against RX1, or RX2 when `sub`.  Emits txBandChangeBlocked().
     Q_INVOKABLE bool txBlocksBandJump(quint32 targetHz, bool sub = false);
@@ -2126,6 +2127,9 @@ private:
     // un-key through stopTxForBlockedJump — the backstop for writes the
     // one-click guards (txBlocksBandJump / txBlocksVfoBJump) never see.
     bool refuseTxBandJump(quint32 fromHz, quint32 toHz);
+    // The crossing rule both TX guards share: amateur-band region or Xvtr
+    // slot changes (lyra::bandJumpCrosses with slot identity).
+    bool txJumpCrosses(quint32 fromHz, quint32 toHz) const;
     // Writes the RX DDC NCOs from rx1FreqHz_ + (ritEnabled ? ritOffsetHz : 0)
     // — the single RX-NCO writer, mirror of pushEffectiveTxFreq.  Called by
     // setRx1FreqHz (every dial gesture) and the RIT setters.

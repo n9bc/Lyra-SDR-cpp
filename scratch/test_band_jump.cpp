@@ -36,6 +36,13 @@ int main()
     check("just below low edge (13.999999)",    bandJumpCrosses(14200000, 13999999), true);
     check("just above high edge (14.350001)",   bandJumpCrosses(14200000, 14350001), true);
     check("transverter 144 MHz from 20m",       bandJumpCrosses(14200000, 144200000), true);
+    // Xvtr slot identity (-1 = no slot).  Above 6 m the dial is one region,
+    // so only the slot index tells 2 m from 70 cm.
+    check("xvtr same slot (2m 144.2 -> 145.5)",  bandJumpCrosses(144200000, 145500000, 0, 0), false);
+    check("xvtr slot -> slot (2m -> 70cm)",      bandJumpCrosses(144200000, 432100000, 0, 1), true);
+    check("xvtr slot -> no slot (2m -> 150 MHz)", bandJumpCrosses(144200000, 150000000, 0, -1), true);
+    check("no slot, same band (20m)",            bandJumpCrosses(14074000, 14200000, -1, -1), false);
+    check("no slot, band change (20m -> 40m)",   bandJumpCrosses(14200000, 7100000, -1, -1), true);
 
     std::printf(g_failures ? "FAILED (%d)\n" : "ALL PASS (0 failures)\n", g_failures);
     return g_failures ? 1 : 0;

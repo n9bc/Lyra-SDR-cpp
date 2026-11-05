@@ -133,6 +133,7 @@ Rectangle {
         }
     }
     function applySplitShift(hz) {
+        Stream.setRptActive(false)   // operator shift replaces any RPT offset
         Stream.setVfoBHz(root.aCarrierHz() + hz)
         Stream.setSplitEnabled(true)
         Stream.setFocusedRx(2)

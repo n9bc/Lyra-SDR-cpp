@@ -4215,7 +4215,8 @@ A compact strip showing current **HF propagation** conditions from
   one-click jumps (GEN, TIME, Mem recall, XVTR chips, DX spot labels, and the
   band-plan, CB and broadcast markers on the panadapter) are blocked the same way only when
   they would **leave the current amateur band**; a jump within the same band
-  still works. The same rule covers the VFO itself: the **1→2**, **2→1** and
+  still works. Moving from one transverter slot to another (2 m to 70 cm, say),
+  or into or out of a slot's range, counts as leaving the band too. The same rule covers the VFO itself: the **1→2**, **2→1** and
   **⇄** (copy/swap) buttons and a typed frequency are refused, and transmit
   stops, if they would move VFO A — or VFO B while it is live (SPLIT or SUB) —
   out of its band.
