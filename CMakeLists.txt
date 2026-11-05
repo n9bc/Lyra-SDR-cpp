@@ -18,7 +18,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Lyra
-    VERSION 0.25.34
+    VERSION 0.25.36
     DESCRIPTION "Lyra Sheliak — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
     LANGUAGES CXX)
 
@@ -1227,6 +1227,14 @@ enable_testing()
 add_test(NAME hl2_ioboard_publish_paths_static
          COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR}/src
                  -P ${CMAKE_SOURCE_DIR}/scratch/hl2_ioboard_publish_paths.cmake)
+
+# OC SWL rows — the broadcast J16 rows are stamped only by the explicit
+# N2ADR accessory pick, never by the first-run / rig-switch default, and
+# their TX seed is 0.  Static body scan of hl2_stream.cpp + OcControl.cpp.
+#   ctest --test-dir build -R oc_swl_seed_paths_static
+add_test(NAME oc_swl_seed_paths_static
+         COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR}/src
+                 -P ${CMAKE_SOURCE_DIR}/scratch/oc_swl_seed_paths.cmake)
 
 # TX band-jump rule (src/bands.h bandJumpCrosses): a jump that leaves the
 # current amateur band is refused while transmitting.  Qt Core only;

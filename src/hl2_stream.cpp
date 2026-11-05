@@ -338,6 +338,14 @@ HL2Stream::HL2Stream(QObject *parent) : QObject(parent) {
     if (splitEnabled_.load(std::memory_order_relaxed))
         txFreqHz_.store(vfoBHz_.load(std::memory_order_relaxed),
                         std::memory_order_relaxed);
+    // RPT-vs-operator split.  Only meaningful while split is on.  A
+    // persisted split from before this key existed has no flag: it is
+    // NOT inferred (defaults false) and behaves as operator split until
+    // the operator clicks it off.
+    rptActive_.store(
+        splitEnabled_.load(std::memory_order_relaxed)
+            && QSettings().value(QStringLiteral("tx/rptActive"), false).toBool(),
+        std::memory_order_relaxed);
     // SUB / RX2 — default OFF (zero extra DSP; DDC1 mirrors RX1).
     subEnabled_.store(
         QSettings().value(QStringLiteral("rx/subEnabled"), false).toBool(),
@@ -1528,6 +1536,7 @@ void HL2Stream::open(const QString &ip) {
     iobPresentReported_ = false;
     iobAbsentReported_ = false;
     iobStaleReported_ = 0;
+    iobFollowBReported_ = false;
     if (!p2DrivePath_.load(std::memory_order_relaxed)) {
         lyra::wire::hl2iob::init_for_open(ioboardForcePresent_);
         // Arm the record gate now so cycle-0 records (latch/probe/regs 0-3) are
@@ -2157,14 +2166,47 @@ bool HL2Stream::refuseTxBandJump(quint32 fromHz, quint32 toHz) {
 
 void HL2Stream::setRx1FreqHz(quint32 hz) {
     const quint32 prev = rx1FreqHz_.load(std::memory_order_relaxed);
-    // Simplex: VFO A is TX.  SPLIT: A is RX-only; B carries TX.
-    if (!splitEnabled_.load(std::memory_order_relaxed)
+    // Simplex: VFO A is TX.  SPLIT: A is RX-only; B carries TX.  RPT
+    // split counts as simplex here: a band jump would drop RPT (below)
+    // and move TX with it, so refuse it while keyed like simplex does.
+    if ((!splitEnabled_.load(std::memory_order_relaxed)
+         || rptActive_.load(std::memory_order_relaxed))
         && refuseTxBandJump(prev, hz))
         return;
     if (prev == hz)
         return;
     rx1FreqHz_.store(hz, std::memory_order_relaxed);
     QSettings().setValue(QStringLiteral("rx/freqHz"), hz);
+    // RPT offset drops on a band-edge crossing (DL1VE, v0.25.34): a 2 m
+    // repeater offset must never ride along to HF as a stale VFO B.
+    // Band identity = Xvtr slot or ham/BC/CB table entry (BandMemory's
+    // applyBand notion); tuning inside one band / one gap never fires.
+    // Reference apps: Thetis keeps the offset per TX band and FM-gates
+    // it; deskHPSDR turns split off and copies A→B on a band change.
+    // Operator SPLIT (rptActive false) is deliberately left alone.
+    // Runs BEFORE the NCO pushes so the TX recompute below already sees
+    // split off — one TX write + one IO-board word for this tune.
+    if (rptActive_.load(std::memory_order_relaxed)) {
+        const QString leftBand = bandIdFor(prev);
+        if (leftBand != bandIdFor(hz)) {
+            const quint32 oldB = vfoBHz_.load(std::memory_order_relaxed);
+            setSplitEnabled(false);          // also clears rptActive_
+            setVfoBHz(hz);                   // A→B: VFO B lands on the new band
+            QString shown = leftBand;
+            if (shown.startsWith(QLatin1String("xvtr:")) && xvtr_)
+                shown = xvtr_->slotName(shown.mid(5).toInt());
+            else if (shown.startsWith(QLatin1String("bc_"))
+                     || shown.startsWith(QLatin1String("cb_")))
+                shown = shown.mid(3);
+            if (shown.isEmpty())
+                shown = QStringLiteral("band");
+            safetyLog(QStringLiteral(
+                "TX: RPT off — RX1 left %1 on a band change; SPLIT off, "
+                "VFO B -> %2 Hz (was %3 Hz)")
+                          .arg(shown).arg(hz).arg(oldB));
+            emit rptDropped(shown);
+        }
+    }
     // NCOs first, then notify.  Protocol 2 mirrors DUC from txFreqHz_
     // on rx1FreqChanged — if that fires before pushEffectiveTxFreq,
     // TX stays on the previous dial (start is correct; any later VFO
@@ -2446,6 +2488,11 @@ void HL2Stream::setSplitEnabled(bool on) {
     if (prev == on)
         return;
     QSettings().setValue(QStringLiteral("tx/splitEnabled"), on);
+    // Split off (SPLIT button, RPT button, A/B pip, memory, CAT/TCI, desk,
+    // band-change drop) always ends the RPT reason — the next split-on is
+    // operator split unless the RPT path re-marks it.
+    if (!on)
+        setRptActive(false);
     if (!on && !subEnabled_.load(std::memory_order_relaxed)
         && focusedRx_.load(std::memory_order_relaxed) != 1) {
         focusedRx_.store(1, std::memory_order_relaxed);
@@ -2469,6 +2516,20 @@ void HL2Stream::setSplitEnabled(bool on) {
         pushEffectiveRxFreq();
     }
     publishIoboardState();
+}
+
+void HL2Stream::setRptActive(bool on) {
+    if (rptActive_.exchange(on, std::memory_order_relaxed) == on)
+        return;
+    QSettings().setValue(QStringLiteral("tx/rptActive"), on);
+    emit rptActiveChanged();
+}
+
+QString HL2Stream::bandIdFor(quint32 rfHz) const {
+    const int xv = xvtrMatchingSlot(static_cast<qint64>(rfHz));
+    if (xv >= 0)
+        return QStringLiteral("xvtr:%1").arg(xv);
+    return lyra::ui::BandMemory::bandNameFor(static_cast<int>(rfHz));
 }
 
 void HL2Stream::setVfoBHz(quint32 hz) {
@@ -3288,7 +3349,13 @@ void HL2Stream::pollIoboardSession() {
     if (!iobPresentReported_) {
         if (iob::force_present()) {
             iobPresentReported_ = true;
-            report(QStringLiteral("[iob] IO board forced present — detection skipped"));
+            const iob::Snapshot s = iob::unpack(iob::published());
+            report(QStringLiteral(
+                "[iob] IO board forced present — detection skipped: TX %1 Hz, REG11 %2")
+                .arg(s.sendTx ? QString::number(qulonglong(s.txHz))
+                              : QStringLiteral("none"),
+                     s.reg11Alt ? QStringLiteral("2 (Alt RX)")
+                                : QStringLiteral("0 (RF1)")));
         } else if (iob::present()) {
             iobPresentReported_ = true;
             const iob::Inputs in = ioboardInputs();
@@ -3321,6 +3388,23 @@ void HL2Stream::pollIoboardSession() {
     const std::uint64_t expected =
         iob::compute_snapshot(ioboardInputs(), lastHfTxHz_);
     const std::uint64_t published = iob::published();
+    // DL1VE diagnostic: say ONCE when the IO-board TX-frequency regs (0–4)
+    // are following VFO B rather than RX1 — i.e. SPLIT is on and the
+    // published TX word differs from the dial.  Re-arms when the condition
+    // clears; never logs per cycle, adds no wire traffic.
+    {
+        const iob::Snapshot s = iob::unpack(published);
+        const bool followB = splitEnabled_.load(std::memory_order_relaxed)
+            && s.valid && s.sendTx
+            && s.txHz != rx1FreqHz_.load(std::memory_order_relaxed);
+        if (followB && !iobFollowBReported_) {
+            iobFollowBReported_ = true;
+            report(QStringLiteral("[iob] TX regs follow VFO B (SPLIT on): %1 Hz")
+                       .arg(qulonglong(s.txHz)));
+        } else if (!followB) {
+            iobFollowBReported_ = false;
+        }
+    }
     if (expected == published) {
         iobStaleReported_ = 0;
     } else if (iobStaleReported_ != expected) {
@@ -3637,9 +3721,10 @@ int HL2Stream::xvtrMatchingSlot(qint64 rfHz) const {
 }
 
 int HL2Stream::ocBandIndexForRf(quint32 rfHz) const {
-    if (xvtrMatchingSlot(static_cast<qint64>(rfHz)) >= 0)
-        return -1;
-    return lyra::bandIndexForFreq(ddsHzForRf(rfHz));
+    // OcControl::rowForHz owns the precedence (Xvtr -> amateur -> broadcast
+    // -> none); this only supplies the two inputs.
+    return lyra::oc::OcControl::rowForHz(
+        ddsHzForRf(rfHz), xvtrMatchingSlot(static_cast<qint64>(rfHz)));
 }
 
 void HL2Stream::setXvtrSlots(lyra::ui::XvtrSlots *xvtrSlots) {
@@ -5059,12 +5144,7 @@ void HL2Stream::setAlcMaxGainLinear(double linear) {
     alcMaxGainLinear_ = clamped;
     QSettings().setValue(QStringLiteral("tx/alcMaxGainLinear"), clamped);
     emit alcMaxGainLinearChanged(clamped);
-    std::function<void(double)> fwd;
-    {
-        std::lock_guard<std::mutex> lk(txControlMtx_);
-        fwd = txControl_.setAlcMaxGainLinear;
-    }
-    if (fwd) fwd(clamped);
+    applyDigitalTxLevels();
 }
 
 // §15.27 Commit B — ALC decay (operator-tunable wcpagc release tau).
@@ -5096,28 +5176,34 @@ void HL2Stream::setLevelerOn(bool on) {
         QSettings().setValue(QStringLiteral("tx/levelerOn"), on);
     emit levelerOnChanged(on);
     if (levelerRunHeldOff_) return;
-    std::function<void(bool,double)> fwd;
-    double topLinear;
-    {
-        std::lock_guard<std::mutex> lk(txControlMtx_);
-        fwd = txControl_.setLevelerOn;
-        topLinear = levelerMaxGainLinear_;
-    }
-    if (fwd) fwd(on, topLinear);
+    applyDigitalTxLevels();
 }
 
 void HL2Stream::pushLevelerRun(bool on) {
     // Held off so a later max-gain or channel-open push cannot turn
     // the leveler back on in the middle of a digital key.
     levelerRunHeldOff_ = !on;
-    std::function<void(bool,double)> fwd;
-    double topLinear;
+    applyDigitalTxLevels();
+}
+
+void HL2Stream::applyDigitalTxLevels() {
+    const int  m       = txMode_.load(std::memory_order_relaxed);
+    const bool digital = (m == 7 || m == 9);
+    std::function<void(double)>      fwdAlc;
+    std::function<void(bool,double)> fwdLev;
+    double alc;
+    bool   levOn;
+    double levTop;
     {
         std::lock_guard<std::mutex> lk(txControlMtx_);
-        fwd = txControl_.setLevelerOn;
-        topLinear = levelerMaxGainLinear_;
+        fwdAlc = txControl_.setAlcMaxGainLinear;
+        fwdLev = txControl_.setLevelerOn;
+        alc    = digital ? std::min(1.0, alcMaxGainLinear_) : alcMaxGainLinear_;
+        levOn  = levelerOn_ && !digital && !levelerRunHeldOff_;
+        levTop = levelerMaxGainLinear_;
     }
-    if (fwd) fwd(on, topLinear);
+    if (fwdAlc) fwdAlc(alc);
+    if (fwdLev) fwdLev(levOn, levTop);
 }
 
 // #109 — compute the EFFECTIVE PHROT run state and push it to the WDSP
@@ -5877,14 +5963,7 @@ void HL2Stream::setLevelerMaxGainLinear(double linear) {
     if (!lyra::deskApplyQuiet())
         QSettings().setValue(QStringLiteral("tx/levelerMaxGainLinear"), clamped);
     emit levelerMaxGainLinearChanged(clamped);
-    std::function<void(bool,double)> fwd;
-    bool on;
-    {
-        std::lock_guard<std::mutex> lk(txControlMtx_);
-        fwd = txControl_.setLevelerOn;
-        on  = levelerRunHeldOff_ ? false : levelerOn_;
-    }
-    if (fwd) fwd(on, clamped);
+    applyDigitalTxLevels();
 }
 
 // §15.27 Commit B — Leveler decay (exponential-curve tau in ms).
@@ -5958,6 +6037,8 @@ void HL2Stream::setTxMode(int wdspMode) {
     // auto-disables in DIGU/DIGL (digital), re-enables in voice modes if the
     // operator toggle is on.  Must follow the txMode_ store above.
     applyPhrotRun();
+    // Hold the ALC to a limiter and the Leveler off in DIGU/DIGL.
+    applyDigitalTxLevels();
     // #107 — re-derive the CTCSS run state on the mode edge: the FM sub-tone
     // runs only in FM (WDSP mode 5) and only when the operator enabled it.
     applyCtcssRun();
@@ -6115,6 +6196,7 @@ void HL2Stream::registerTxControl(TxControl ctl) {
     std::function<void(bool)>         pushCtcssRun;
     bool   levOn;
     double levTop;
+    double alcLin;
     double amCarLin;
     bool   phrotOn;
     double fmDev;
@@ -6136,13 +6218,17 @@ void HL2Stream::registerTxControl(TxControl ctl) {
         pushFmDev        = txControl_.setFmDeviation;
         pushCtcssFreq    = txControl_.setCtcssFreq;
         pushCtcssRun     = txControl_.setCtcssRun;
-        levOn            = levelerRunHeldOff_ ? false : levelerOn_;
         levTop           = levelerMaxGainLinear_;
         amCarLin         = amPctToCarrierLevel(amCarrierPct_);   // % power → c_level
         // #109 — push the EFFECTIVE run (operator intent gated by mode):
         // auto-OFF in DIGU/DIGL even when the toggle is on.
         const int m      = txMode_.load(std::memory_order_relaxed);
         phrotOn          = phrotEnabled_ && !(m == 7 || m == 9);
+        // Digital modes: ALC as a limiter only, Leveler off (see
+        // applyDigitalTxLevels).
+        const bool digital = (m == 7 || m == 9);
+        alcLin           = digital ? std::min(1.0, alcMaxGainLinear_) : alcMaxGainLinear_;
+        levOn            = levelerOn_ && !digital && !levelerRunHeldOff_;
         // #107 — FM deviation/tone push once; CTCSS run is FM-gated (mode 5).
         fmDev            = fmDeviationHz_;
         ctcssFreq        = ctcssToneHz_;
@@ -6153,7 +6239,7 @@ void HL2Stream::registerTxControl(TxControl ctl) {
     if (noiseEnabled_.load(std::memory_order_relaxed))
         pushCalNoise();
     if (pushMic)          pushMic(micGainParked_ ? 0.0 : micGainDb_);
-    if (pushAlc)          pushAlc(alcMaxGainLinear_);
+    if (pushAlc)          pushAlc(alcLin);
     if (pushAlcDecay)     pushAlcDecay(alcDecayMs_);
     if (pushLeveler)      pushLeveler(levOn, levTop);
     if (pushLevelerDecay) pushLevelerDecay(levelerDecayMs_);
@@ -6495,8 +6581,13 @@ void HL2Stream::setOcAccessory(lyra::oc::OcAccessory mode) {
     if (mode == lyra::oc::OcAccessory::Off) {
         setFilterBoardEnabled(false);
     } else {
-        if (mode == lyra::oc::OcAccessory::N2adr)
+        if (mode == lyra::oc::OcAccessory::N2adr) {
+            // Explicit operator action (accessory combo / "Reload N2ADR"
+            // button): ham rows AND the SWL rows.  The first-run default
+            // in reloadOcFromDisk() stamps ham rows only.
             seedOcN2adr();
+            seedOcSwlN2adr();
+        }
         setFilterBoardEnabled(true);
     }
     saveOcSettings();
@@ -6558,11 +6649,18 @@ void HL2Stream::updateOcPattern(bool transmitting) {
             bits = oc_.computeXvtr(xv, transmitting, /*tune*/ false,
                                    /*twoTone*/ false, /*pa*/ false);
         } else {
+            // bi is an OcControl row: amateur, or a SWL broadcast row
+            // (OcControl::rowForHz precedence), or -1 = all pins off.
             const int bi = ocBandIndexForRf(rf);
             bits = oc_.compute(bi, bi, transmitting, /*tune*/ false,
                                /*twoTone*/ false, /*pa*/ false);
         }
     }
+    // P2 note: ocBitsChanged below is forwarded by P2RxBridge to
+    // P2Session::setOcOutput (Brick3 byte [1401]).  SWL rows therefore reach
+    // a P2 radio only when OC is enabled for that rig bucket — the
+    // reloadOcFromDisk() default is Off for every non-HL2 family, so a
+    // Brick / ANAN operator must opt in before any row (ham or SWL) emits.
     // Change gate (Thetis m_nOldBits, −1-seeded so the first emit after an
     // enable/open is never swallowed — §7.5.1).  Push only on a real change.
     if (!oc_.takeIfChanged(bits)) {
@@ -6593,7 +6691,7 @@ QString HL2Stream::ocGroupKey() const {
 }
 
 void HL2Stream::seedOcEmpty() {
-    const int n = oc_.nBands();
+    const int n = oc_.nRows();   // amateur + broadcast rows
     for (int bi = 0; bi < n; ++bi) {
         oc_.setRxMaskA(bi, 0);
         oc_.setTxMaskA(bi, 0);
@@ -6615,6 +6713,10 @@ void HL2Stream::reloadOcFromDisk() {
     const bool hl2 = (fam == lyra::rig::RadioFamily::Hl2);
     if (!present) {
         if (hl2) {
+            // Ham rows only — SWL rows stay 0 (pins off) until the operator
+            // picks N2ADR / presses "Reload N2ADR" (seedOcSwlN2adr).  This
+            // runs for every new rig bucket (ctor + setTxCalRigId), so it
+            // must not stamp anything the operator has not asked for.
             seedOcN2adr();
             ocAccessory_ = lyra::oc::OcAccessory::N2adr;
         } else {
@@ -6640,6 +6742,14 @@ void HL2Stream::seedOcYaesuExample() {
         oc_.setRxMaskB(bi, 0);
         oc_.setTxMaskB(bi, 0);
     }
+    // Yaesu BCD has no broadcast codes: SWL rows go empty (pins off).
+    for (int bc = 0; bc < oc_.nBcBands(); ++bc) {
+        const int row = oc_.bcRow(bc);
+        oc_.setRxMaskA(row, 0);
+        oc_.setTxMaskA(row, 0);
+        oc_.setRxMaskB(row, 0);
+        oc_.setTxMaskB(row, 0);
+    }
     for (int i = 0; i < lyra::oc::OcControl::kXvtrSlots; ++i) {
         oc_.setRxMaskXvtr(i, 0);
         oc_.setTxMaskXvtr(i, 0);
@@ -6649,8 +6759,10 @@ void HL2Stream::seedOcYaesuExample() {
 void HL2Stream::seedOcN2adr() {
     // Seed OcControl's per-band RX/TX masks from the N2ADR filter-board
     // preset (bands.cpp n2adrOcPattern) so an enabled board reproduces the
-    // shipped behaviour exactly.  Xvtr rows stay 0 (DeskHPSDR).  The
-    // Stage-4 "N2ADR Filter" preset button re-seeds through this same helper.
+    // shipped behaviour exactly.  HAM ROWS ONLY — Xvtr rows stay 0
+    // (DeskHPSDR) and SWL rows are a separate, operator-only stamp
+    // (seedOcSwlN2adr).  This is the first-run default for a new HL2 rig
+    // (reloadOcFromDisk) as well as half of the explicit N2ADR pick.
     const int n = static_cast<int>(lyra::amateurBands().size());
     for (int bi = 0; bi < n; ++bi) {
         oc_.setRxMaskA(bi,
@@ -6658,6 +6770,22 @@ void HL2Stream::seedOcN2adr() {
         oc_.setTxMaskA(bi,
             static_cast<quint8>(lyra::n2adrOcPattern(bi, /*tx*/ true)));
     }
+}
+
+void HL2Stream::seedOcSwlN2adr() {
+    // SWL broadcast rows borrow the RX LPF of the ham band directly above
+    // them (OcControl::n2adrBroadcastSeed — table in OcControl.cpp); TX
+    // masks seed 0 (RX-only rows).  Invoked ONLY from the explicit operator
+    // actions — the N2ADR accessory pick and the Settings "Reload N2ADR HF"
+    // button — never from the first-run / rig-switch default path.
+    const int n = oc_.nBcBands();
+    for (int bc = 0; bc < n; ++bc) {
+        const int row = oc_.bcRow(bc);
+        oc_.setRxMaskA(row, lyra::oc::OcControl::n2adrBroadcastSeed(bc, /*tx*/ false));
+        oc_.setTxMaskA(row, lyra::oc::OcControl::n2adrBroadcastSeed(bc, /*tx*/ true));
+    }
+    emit logLine(QStringLiteral("[oc] SWL rows seeded from N2ADR (%1 rows, TX off)")
+                     .arg(n));
 }
 
 void HL2Stream::applyOcEdit() {
@@ -6702,6 +6830,14 @@ void HL2Stream::saveOcSettings() const {
     for (int i = 0; i < lyra::oc::OcControl::kXvtrSlots; ++i) {
         s.setValue(QStringLiteral("xvtrRx/%1").arg(i), int(oc_.rxMaskXvtr(i)));
         s.setValue(QStringLiteral("xvtrTx/%1").arg(i), int(oc_.txMaskXvtr(i)));
+    }
+    // SWL broadcast rows — additive keys, N = broadcastBands() index.
+    for (int bc = 0; bc < oc_.nBcBands(); ++bc) {
+        const int row = oc_.bcRow(bc);
+        s.setValue(QStringLiteral("swlRxA/%1").arg(bc), int(oc_.rxMaskA(row)));
+        s.setValue(QStringLiteral("swlTxA/%1").arg(bc), int(oc_.txMaskA(row)));
+        s.setValue(QStringLiteral("swlRxB/%1").arg(bc), int(oc_.rxMaskB(row)));
+        s.setValue(QStringLiteral("swlTxB/%1").arg(bc), int(oc_.txMaskB(row)));
     }
     s.endGroup();
 }
@@ -6749,6 +6885,16 @@ bool HL2Stream::loadOcSettings() {
     for (int i = 0; i < lyra::oc::OcControl::kXvtrSlots; ++i) {
         oc_.setRxMaskXvtr(i, quint8(s.value(QStringLiteral("xvtrRx/%1").arg(i), 0).toInt()));
         oc_.setTxMaskXvtr(i, quint8(s.value(QStringLiteral("xvtrTx/%1").arg(i), 0).toInt()));
+    }
+    // SWL rows: missing keys default to LITERAL 0 = pins off (never the
+    // in-memory value), so a rig saved before these keys existed behaves
+    // exactly as today until the operator re-seeds N2ADR.
+    for (int bc = 0; bc < oc_.nBcBands(); ++bc) {
+        const int row = oc_.bcRow(bc);
+        oc_.setRxMaskA(row, quint8(s.value(QStringLiteral("swlRxA/%1").arg(bc), 0).toInt()));
+        oc_.setTxMaskA(row, quint8(s.value(QStringLiteral("swlTxA/%1").arg(bc), 0).toInt()));
+        oc_.setRxMaskB(row, quint8(s.value(QStringLiteral("swlRxB/%1").arg(bc), 0).toInt()));
+        oc_.setTxMaskB(row, quint8(s.value(QStringLiteral("swlTxB/%1").arg(bc), 0).toInt()));
     }
     s.endGroup();
     return true;

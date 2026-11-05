@@ -2461,6 +2461,13 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
         // Band-plan in/out-of-band advisory: on a band-state transition
         // post a status message (gated like old Lyra on the edge-warning
         // layer + a real region).  The red edge lines are the visual half.
+        // RPT (FM repeater offset) dropped because RX1 crossed a band
+        // edge — the stream already turned split off and parked VFO B on
+        // the new band; this is the operator-visible half (DL1VE).
+        connect(st, &lyra::ipc::HL2Stream::rptDropped, this,
+                [this](const QString &leftBand) {
+            statusBus_->show(tr("RPT off — left %1").arg(leftBand), 4000);
+        });
         connect(st, &lyra::ipc::HL2Stream::rx1FreqChanged, this,
                 [this, st]() {
             if (!prefs_->bandPlanEdges()

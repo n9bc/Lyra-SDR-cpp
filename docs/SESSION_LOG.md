@@ -4,6 +4,69 @@ Running EOD log. Newest entry on top. Short rough-outline format.
 
 ---
 
+## 2026-11-04 — v0.25.36 Sheliak RELEASED (8 Xvtr slots, SWL J16 rows, digital-mode ALC)
+
+Five commits over v0.25.35. `546813d` Xvtr slots 4 → 8 (K7MDL's
+five-band stack): `lyra::xvtr::kSlotCount = 8` in `xvtr_math.h` is the
+single source, `XvtrSlots::kCount` / `OcControl::kXvtrSlots` alias it;
+slots 5–8 default disabled / numbered; BandPanel Repeater model
+`Xvtr.slotCount`, one row of 8 on HL2, wraps 2×4 beside the Alex ANT /
+RX chips so dock min width is unchanged; `xvtr/4..7/*` additive.
+`ecb041c` SWL broadcast rows on J16: `OcControl::rowForHz(hz, xvtrSlot)`
+Xvtr → ham → BC → none (ham wins 75 m / 41 m / 13 m overlaps); rows
+0–10 ham, 11–22 BC; pin-table group 2 for BC; folded "SWL broadcast
+rows" section in the Filters / BCD grid (`hw/ocSwlRowsOpen`); keys
+`swlRxA|TxA|RxB|TxB/N`; Live J16 reads "<band> BC (SWL row)" / "none
+(GEN / CB / out of table)"; CB + GEN deliberately no row. `ec07dab`
+second pass after design review: SWL seed only from
+`setOcAccessory(N2adr)` (combo + Reload button), never from
+`reloadOcFromDisk` / first run / rig switch; TX seed = 0 for every band
+(RX-only filters); 41 m → 40 m row (3+7), 13 m → 15 m row (5+7), 120 m
+pin 2 only; `[oc] SWL rows seeded from N2ADR (12 rows, TX off)`; bounds
+via `nRows()`; test_oc_control 22 groups + `oc_swl_seed_paths_static`
+ctest. `f9042df` TX: `applyDigitalTxLevels()` — in DIGU / DIGL ALC max
+gain capped at 1.0 (limiter only) and Leveler held off regardless of the
+toggle, voice modes keep operator values, nothing saved changes; found
+testing RADE through STD over TCI (3.0 ALC gain + 10 ms decay reshaped
+variable-envelope waveforms; FT8 got through); first RADE contact on
+the air 2026-11-04. `2b04d57` TCI TX-in gain spinner retired (no-op
+since c4a6324; `tci/tx_gain_db` orphaned, profile field dropped,
+RX-out gain stays). Docs: `docs/releases/v0.25.36.md`, USER_GUIDE
+(What's new, stale "queued" lines → shipped, four → eight Xvtr, OC
+Control SWL bullet, Leveler / ALC / VAC / TCI digital advice →
+automatic), README, KNOWN_ISSUES, wiki Feature Status / Home / Roadmap /
+Installing / FAQ. Open: CL1 / CL2 external 10 MHz reference scoping
+(`HL2_EXT_REF_CL1_CL2_SCOPE.md`, untracked). Tag `v0.25.36`. `main`
+untouched. Mac stays `macos-port`.
+
+## 2026-11-02 — v0.25.35 Sheliak RELEASED (GEN RF1/Alt memory, RPT band-change drop)
+
+Two tester fixes over v0.25.34, no wire / DSP changes. `5442443` GEN
+slots remember RF1/Alt + LNA + Auto-LNA per slot (GitHub #24, K7MDL):
+GEN freqs fall outside BandMemory's ham/BC/CB tables so nothing was
+saved or applied; GenSlots now does it XvtrSlots-style
+(`gen/<n>/rxPort|lnaDb|autoLna`), applied after the freq + mode writes
+behind an `applying_` guard; unset LNA/Auto leave live state alone,
+unset rxPort = RF1, resetSlot clears all three; TX drive untouched.
+`b2820cd` RPT offset drops on band change (DL1VE): 2 m RPT → 15 m left
+VFO B at RX1 − 600 kHz, SPLIT lit, 20.492 MHz on the IO-board TX regs,
+persisted. New `rptActive` (`tx/rptActive`) set by the RPT button /
+repeater memory, cleared by any split-off and 1→2 / 2→1 / ⇄;
+`setRx1FreqHz` drops split + A→B when `bandIdFor()` (Xvtr slot or
+BandMemory band) changes, safetyLog `TX: RPT off — RX1 left <band>…`,
+status bus `RPT off — left <band>`; keyed RPT gets the simplex
+band-jump refusal; TuningPanel duplex tracker gated on rptActive +
+same band. Operator SPLIT persists across bands as before (Thetis /
+deskHPSDR). Old persisted RPT split loads as operator split — click
+SPLIT off once. One-shot `[iob] TX regs follow VFO B (SPLIT on)` in
+pollIoboardSession; forced-present line shows TX Hz / REG 11. Docs:
+release notes, USER_GUIDE (What's new, new GEN heading, RPT paragraph,
+`[iob]` troubleshooting), wiki Feature Status / FAQ / Installing /
+Home / Roadmap, README, KNOWN_ISSUES. Still queued: Xvtr slots 4 → 8
+and SWL-band OC rows (per-slot Xvtr OC rows shipped 0.25.29; release
+text that said otherwise corrected the same day, incl. the GitHub body).
+Tag `v0.25.35`. `main` untouched. Mac stays `macos-port`.
+
 ## 2026-10-31 — v0.25.34 Sheliak RELEASED (HL2 IO board sequencer)
 
 HL2 IO board (N2ADR HL2IOBoard Pico, I2C 0x1D) rework, Protocol 1
@@ -21,7 +84,8 @@ changed snapshot. Detection: PCA9536 at 0x41, 10 probes at ~1.7 s then
 Bench on N8SDR HL2+ (no IO board): zero 0x1D traffic absent, forced
 capture correct, restart / power-cycle / live force / fast hops clean,
 Brick3 P2 + PS TX no IO-board activity. Pico-side confirmation from
-testers (K7MDL / W7CPA / DL1VE). Xvtr / SWL OC rows still queued.
+testers (K7MDL / W7CPA / DL1VE). Still queued: Xvtr slots 4 → 8 and
+SWL-band OC rows (per-slot Xvtr OC rows shipped 0.25.29).
 Tag `v0.25.34`. `main` untouched. Mac stays `macos-port`.
 
 ## 2026-10-30 — v0.25.33 Sheliak RELEASED (stability upgrade)

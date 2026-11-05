@@ -141,6 +141,14 @@ class HL2Stream : public QObject {
     // path — so PS, whenever it lands, samples the split VFO unchanged.
     Q_PROPERTY(bool    splitEnabled READ splitEnabled WRITE setSplitEnabled NOTIFY splitEnabledChanged)
     Q_PROPERTY(quint32 vfoBHz       READ vfoBHz       WRITE setVfoBHz       NOTIFY vfoBHzChanged)
+    // RPT (FM repeater offset) is layered on SPLIT (VFO B = RX1 ± offset).
+    // rptActive says WHY split is on: true = the RPT button / a repeater
+    // memory armed it; false = operator SPLIT.  Only RPT-split is dropped
+    // when RX1 crosses a band edge (DL1VE: a 2 m repeater offset otherwise
+    // rode along to HF and put the TX NCO / IO-board TX regs 600 kHz out
+    // of band).  Operator SPLIT persists across band changes unchanged.
+    // Cleared whenever split goes off; persisted as tx/rptActive.
+    Q_PROPERTY(bool    rptActive    READ rptActive    WRITE setRptActive    NOTIFY rptActiveChanged)
     // SUB / RX2 — second DDC on the same ADC (HL2 + Brick).  Default OFF:
     // DDC1 keeps mirroring RX1 (SUB-off wire identity).  When on, DDC1
     // follows rx2FreqHz (VFO B if SPLIT is also on).  focusedRx is 1 or 2.
@@ -812,6 +820,12 @@ public:
     quint32 rx1FreqHz()         const { return rx1FreqHz_.load(std::memory_order_relaxed); }
     bool    splitEnabled()      const { return splitEnabled_.load(std::memory_order_relaxed); }
     quint32 vfoBHz()            const { return vfoBHz_.load(std::memory_order_relaxed); }
+    bool    rptActive()         const { return rptActive_.load(std::memory_order_relaxed); }
+    // Band identity of an RF frequency for the RPT band-edge drop: the
+    // Xvtr slot ("xvtr:N") when one matches, else BandMemory's ham / BC /
+    // CB name ("15m", "bc_49m", "cb_11m"), else "" (gap).  Same notion
+    // BandMemory::applyBand fires on, plus Xvtr slot identity.
+    Q_INVOKABLE QString bandIdFor(quint32 rfHz) const;
     bool    subEnabled()        const { return subEnabled_.load(std::memory_order_relaxed); }
     bool    dualAdc()           const { return dualAdc_.load(std::memory_order_relaxed); }
     bool    diversityCapable()  const { return diversityCapable_.load(std::memory_order_relaxed); }
@@ -1343,6 +1357,9 @@ public slots:
     // the split TX VFO and re-pushes the TX NCO when split is on.
     void setSplitEnabled(bool on);
     void setVfoBHz(quint32 hz);
+    // Mark the live split as RPT (repeater offset) or operator split.  See
+    // the rptActive Q_PROPERTY doc.  Turning split off clears it.
+    void setRptActive(bool on);
     void setSubEnabled(bool on);
     void setDualAdc(bool on);
     void setDiversityCapable(bool on);
@@ -1388,8 +1405,10 @@ public slots:
     int ddsHzForRf(quint32 rfHz) const;
     // Enabled Xvtr slot index containing displayed RF, or -1.
     int xvtrMatchingSlot(qint64 rfHz) const;
-    // Amateur-band index for HF J16. Returns -1 on an Xvtr chip (those
-    // use OcControl xvtr masks, DeskHPSDR-style — not the IF/10 m row).
+    // OcControl row for J16 (amateur row, or a broadcast/SWL row —
+    // OcControl::rowForHz precedence).  Returns -1 on an Xvtr chip (those
+    // use OcControl xvtr masks, DeskHPSDR-style — not the IF/10 m row)
+    // and for CB / GEN / out-of-table.
     int ocBandIndexForRf(quint32 rfHz) const;
     void applyPaWire();
     void setMicBoost(bool on);
@@ -1784,6 +1803,10 @@ signals:
     void rx1FreqChanged();
     void splitEnabledChanged();
     void vfoBHzChanged();
+    void rptActiveChanged();
+    // RPT split was dropped because RX1 crossed a band edge; <leftBand> is
+    // the band / Xvtr slot RX1 left (status-bar line in MainWindow).
+    void rptDropped(const QString& leftBand);
     void subEnabledChanged();
     void dualAdcChanged();
     void diversityCapableChanged();
@@ -2069,6 +2092,15 @@ private:
     // to the WDSP TX channel.  Called from the operator toggle, every TX
     // mode change, and channel open.  Auto-OFF in DIGU/DIGL (mode 7/9).
     void applyPhrotRun();
+    // Push the EFFECTIVE ALC ceiling and Leveler run.  In DIGU/DIGL (mode
+    // 7/9) the ALC max gain is held at 1.0 or below, so it only limits
+    // peaks over full scale, and the Leveler is off: both ride the gain of
+    // a variable-envelope signal (OFDM digital voice, PSK) and distort it.
+    // This covers any TCI or VAC client, not only a DeskLink digital key.
+    // Voice modes use the operator values (and levelerRunHeldOff_).
+    // Called from those setters, pushLevelerRun, every TX mode change,
+    // and channel open.
+    void applyDigitalTxLevels();
     // #107 — push the EFFECTIVE CTCSS run (ctcssEnabled_ && FM mode) to the
     // WDSP TX channel.  Called from the operator toggle, every setTxMode
     // edge, and channel open.  CTCSS is an FM-only modulator stage (WDSP
@@ -2157,7 +2189,8 @@ private:
     // #199 Stage 2 — OC wire sink (the write-tail of the old updateOcPattern)
     // + the N2ADR preset seeder for the editable OcControl table.
     void setOcOutput(quint8 bits);
-    void seedOcN2adr();
+    void seedOcN2adr();           // ham rows only (also the first-run default)
+    void seedOcSwlN2adr();        // SWL rows — explicit operator action only
     void seedOcYaesuExample();
     void seedOcEmpty();
     bool loadOcSettings();        // true if this rig has a saved table
@@ -2343,6 +2376,8 @@ private:
     // mirror in setRx1FreqHz, now gated on !splitEnabled_).
     std::atomic<bool>    splitEnabled_{false};
     std::atomic<quint32> vfoBHz_{7074000};
+    // Why split is on (RPT vs operator) — see the rptActive Q_PROPERTY.
+    std::atomic<bool>    rptActive_{false};
     std::atomic<bool>    subEnabled_{false};
     std::atomic<bool>    dualAdc_{false};
     std::atomic<bool>    diversityCapable_{false};
@@ -2444,6 +2479,10 @@ private:
     bool                 iobPresentReported_ = false;
     bool                 iobAbsentReported_ = false;
     std::uint64_t        iobStaleReported_ = 0;
+    // One-shot "[iob] TX regs follow VFO B" diagnostic: set when the
+    // published TX word first differs from RX1 under SPLIT, re-armed
+    // when it stops (never logs every poll cycle).
+    bool                 iobFollowBReported_ = false;
     std::atomic<int>     txStepAttnDb_{0};      // 0..31 dB; 0x1C C3 (31-db)
     std::atomic<int>     txMode_{1};            // 0=LSB 1=USB; mirror of the WDSP TXA mode, for the TUN DDS-offset sign (txDdsHzForTune)
     std::atomic<bool>    psUiDigital_{false};   // focused RX DIG/DRM/CW/FM lock-out

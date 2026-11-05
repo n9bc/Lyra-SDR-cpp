@@ -171,6 +171,27 @@ for RX2 (enable **SUB** so VAC2 has audio). **TCI** as mic source is
 exclusive — Lyra will not also arm VAC TX. If **Auto-enable for digital**
 is on, switch to **DIGU / DIGL**; USB turns that auto path off.
 
+**Can I use CMASIO or a Behringer WING / X32 with Lyra?**
+No. Lyra does not offer CMASIO because it does not use Thetis’s PC audio
+host. In Thetis (and Thetis-based builds), speaker and mic can go to
+CMASIO / ASIO — exclusive, multi-channel — which is why a Behringer WING
+works there: you pick the driver and which pair is phones vs mic. Lyra’s
+speaker path is ordinary Windows audio (WASAPI): stereo 48 kHz, the
+device Windows calls Speakers. The HL2 can play from the radio’s own
+headphone jack. Digital apps (STD, WSJT, …) use TCI or a VAC stereo pipe,
+not ASIO channel maps. Lyra cannot park RX on WING channel 17 and TX from
+an arbitrary bus. A Scarlett-style USB interface still works via its
+Windows speaker/mic names. A WING used as a console over ASIO does not.
+Some operators find Lyra RX smoother / less fatiguing; the receive audio
+is paced with the radio and played as a simple stereo stream. Native ASIO
+(device + stereo pair pickers) is not a hidden setting today. ASIO is a
+separate Steinberg kit from the radio code, so it is not a copy-paste from
+Thetis even though both programs are GPL.
+
+**Why is there no CMASIO like Thetis?**
+Same answer as **Can I use CMASIO or a Behringer WING / X32 with Lyra?**
+above. Lyra is not Thetis’s PC audio host.
+
 ---
 
 ## Transmit
@@ -392,6 +413,44 @@ auto-enable SUB.
 **SUB** is a second *receiver* (its own frequency, mode, ear). **SPLIT**
 moves *transmit* to VFO B. They are independent — both, one, or neither.
 FM **RPT** still replaces SPLIT in FM.
+
+**I left the 2 m repeater and SPLIT stayed lit / the amp decoded the wrong band.**
+Install **v0.25.35**. An **RPT** (FM repeater offset) split now drops
+the moment RX1 crosses into another band: RPT / SPLIT turn off, VFO B is
+set to the new RX1, the status bar says **RPT off — left ‹band›**, and
+the IO-board TX registers follow the dial again. **Operator SPLIT** (the
+SPLIT button, CAT / TCI, the desk) is deliberately *not* dropped on a
+band change — it persists with VFO B where you left it, as in Thetis /
+deskHPSDR. If SPLIT comes up lit right after installing over an older
+build that had RPT armed, click **SPLIT** off once; from then on the
+distinction is tracked. With verbose logging on, a one-shot
+`[iob] TX regs follow VFO B (SPLIT on): ‹hz› Hz` line tells you when
+the board's TX word is VFO B rather than RX1.
+
+**GEN1 / GEN2 / GEN3 keep the previous band's RF1 / Alt or LNA.**
+Install **v0.25.35** (GitHub #24). Each GEN slot now remembers its own
+**RF1 / Alt**, **LNA** and **Auto-LNA**, like the Xvtr chips. Default is
+RF1; LNA / Auto are stored once you touch them while that slot is
+active. **Right-click** a GEN button → reset clears them.
+
+**My digital app's signal is distorted / nobody decodes my RADE or PSK, but FT8 works.**
+Install **v0.25.36**. In **DIGU / DIGL** the ALC is now a peak limiter
+only (max gain 1.0) and the **Leveler** is held off whatever the toggle
+says, so variable-envelope digital waveforms go out unshaped. Voice
+modes keep your ALC / Leveler settings. Still hot? Turn the app's own
+output / drive down, or Lyra's **digital drive %** (Settings → TX) — the
+old TCI **TX-in gain** spinner is gone; it had not done anything.
+
+**My N2ADR board sits unfiltered on the shortwave broadcast bands (49 m / 31 m / 19 m).**
+Install **v0.25.36**, then Settings → **Filters / BCD** → **Reload N2ADR
+HF**. That seeds the folded **SWL broadcast rows** (120 m … 13 m) with
+the RX LPF of the ham band above each, TX unticked. The rows stay empty
+until you do this. Where a broadcast band overlaps a ham band the ham
+row wins (7.200–7.300 is 40 m); CB and GEN still get no row.
+
+**I need more than four transverter chips.**
+Install **v0.25.36** — there are eight. Slots 5–8 start disabled; right-
+click a chip to enable and name it. Your first four are unchanged.
 
 **What do the colours mean?**
 **Orange TUNE A** + **cyan** passband = RX1. **Lime TUNE B** + **green**
