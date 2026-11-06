@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Visualizer — four views, palettes, settings</title>
+<style>
+  body{margin:0;background:#0d0f14;color:#cdd3de;font:13px -apple-system,Segoe UI,sans-serif;padding:18px}
+  h2{margin:0 0 4px;font-size:18px;color:#fff} .sub{color:#8a93a3;margin-bottom:14px}
+  .wrap{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+  .dock{width:600px;border:1px solid #2a2f3a;border-radius:6px;background:#12151c;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a1e27;border-bottom:1px solid #2a2f3a}
+  .bar b{color:#fff;font-weight:600;margin-right:auto}
+  select,button{background:#232836;color:#dfe5ef;border:1px solid #39404f;border-radius:4px;padding:3px 6px;font:12px inherit}
+  button.on{background:#2d5bd7;border-color:#4a76f0}
+  .span{color:#7fd1ff;font-size:11px}
+  #main{display:block;width:600px;height:280px}
+  .set{width:470px;border:1px solid #2a2f3a;border-radius:6px;background:#151922;padding:12px}
+  .set h3{margin:10px 0 6px;font-size:12px;color:#9fb0c8;text-transform:uppercase;letter-spacing:.06em}
+  .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .t{cursor:pointer;border:1px solid #2a2f3a;border-radius:4px;overflow:hidden;background:#12151c}
+  .t.sel{outline:2px solid #4a76f0}
+  .t canvas{display:block;width:100%;height:62px}
+  .t div{font-size:11px;padding:2px 4px;color:#aeb6c4}
+  .pals{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .p{cursor:pointer;border:1px solid #2a2f3a;border-radius:4px;padding:4px;font-size:11px}
+  .p.sel{outline:2px solid #4a76f0}
+  .p i{display:block;height:12px;border-radius:2px;margin-bottom:3px}
+  .row{display:flex;align-items:center;gap:8px;margin:4px 0}
+  .row label{width:150px;color:#aeb6c4}
+  .row input{flex:1}
+  .row span{width:40px;text-align:right;color:#7fd1ff;font-size:11px}
+</style></head><body>
+<h2>The four views, nine new palettes and the settings section</h2>
+<div class="sub">Still a rough Canvas2D mock with fake audio. Everything is live: click a thumbnail, click a palette, drag the sliders.</div>
+<div class="wrap">
+<div class="dock">
+  <div class="bar"><b>Audio Visualizer</b>
+    <select id="pick"></select><button id="ph" class="on">Peak hold</button>
+    <span class="span" id="span"></span></div>
+  <canvas id="main" width="1200" height="560"></canvas>
+</div>
+<div class="set">
+  <h3>Look</h3><div class="thumbs" id="thumbs"></div>
+  <h3>Palette</h3><div class="pals" id="pals"></div>
+  <h3>Effects</h3>
+  <div class="row"><label>Echo / trails</label><input type="range" id="echo" min="0" max="95" value="40"><span></span></div>
+  <div class="row"><label>Glow</label><input type="range" id="glow" min="0" max="100" value="50"><span></span></div>
+  <div class="row"><label>Background opacity</label><input type="range" id="bg" min="0" max="100" value="0"><span></span></div>
+  <h3>Speed &amp; smoothing</h3>
+  <div class="row"><label>Attack (rise)</label><input type="range" id="att" min="5" max="100" value="70"><span></span></div>
+  <div class="row"><label>Decay (fall)</label><input type="range" id="dec" min="1" max="60" value="12"><span></span></div>
+  <div class="row"><label>Smoothing</label><input type="range" id="smo" min="0" max="90" value="30"><span></span></div>
+  <div class="row"><label>Peak hold time</label><input type="range" id="pht" min="0" max="3000" value="800"><span></span></div>
+  <h3>Audio reactivity</h3>
+  <div class="row"><label>Sensitivity</label><input type="range" id="sens" min="20" max="300" value="100"><span></span></div>
+  <div class="row"><label>Floor (dB)</label><input type="range" id="floor" min="-120" max="-40" value="-90"><span></span></div>
+</div>
+</div>
+<script>
+const VIEWS=["25-bar","FFT line","Scope","Radial"];
+const PALS={Neon:["#06021a","#00e5ff","#ff2bd6"],Synthwave:["#140028","#8a2be2","#ff3d9a","#ffa64d"],Aurora:["#001a14","#00e08a","#00c8d6","#a066ff"],
+  Ember:["#1a0000","#c41a00","#ff7a00","#ffe14d"],Ice:["#000a24","#1460ff","#5fe6ff","#ffffff"],Toxic:["#001400","#14b400","#9cff00","#f0ff4d"],
+  Sunset:["#12003a","#c1307a","#ff6b4a","#ffd166"],Phosphor:["#000d00","#0f7a2a","#33ff66","#c8ffd8"],Prism:["#ff004d","#ffb300","#3dff5a","#00b3ff","#b14dff"]};
+const PANEL=[18,21,28];
+let cur="Radial",pal="Neon",peakOn=true,S={};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+function col(t,a=1){const st=PALS[pal].map(hex);t=Math.max(0,Math.min(1,t))*(st.length-1);const i=Math.min(st.length-2,Math.floor(t)),f=t-i;
+  const c=st[i].map((v,k)=>Math.round(v+(st[i+1][k]-v)*f));return `rgba(${c[0]},${c[1]},${c[2]},${a})`}
+// fake audio
+let T=0,env=0,trans=0,raw=new Float32Array(128),spec=new Float32Array(128),wave=new Float32Array(300);
+const bars=new Float32Array(48),peak=new Float32Array(128),pkT=new Float32Array(128);
+function audio(dt){T+=dt;const syl=Math.max(0,Math.sin(T*5.3)*Math.sin(T*1.7+1));env+=(syl-env)*0.25;trans*=0.85;if(Math.random()<0.01)trans=1;
+  const sens=S.sens/100,a=S.att/100,d=S.dec/100,sm=S.smo/100;
+  for(let i=0;i<128;i++){const x=i/128;let v=0.75*Math.exp(-((x-0.12)**2)/0.004)+0.55*Math.exp(-((x-0.32-0.05*Math.sin(T))**2)/0.006)+0.35*Math.exp(-((x-0.55)**2)/0.01);
+    v*=(0.55+0.45*Math.abs(Math.sin(i*0.5+T)));v=(v*env+0.05*Math.random()+0.3*trans*(1-x))*sens;
+    raw[i]=raw[i]*sm+v*(1-sm);spec[i]+= raw[i]>spec[i]?(raw[i]-spec[i])*a:(raw[i]-spec[i])*d;
+    if(spec[i]>=peak[i]){peak[i]=spec[i];pkT[i]=S.pht/1000;}else if((pkT[i]-=dt)<0)peak[i]=Math.max(0,peak[i]-dt*0.5);}
+  for(let i=0;i<300;i++){const p=T*30+i*0.05;wave[i]=sens*env*(0.6*Math.sin(p*5)+0.3*Math.sin(p*11.3+1)+0.15*Math.sin(p*27))+0.03*(Math.random()-.5);}
+}
+const pick2=(arr,k,n)=>{let s=0,a=Math.floor((k/n)**1.3*120),b=Math.max(a+1,Math.floor(((k+1)/n)**1.3*120));for(let i=a;i<b;i++)s=Math.max(s,arr[i]);return Math.min(1,s)};
+function draw(c,view){const x=c.getContext('2d'),W=c.width,H=c.height,cx=W/2,cy=H/2,R=Math.min(W,H);
+  // background: panel colour .. black, echo keeps a fraction of last frame
+  const o=S.bg/100,bg=PANEL.map(v=>Math.round(v*(1-o)));const keep=S.echo/100;
+  x.globalCompositeOperation='source-over';x.shadowBlur=0;x.fillStyle=`rgba(${bg[0]},${bg[1]},${bg[2]},${1-keep})`;x.fillRect(0,0,W,H);
+  const glow=S.glow/100*W/40;x.shadowBlur=glow;x.lineCap='round';
+  if(view==="25-bar"){const n=25,bw=W/n,g=W/600;for(let k=0;k<n;k++){const v=pick2(spec,k,n),pv=pick2(peak,k,n),h=v*H*0.9;
+      const gr=x.createLinearGradient(0,H,0,H-H*0.9);gr.addColorStop(0,col(0.15));gr.addColorStop(0.6,col(0.6));gr.addColorStop(1,col(1));x.fillStyle=gr;x.shadowColor=col(v);
+      x.fillRect(k*bw+bw*0.12,H-h,bw*0.76,h);if(peakOn){x.fillStyle=col(1);x.fillRect(k*bw+bw*0.12,H-pv*H*0.9-4*g,bw*0.76,3*g);}}}
+  else if(view==="FFT line"){const P=(arr,i)=>[i/127*W,H-Math.min(1,arr[i])*H*0.88];x.beginPath();for(let i=0;i<128;i++){const[p,q]=P(spec,i);i?x.lineTo(p,q):x.moveTo(p,q);}
+      x.strokeStyle=col(0.85);x.shadowColor=col(0.85);x.lineWidth=W/300;x.stroke();x.shadowBlur=0;x.lineTo(W,H);x.lineTo(0,H);const gr=x.createLinearGradient(0,0,0,H);gr.addColorStop(0,col(0.7,0.35));gr.addColorStop(1,col(0.1,0));x.fillStyle=gr;x.fill();
+      if(peakOn){x.beginPath();for(let i=0;i<128;i++){const[p,q]=P(peak,i);i?x.lineTo(p,q):x.moveTo(p,q);}x.strokeStyle=col(1,0.6);x.lineWidth=W/700;x.stroke();}}
+  else if(view==="Scope"){x.beginPath();for(let i=0;i<300;i++){const p=i/299*W,q=cy-wave[i]*H*0.4;i?x.lineTo(p,q):x.moveTo(p,q);}x.strokeStyle=col(0.8);x.shadowColor=col(0.8);x.lineWidth=W/350;x.stroke();}
+  else if(view==="Radial"){const n=48,r0=R*0.2;x.lineWidth=W/170;for(let k=0;k<n;k++){const v=pick2(spec,k%24,24),pv=pick2(peak,k%24,24),a=k/n*Math.PI*2-Math.PI/2+T*0.05;const r1=r0+v*R*0.28;
+      x.strokeStyle=col(v);x.shadowColor=col(v);x.beginPath();x.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);x.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);x.stroke();
+      if(peakOn){const rp=r0+pv*R*0.28+W/120;x.fillStyle=col(1);x.beginPath();x.arc(cx+Math.cos(a)*rp,cy+Math.sin(a)*rp,W/300,0,7);x.fill();}}
+      x.shadowBlur=0;x.strokeStyle=col(0.4,0.5);x.lineWidth=W/600;x.beginPath();x.arc(cx,cy,r0*0.92,0,7);x.stroke();}
+}
+const $=id=>document.getElementById(id);
+document.querySelectorAll('input[type=range]').forEach(r=>{const u=()=>{S[r.id]=+r.value;r.nextElementSibling.textContent=r.value};r.oninput=u;u();});
+VIEWS.forEach(v=>{const o=document.createElement('option');o.textContent=v;$('pick').appendChild(o);
+  const d=document.createElement('div');d.className='t';d.dataset.v=v;d.innerHTML=`<canvas width="220" height="124"></canvas><div>${v}</div>`;d.onclick=()=>{cur=v;sync()};$('thumbs').appendChild(d);});
+Object.keys(PALS).forEach(p=>{const d=document.createElement('div');d.className='p';d.dataset.p=p;d.innerHTML=`<i style="background:linear-gradient(90deg,${PALS[p].join(',')})"></i>${p}`;d.onclick=()=>{pal=p;sync()};$('pals').appendChild(d);});
+$('pick').onchange=()=>{cur=$('pick').value;sync()};$('ph').onclick=e=>{peakOn=!peakOn;e.target.classList.toggle('on',peakOn)};
+function sync(){$('pick').value=cur;document.querySelectorAll('.t').forEach(d=>d.classList.toggle('sel',d.dataset.v===cur));document.querySelectorAll('.p').forEach(d=>d.classList.toggle('sel',d.dataset.p===pal));}
+sync();let last=performance.now();
+(function loop(now){const dt=Math.min(0.05,(now-last)/1000);last=now;audio(dt);
+  $('span').textContent=(T%8)>6.5?'0–3 kHz · TX audio':'0–2.8 kHz · USB filter';
+  draw($('main'),cur);document.querySelectorAll('.t').forEach(d=>draw(d.querySelector('canvas'),d.dataset.v));requestAnimationFrame(loop);})(last);
+</script></body></html>

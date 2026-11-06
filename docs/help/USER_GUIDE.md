@@ -31,6 +31,12 @@ control is gone. No change to the IO-board wire traffic, to the ham-band
 J16 pattern, or to any receive DSP. **v0.25.35** is the previous public
 build. See [What's new in 0.25.36](#whats-new-in-02536).
 
+**Coming next (unreleased):** a new **Visualizer** — a floating
+panel (header **Visualizer** chip) that draws what you hear, or your mic
+while you transmit voice, as 25-bar, FFT line, Scope or Radial, with
+nine palettes and echo / glow / speed controls on the new Settings →
+**Visualizer** tab. See [the Visualizer guide](#audio-visualizer).
+
 ## What's new in 0.25.36
 
 - **Eight transverter slots** (was four). Slots 5–8 start **disabled
@@ -788,6 +794,7 @@ Dummy load first.
   - [Is it legal to record?](#is-it-legal-to-record)
 - [CW operating (paddle, keyboard, TCI)](#cw-operating-paddle-keyboard-tci)
   - [Reading CW — the RX decoder](#reading-cw--the-rx-decoder)
+- [Audio Visualizer](#audio-visualizer)
 - [Tuner (manual ATU memory)](#tuner-manual-atu-memory)
 - [eSSB Coach](#essb-coach)
 - [Frequency calibration (WWV / time station)](#frequency-calibration-wwv--time-station)
@@ -3728,6 +3735,97 @@ copy well on typical signals; reach for the rest only when copy is rough:
 > **Tip.** There's no AFC — tune the signal onto your CW pitch on the
 > panadapter and leave it there; **Tracking** handles fist and speed, and
 > **Bandwidth** gives you the tolerance for small drift.
+
+---
+
+## Audio Visualizer
+
+A live picture of the audio you are hearing — and, while you talk, the
+audio you are sending. It is a floating panel that draws the sound as
+moving bars, a line, a waveform or a radial burst, drawn on your
+graphics card so it stays smooth.
+
+**Open it:** click the **Visualizer** chip on the header (or in the
+**Options** rack in grouped layout), or use the **View** menu. Close it
+the same way. A closed (or hidden) visualizer costs nothing — no
+analysis and no drawing run until you open it again.
+
+### What it shows
+
+- **Receiving:** the receive audio after the RX EQ — what you hear. It
+  does not follow the **Vol** knob or the master **MUTE**, so you can
+  still watch a signal with the speakers turned down. In **SUB**, a
+  receiver you have muted is left out of the picture.
+- **Transmitting voice or digital** (SSB, AM, FM, DIGU / DIGL …): the
+  panel switches to your **TX mic audio** the moment you key up, and the
+  label reads **· TX**. It goes back to **· RX** when you unkey.
+- **CW, TUNE and two-tone:** it stays on the receive audio (which is
+  silent if **Auto-mute on TX** is on) — there is no voice to draw.
+
+At the top of the panel you get a **view picker**, a **Peak hold**
+toggle and a small label such as **0–4 kHz · RX** showing the frequency
+span and the source.
+
+### The four views
+
+- **25-bar** — a classic 25-band equalizer-style bar display.
+- **FFT line** — a smooth spectrum line of the audio.
+- **Scope** — the audio waveform, oscilloscope style.
+- **Radial** — the spectrum wrapped into a circle that pulses with the
+  sound. This is the default.
+
+### The frequency span
+
+The span follows your RX filter, between **4 kHz** and **10 kHz**. For
+most modes it is the outer edge of the filter (a 2.4 kHz SSB filter
+gives the 4 kHz minimum). **AM, SAM and DSB** use the full filter width,
+so a ±5 kHz filter shows **0–10 kHz** — expect the **upper half to look
+mostly empty**, because demodulated AM audio only reaches about 5 kHz.
+With **SUB** on, the wider of the two receivers wins. While you
+transmit, the span stays where it was on receive.
+
+### Peak hold
+
+**Peak hold** keeps a small marker at each recent peak, then lets it
+fall after a moment. Toggle it from the panel or from Settings; **Peak
+hold time** (below) sets how long it waits.
+
+### Settings → Visualizer
+
+Open Settings (**Ctrl+,**) and pick the **Visualizer** tab. Changes
+apply live to the open panel.
+
+- **Look** — four small **live thumbnails**, one per view. Click one to
+  choose it. They animate a demo signal when no radio audio is flowing,
+  so you can judge a palette or effect with the radio off.
+- **Peak hold** — the same toggle as on the panel.
+- **Palette** — nine colour schemes: **Neon**, **Synthwave**, **Aurora**,
+  **Ember**, **Ice**, **Toxic**, **Sunset**, **Phosphor** and **Prism**.
+  Colour follows loudness, so quiet audio is dark and loud audio is
+  bright.
+- **Effects** — **Echo / trails** (how much of the previous frame
+  lingers as a fading tail), **Glow** (soft bloom around the shapes) and
+  **Background opacity** (0 blends into Lyra's panel colour, 100 is
+  solid black).
+- **Speed & smoothing** — **Attack** (how fast bars rise), **Decay**
+  (how fast they fall), **Smoothing** (averages successive frames) and
+  **Peak hold time**.
+- **Audio reactivity** — **Sensitivity** (how strongly the level drives
+  the picture) and **Floor** (the level treated as silence — raise
+  it to keep a noisy band from lighting up the whole display).
+
+### Remote desk
+
+On a remote desk client the panel shows **Not available on a remote
+desk**, because the audio analysis runs on the radio's own computer. The
+Settings thumbnails still animate with the demo signal.
+
+### Software rendering
+
+In graphics safe mode (software rendering) the visualizer cannot draw, so
+the panel and the Settings thumbnails show **Not available with software
+rendering** instead, and no analysis runs. Switch back to normal graphics to
+use it.
 
 ---
 

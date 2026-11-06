@@ -68,6 +68,8 @@ const QHash<QString, QString> &topicHeads() {
          QStringLiteral("CW operating (paddle, keyboard, TCI)")},
         {QStringLiteral("cwdecoder"),
          QStringLiteral("Reading CW — the RX decoder")},
+        {QStringLiteral("audiovis"),
+         QStringLiteral("Audio Visualizer")},
         {QStringLiteral("tuner"),     QStringLiteral("Tuner (manual ATU memory)")},
         {QStringLiteral("essbcoach"), QStringLiteral("eSSB Coach")},
         {QStringLiteral("profiles"),

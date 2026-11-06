@@ -157,6 +157,19 @@ constexpr auto kDigitalDrivePct     = "tx/digitalDrivePct";
 constexpr auto kMicSource    = "tx/mic_source";
 constexpr auto kTooltipsEnabled = "ui/tooltips_enabled";
 constexpr auto kVfoStyle = "ui/vfo_style";
+// Audio visualizer (dock + Settings tab) — all under the visualizer/ group.
+constexpr auto kVisView        = "visualizer/view";
+constexpr auto kVisPeakHold    = "visualizer/peakHold";
+constexpr auto kVisPalette     = "visualizer/palette";
+constexpr auto kVisEcho        = "visualizer/echo";
+constexpr auto kVisGlow        = "visualizer/glow";
+constexpr auto kVisBgOpacity   = "visualizer/bgOpacity";
+constexpr auto kVisAttack      = "visualizer/attack";
+constexpr auto kVisDecay       = "visualizer/decay";
+constexpr auto kVisSmoothing   = "visualizer/smoothing";
+constexpr auto kVisPeakHoldMs  = "visualizer/peakHoldMs";
+constexpr auto kVisSensitivity = "visualizer/sensitivity";
+constexpr auto kVisFloorDb     = "visualizer/floorDb";
 // Task #74 — TUN separate-drive toggle + value.  Operator-tuned in
 // Settings → TX (toggle) and on TxPanel's inline tune-drive stepper.
 constexpr auto kUseTuneDrive = "tx/use_tune_drive";   // legacy (#74); migrated
@@ -460,6 +473,19 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
     spaceBarPttEnabled_ = s.value(kSpaceBarPttEnabled, true).toBool();
     tooltipsEnabled_    = s.value(kTooltipsEnabled, true).toBool();
     vfoStyle_           = lyra::ui::migrateVfoStyleId(s.value(kVfoStyle, QString()).toString());
+    // Audio visualizer — clamp on load so a hand-edited / corrupt value can't escape its range.
+    visView_ = std::clamp(s.value(kVisView, 3).toInt(), 0, 3);
+    visPeakHold_ = s.value(kVisPeakHold, true).toBool();
+    visPalette_ = std::clamp(s.value(kVisPalette, 0).toInt(), 0, 8);
+    visEcho_ = std::clamp(s.value(kVisEcho, 40).toInt(), 0, 95);
+    visGlow_ = std::clamp(s.value(kVisGlow, 50).toInt(), 0, 100);
+    visBgOpacity_ = std::clamp(s.value(kVisBgOpacity, 0).toInt(), 0, 100);
+    visAttack_ = std::clamp(s.value(kVisAttack, 70).toInt(), 5, 100);
+    visDecay_ = std::clamp(s.value(kVisDecay, 12).toInt(), 1, 60);
+    visSmoothing_ = std::clamp(s.value(kVisSmoothing, 30).toInt(), 0, 90);
+    visPeakHoldMs_ = std::clamp(s.value(kVisPeakHoldMs, 800).toInt(), 0, 3000);
+    visSensitivity_ = std::clamp(s.value(kVisSensitivity, 100).toInt(), 20, 300);
+    visFloorDb_ = std::clamp(s.value(kVisFloorDb, -90).toInt(), -120, -40);
     autoStartOnLaunch_  = s.value(kAutoStartOnLaunch, true).toBool();
     // Process priority (per-PC).  Clamp to the valid 0..2 range, then apply
     // to the running process so the persisted choice takes effect at launch.
@@ -1831,6 +1857,115 @@ void Prefs::setVfoStyle(const QString &id) {
         vfoStyle_ = v;
         QSettings().setValue(kVfoStyle, v);
         emit vfoStyleChanged();
+    }
+}
+
+// ---- Audio visualizer ------------------------------------------------
+
+void Prefs::setVisView(int v) {
+    v = std::clamp(v, 0, 3);
+    if (v != visView_) {
+        visView_ = v;
+        QSettings().setValue(kVisView, v);
+        emit visViewChanged();
+    }
+}
+
+void Prefs::setVisPeakHold(bool v) {
+    if (v != visPeakHold_) {
+        visPeakHold_ = v;
+        QSettings().setValue(kVisPeakHold, v);
+        emit visPeakHoldChanged();
+    }
+}
+
+void Prefs::setVisPalette(int v) {
+    v = std::clamp(v, 0, 8);
+    if (v != visPalette_) {
+        visPalette_ = v;
+        QSettings().setValue(kVisPalette, v);
+        emit visPaletteChanged();
+    }
+}
+
+void Prefs::setVisEcho(int v) {
+    v = std::clamp(v, 0, 95);
+    if (v != visEcho_) {
+        visEcho_ = v;
+        QSettings().setValue(kVisEcho, v);
+        emit visEchoChanged();
+    }
+}
+
+void Prefs::setVisGlow(int v) {
+    v = std::clamp(v, 0, 100);
+    if (v != visGlow_) {
+        visGlow_ = v;
+        QSettings().setValue(kVisGlow, v);
+        emit visGlowChanged();
+    }
+}
+
+void Prefs::setVisBgOpacity(int v) {
+    v = std::clamp(v, 0, 100);
+    if (v != visBgOpacity_) {
+        visBgOpacity_ = v;
+        QSettings().setValue(kVisBgOpacity, v);
+        emit visBgOpacityChanged();
+    }
+}
+
+void Prefs::setVisAttack(int v) {
+    v = std::clamp(v, 5, 100);
+    if (v != visAttack_) {
+        visAttack_ = v;
+        QSettings().setValue(kVisAttack, v);
+        emit visAttackChanged();
+    }
+}
+
+void Prefs::setVisDecay(int v) {
+    v = std::clamp(v, 1, 60);
+    if (v != visDecay_) {
+        visDecay_ = v;
+        QSettings().setValue(kVisDecay, v);
+        emit visDecayChanged();
+    }
+}
+
+void Prefs::setVisSmoothing(int v) {
+    v = std::clamp(v, 0, 90);
+    if (v != visSmoothing_) {
+        visSmoothing_ = v;
+        QSettings().setValue(kVisSmoothing, v);
+        emit visSmoothingChanged();
+    }
+}
+
+void Prefs::setVisPeakHoldMs(int v) {
+    v = std::clamp(v, 0, 3000);
+    if (v != visPeakHoldMs_) {
+        visPeakHoldMs_ = v;
+        QSettings().setValue(kVisPeakHoldMs, v);
+        emit visPeakHoldMsChanged();
+    }
+}
+
+void Prefs::setVisSensitivity(int v) {
+    v = std::clamp(v, 20, 300);
+    if (v != visSensitivity_) {
+        visSensitivity_ = v;
+        QSettings().setValue(kVisSensitivity, v);
+        emit visSensitivityChanged();
+    }
+}
+
+void Prefs::setVisFloorDb(int v) {
+    v = std::clamp(v, -120, -40);
+    if (v != visFloorDb_) {
+        visFloorDb_ = v;
+        QSettings().setValue(kVisFloorDb, v);
+        emit visFloorDbChanged();
     }
 }
 

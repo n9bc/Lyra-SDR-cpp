@@ -22,6 +22,8 @@
 #include "dsp/coach/CoachAnalyzer.h"  // eSSB Coach — pre-RX-EQ audio tap
 #include "dsp/coach/SplatterMeter.h"  // eSSB Coach — RX1 IQ tap
 #include "dsp/MonitorRouting.h"       // eSSB practice — monitor route decision
+#include "dsp/AudioVisHub.h"         // audio visualizer — RX / TX audio taps
+#include "dsp/AudioVisCore.h"        // audio visualizer — span + source rules
 #include "wire/CMaster.h" // #158 Stage 4 — SendpInboundVacTxAudio (VAC-in seam)
 #include "rig/RigScope.h" // #2 — per-rig audio-route scoping (scope::rigKey / migrate)
 #include <QDataStream>
@@ -468,6 +470,10 @@ private:
 WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     : QObject(parent), wdsp_(wdsp)
 {
+    // Audio visualizer: construct the hub singleton now (it allocates its FFT
+    // tables + rings) so the audio / TX pump threads' first tap call only ever
+    // finds it already built -- no allocation on a real-time thread.
+    (void)lyra::dsp::vis::AudioVisHub::instance();
     // out_size = in_size * out_rate / in_rate (when in_rate >= out_rate).
     // With 1024 @ 192k -> 48k that is 256 frames per fexchange0 call.
     if (cfg_.inRate >= cfg_.outRate) {
@@ -5200,6 +5206,17 @@ void WdspEngine::txMonitorTapCb(int nsamples, double *buff)
     if (self == nullptr || buff == nullptr || nsamples <= 0) {
         return;
     }
+    // Audio visualizer TX tap.  The same post-rack mono as the monitor, so the
+    // extraction loop below is shared by both consumers.  Copies only while a
+    // visualizer is showing AND its source is TX (wantsTx: MOX up on a
+    // voice/digital mode, set from the GUI via visUsesTx); otherwise two
+    // relaxed loads, nothing is copied, and the monitor path is exactly as
+    // before.  Taken BEFORE the monitor's fillTap early return -- the
+    // visualizer must see the mic whether or not MON / practice is on.  Only
+    // ever called here, on the single cm_main TX pump thread, which is the
+    // hub's one TX-ring producer.
+    auto &vis = lyra::dsp::vis::AudioVisHub::instance();
+    const bool visOn = vis.wantsTx();
     // Only fill the ring when MON is on or practice runs — saves the copy on
     // every TX block when nobody is listening, and keeps the ring from
     // accumulating latency (dispatchAudioFrame also flushes it when idle).
@@ -5207,7 +5224,7 @@ void WdspEngine::txMonitorTapCb(int nsamples, double *buff)
         self->monEnabled_.load(std::memory_order_relaxed),
         self->txMuted_.load(std::memory_order_relaxed),
         self->practiceActive_.load(std::memory_order_relaxed));
-    if (!route.fillTap) {
+    if (!route.fillTap && !visOn) {
         return;
     }
     // Stack scratch sized to the mic block (xcm_insize, typ. <= 1024).  Clamp
@@ -5218,7 +5235,12 @@ void WdspEngine::txMonitorTapCb(int nsamples, double *buff)
     for (int i = 0; i < nsamples; ++i) {
         mono[i] = buff[2 * i];
     }
-    self->monitorRing_.push(mono, static_cast<std::size_t>(nsamples));
+    if (visOn) {
+        vis.pushTx(mono, nsamples);
+    }
+    if (route.fillTap) {
+        self->monitorRing_.push(mono, static_cast<std::size_t>(nsamples));
+    }
 }
 
 // #158 (#161 UAF fix) — VAC-in → TX bridge, registered via
@@ -5545,6 +5567,34 @@ void WdspEngine::setRxRecordTap(std::function<void(const double *, int)> tap)
     rxRecordTap_ = std::move(tap);
 }
 
+// Audio visualizer -- GUI-thread getters (see wdsp_engine.h).  Span: each
+// receiver's audio span from its mode + passband edges; RX1 counts as audible
+// unless it is the SUB mix's muted receiver (the master mute does not blank
+// the picture, matching the RX tap), RX2 counts only while it is actually
+// mixed in (subMixActive_) and unmuted.  Plain-member reads (mode_, passband
+// edges) are main-thread-owned like every other getter on this class.
+double WdspEngine::visSpanHz() const
+{
+    namespace vis = lyra::dsp::vis;   // WdspEngine::spanHz() would shadow vis::spanHz
+    const bool sub = subMixActive_.load(std::memory_order_relaxed);
+    const bool rx1Audible = !sub || !muted_.load(std::memory_order_relaxed);
+    const bool rx2Audible = !mutedRx2_.load(std::memory_order_relaxed);
+    const double rx1 = vis::spanHz(mode_.toStdString(), passbandLowHz_, passbandHighHz_);
+    const double rx2 = vis::spanHz(modeRx2_.toStdString(), passbandLowHzRx2_, passbandHighHzRx2_);
+    return vis::combinedSpanHz(rx1, rx1Audible, rx2, sub, rx2Audible);
+}
+
+// MOX = the wire-MOX edge (txOwnsAnalyzer_ is stored from moxActiveChanged and
+// is NOT set by CW keying), so CW stays on the RX tap via useTxSource's mode
+// check anyway; TUN / two-tone come from setVisTuneActive.
+bool WdspEngine::visUsesTx() const
+{
+    return lyra::dsp::vis::useTxSource(
+        txOwnsAnalyzer_.load(std::memory_order_acquire),
+        mode_.toStdString(),
+        visTuneActive_.load(std::memory_order_relaxed));
+}
+
 namespace {
 // #187 — passive WAV capture of the EXACT mono audio fed to the CW decoder, for
 // offline filter tuning against a real off-air signal.  Armed only when the env
@@ -5798,6 +5848,35 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
     // clip records; a lock-free no-op otherwise (one relaxed bool read).
     if (rxRecordTap_ && nframes > 0) {
         rxRecordTap_(audio, nframes);
+    }
+
+    // Audio visualizer RX tap.  Same `audio` as the recorder above: post-RX-EQ,
+    // PRE-volume, pre-master-mute -- the operator's master volume and master
+    // mute must not blank the picture (non-SUB: vis::mixSample ignores the
+    // mute flags when sub == false, so muted_ is simply not passed).  In SUB
+    // the output loop below treats muted_ as RX1's mute and mutedRx2_ as
+    // RX2's (gL / gR), so a muted receiver is excluded from the mix by passing
+    // exactly those two flags.  When auto-mute-on-TX would silence the jack
+    // (m_tx -- CW, TUN and two-tone keep the RX tap selected, but the operator
+    // hears nothing), push silence instead (sub with both receivers "muted"
+    // => mixSample returns 0) so the dock settles to idle rather than
+    // showing the TX-coupled RX tail.  active() first: when no dock / Settings
+    // thumbnail holds the hub, the flag loads are skipped as well and the whole
+    // tap is one relaxed load.  dispatchAudioFrame runs only on AAMix's single
+    // mix_main thread, the hub's one RX-ring producer.  Read-only on `audio`.
+    {
+        auto &vis = lyra::dsp::vis::AudioVisHub::instance();
+        if (nframes > 0 && vis.active()) {
+            const bool silenced = txMuted_.load(std::memory_order_relaxed) &&
+                               autoMuteOnTx_.load(std::memory_order_relaxed);
+            if (silenced) {
+                vis.pushRx(audio, nframes, true, true, true);
+            } else {
+                vis.pushRx(audio, nframes, subMix,
+                           muted_.load(std::memory_order_relaxed),
+                           mutedRx2_.load(std::memory_order_relaxed));
+            }
+        }
     }
 
     // #91 VOX anti-VOX — running RMS of the RX audio the operator HEARS
