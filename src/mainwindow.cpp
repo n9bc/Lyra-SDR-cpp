@@ -3374,6 +3374,15 @@ void MainWindow::buildDocks() {
         d->hide();
         new FloatingDockMemory(d, QStringLiteral("ui/audioVisDock"),
                                &layoutRestoring_, d);
+        // Floating, the bar and the status label need this much room, and
+        // the panel would otherwise open at its ~220 px size hint.  Docked
+        // (main window or the Options rack) the host decides; the bar gives
+        // up the status label first there.
+        const auto visMin = [d](bool floating) {
+            d->setMinimumWidth(floating ? 320 : 0);
+        };
+        connect(d, &QDockWidget::topLevelChanged, d, visMin);
+        visMin(d->isFloating());
         const auto syncVis = [d]() {
             QWidget *w = d->window();
             const bool open = d->isVisible() && w && w->isVisible()

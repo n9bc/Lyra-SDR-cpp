@@ -49,12 +49,22 @@ Rect  peakCapRect(int k, int n, float peak, float w, float h) noexcept;
 // bars' vertical gradient: stops 0 -> 0.15, 0.6 -> 0.6, 1 -> 1 (mockup).
 float barGradientT(float f) noexcept;
 
+// x (0..w) of frequency hz on the 25-bar axis: the bands are log-spaced from
+// lowHz to spanHz and share the width equally, so band k's range maps onto
+// its slot [k, k+1)·w/n and hz lands inside the bar that shows it.  -1 when
+// hz is outside lowHz..spanHz (or the range is empty).
+float barFreqX(float hz, float lowHz, float spanHz, float w) noexcept;
+
 // ---- FFT line / Scope -----------------------------------------------------
 constexpr float kLineHeight = 0.88f;  // FFT line full scale / item height
 constexpr float kScopeAmp   = 0.40f;  // Scope ±1 / item height
 
 // Point i of n across the full width; level 0..1 (clamped) up from the bottom.
 Pt linePoint(int i, int n, float level, float w, float h) noexcept;
+// x (0..w) of frequency hz on the FFT line: point i of n covers
+// [i, i+1)·spanHz/n and is drawn at linePoint's x, so hz sits at its point's
+// centre, clamped to the width.  -1 when hz is outside 0..spanHz.
+float lineFreqX(float hz, float spanHz, int n, float w) noexcept;
 // Point i of n across the full width; sample -1..1 (clamped) about the centre.
 Pt scopePoint(int i, int n, float sample, float w, float h) noexcept;
 

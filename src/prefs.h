@@ -444,7 +444,9 @@ class Prefs : public QObject {
     // line, 2 = Scope, 3 = Radial.  Palette: 0..8 (Neon default).  Echo,
     // glow, background opacity, smoothing and sensitivity are percents;
     // attack/decay are the bar ballistics; peakHoldMs is the peak-hold time;
-    // floorDb is the bottom of the level range.  Persisted under visualizer/.
+    // floorDb is the bottom of the level range; autoFloor (default on) tracks
+    // the received noise and sets the bottom itself, floorDb applying only
+    // while it is off.  Persisted under visualizer/.
     Q_PROPERTY(int visView READ visView WRITE setVisView
                NOTIFY visViewChanged)
     Q_PROPERTY(bool visPeakHold READ visPeakHold WRITE setVisPeakHold
@@ -469,6 +471,8 @@ class Prefs : public QObject {
                NOTIFY visSensitivityChanged)
     Q_PROPERTY(int visFloorDb READ visFloorDb WRITE setVisFloorDb
                NOTIFY visFloorDbChanged)
+    Q_PROPERTY(bool visAutoFloor READ visAutoFloor WRITE setVisAutoFloor
+               NOTIFY visAutoFloorChanged)
 
 public:
     explicit Prefs(QObject *parent = nullptr);
@@ -820,6 +824,8 @@ public:
     void setVisSensitivity(int v);
     int  visFloorDb() const { return visFloorDb_; }
     void setVisFloorDb(int v);
+    bool visAutoFloor() const { return visAutoFloor_; }
+    void setVisAutoFloor(bool v);
     // Task #33 — operator-facing token list with display labels.  Used
     // by the Settings → TX → Mic Source dropdown.  Order matches the
     // dropdown order (Mic In default first).  Disabled entries get a
@@ -969,6 +975,7 @@ signals:
     void visPeakHoldMsChanged();
     void visSensitivityChanged();
     void visFloorDbChanged();
+    void visAutoFloorChanged();
 
 private:
     int     gridLevel_;
@@ -1133,6 +1140,7 @@ private:
     int     visPeakHoldMs_ = 800;
     int     visSensitivity_ = 100;
     int     visFloorDb_ = -90;
+    bool    visAutoFloor_ = true;
     QHash<QString, int> splitShiftHz_;
     QHash<QString, int> vfoStepHz_;
     QHash<QString, int> vfoStepHzRx2_;

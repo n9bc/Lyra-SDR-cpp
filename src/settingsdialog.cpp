@@ -9642,7 +9642,8 @@ QWidget *SettingsDialog::buildVisualizerTab() {
 
     // Slider + value label row bound two-way to a Prefs int.  The prefs
     // setter ignores equal values, so an external change that moves the
-    // slider cannot loop back (QSignalBlocker is belt and braces).
+    // slider cannot loop back (QSignalBlocker is belt and braces).  Returns
+    // the row, so a caller can grey it out (Floor, under Auto floor).
     auto addSlider = [this, content](QFormLayout *form, const QString &label,
                                   int lo, int hi, int (Prefs::*get)() const,
                                   void (Prefs::*set)(int),
@@ -9678,6 +9679,7 @@ QWidget *SettingsDialog::buildVisualizerTab() {
         h->addWidget(sl, 1);
         h->addWidget(val);
         form->addRow(label, row);
+        return row;
     };
 
     // --- Look: four live thumbnails + Peak hold ---
@@ -9811,10 +9813,27 @@ QWidget *SettingsDialog::buildVisualizerTab() {
                   &Prefs::setVisSensitivity, &Prefs::visSensitivityChanged,
                   tr(" %"), tr("Scales how strongly the audio level drives "
                                "the picture."));
-        addSlider(f, tr("Floor"), -120, -40, &Prefs::visFloorDb,
-                  &Prefs::setVisFloorDb, &Prefs::visFloorDbChanged,
-                  tr(" dB"), tr("Level treated as silence. Raise it to hide "
-                                "background noise."));
+        QWidget *floorRow = addSlider(
+            f, tr("Floor"), -120, -40, &Prefs::visFloorDb,
+            &Prefs::setVisFloorDb, &Prefs::visFloorDbChanged, tr(" dB"),
+            tr("Level treated as silence when Auto floor is off. Raise it "
+               "to hide background noise."));
+        // Auto floor: the visualizer tracks the received noise and sets the
+        // bottom itself; the manual Floor slider is greyed out meanwhile.
+        auto *autoFloor = new QCheckBox(tr("Auto floor"), grp);
+        autoFloor->setToolTip(tr("Follow the received noise level so band "
+                                 "noise sits at the bottom and signals stand "
+                                 "out. Off: use the Floor slider."));
+        autoFloor->setChecked(prefs_->visAutoFloor());
+        floorRow->setEnabled(!prefs_->visAutoFloor());
+        connect(autoFloor, &QCheckBox::toggled, prefs_, &Prefs::setVisAutoFloor);
+        connect(prefs_, &Prefs::visAutoFloorChanged, autoFloor,
+                [this, autoFloor, floorRow]() {
+            const bool on = prefs_->visAutoFloor();
+            if (autoFloor->isChecked() != on) autoFloor->setChecked(on);
+            floorRow->setEnabled(!on);
+        });
+        f->addRow(QString(), autoFloor);
         root->addWidget(grp);
     }
 

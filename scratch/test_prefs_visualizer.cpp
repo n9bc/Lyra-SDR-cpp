@@ -65,6 +65,7 @@ int main(int argc, char **argv)
         check("default visPeakHoldMs",  p.visPeakHoldMs(),  800);
         check("default visSensitivity", p.visSensitivity(), 100);
         check("default visFloorDb",     p.visFloorDb(),     -90);
+        check("default visAutoFloor",   p.visAutoFloor(),   1);
 
         // --- clamping on set (high and low) -----------------------------
         p.setVisView(99);        check("set visView 99 -> 3",         p.visView(), 3);
@@ -91,7 +92,8 @@ int main(int argc, char **argv)
         p.setVisFloorDb(-500);   check("set visFloorDb -500 -> -120", p.visFloorDb(), -120);
 
         // --- NOTIFY fires on change only -------------------------------
-        int echoSignals = 0, viewSignals = 0, peakSignals = 0;
+        int echoSignals = 0, viewSignals = 0, peakSignals = 0, autoSignals = 0;
+        QObject::connect(&p, &Prefs::visAutoFloorChanged, [&] { ++autoSignals; });
         QObject::connect(&p, &Prefs::visEchoChanged, [&] { ++echoSignals; });
         QObject::connect(&p, &Prefs::visViewChanged, [&] { ++viewSignals; });
         QObject::connect(&p, &Prefs::visPeakHoldChanged, [&] { ++peakSignals; });
@@ -101,6 +103,8 @@ int main(int argc, char **argv)
         check("visViewChanged fires once", viewSignals, 1);
         p.setVisPeakHold(false); p.setVisPeakHold(false);
         check("visPeakHoldChanged fires once", peakSignals, 1);
+        p.setVisAutoFloor(false); p.setVisAutoFloor(false);
+        check("visAutoFloorChanged fires once", autoSignals, 1);
 
         // Leave known values behind for the round-trip below.
         p.setVisView(1);        p.setVisPeakHold(false);  p.setVisPalette(5);
@@ -124,6 +128,7 @@ int main(int argc, char **argv)
         check("reload visPeakHoldMs",  p.visPeakHoldMs(),  1234);
         check("reload visSensitivity", p.visSensitivity(), 150);
         check("reload visFloorDb",     p.visFloorDb(),     -60);
+        check("reload visAutoFloor",   p.visAutoFloor(),   0);
     }
 
     // --- corrupt stored values load clamped (Review Focus 5) ------------
@@ -140,6 +145,7 @@ int main(int argc, char **argv)
         s.setValue("visualizer/peakHoldMs",  -50);
         s.setValue("visualizer/sensitivity", 5000);
         s.setValue("visualizer/floorDb",     -10);
+        s.setValue("visualizer/autoFloor",   "garbage");
         s.sync();
         Prefs p;
         check("corrupt view -> 3",          p.visView(),        3);
@@ -153,6 +159,8 @@ int main(int argc, char **argv)
         check("corrupt peakHoldMs -> 0",    p.visPeakHoldMs(),  0);
         check("corrupt sensitivity -> 300", p.visSensitivity(), 300);
         check("corrupt floorDb -10 -> -40", p.visFloorDb(),     -40);
+        // QVariant::toBool: any string but "", "0" or "false" is true.
+        check("corrupt autoFloor -> on",    p.visAutoFloor(),   1);
     }
 
     clearVis();

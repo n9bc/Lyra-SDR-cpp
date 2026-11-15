@@ -133,6 +133,35 @@ int main()
         check("scope sample clamped to +-1", near(scopePoint(3, 512, -5.f, w, h).y, h / 2 + 0.4f * h), 0);
     }
 
+    // 3b. Frequency -> x for the dock's axis labels.
+    {
+        const float w = 500.f;
+        check("bar axis: low edge at x=0", near(barFreqX(50.f, 50.f, 4000.f, w), 0), barFreqX(50.f, 50.f, 4000.f, w));
+        check("bar axis: span at x=w", near(barFreqX(4000.f, 50.f, 4000.f, w), w), barFreqX(4000.f, 50.f, 4000.f, w));
+        // Band k's lower edge = 50·80^(k/25) lands on slot k's left edge.
+        const float edge7 = 50.f * std::pow(80.f, 7.f / 25.f);
+        check("bar axis: band 7's lower edge on slot 7's left edge",
+              near(barFreqX(edge7, 50.f, 4000.f, w), 7.f * w / 25.f, 0.01), barFreqX(edge7, 50.f, 4000.f, w));
+        // A frequency inside band k is under bar k's slot.
+        const float x1k = barFreqX(1000.f, 50.f, 4000.f, w);
+        const int k1k = int(25.f * std::log(1000.f / 50.f) / std::log(80.f));
+        check("bar axis: 1 kHz inside its band's slot",
+              x1k >= k1k * w / 25.f && x1k < (k1k + 1) * w / 25.f, x1k);
+        check("bar axis: below the low edge -> -1", near(barFreqX(20.f, 50.f, 4000.f, w), -1), 0);
+        check("bar axis: above the span -> -1", near(barFreqX(5000.f, 50.f, 4000.f, w), -1), 0);
+        check("bar axis: wider span moves 1 kHz left",
+              barFreqX(1000.f, 50.f, 10000.f, w) < x1k, barFreqX(1000.f, 50.f, 10000.f, w));
+        check("line axis: 0 Hz at x=0", near(lineFreqX(0.f, 4000.f, 256, w), 0), lineFreqX(0.f, 4000.f, 256, w));
+        check("line axis: span at x=w", near(lineFreqX(4000.f, 4000.f, 256, w), w), lineFreqX(4000.f, 4000.f, 256, w));
+        // Point 64 covers [1000, 1015.6) Hz at span 4 kHz; its centre is drawn at 64/255 w.
+        check("line axis: point 64's centre frequency at linePoint(64).x",
+              near(lineFreqX(64.5f * 4000.f / 256.f, 4000.f, 256, w), linePoint(64, 256, 0.f, w, 100.f).x, 0.01),
+              lineFreqX(64.5f * 4000.f / 256.f, 4000.f, 256, w));
+        check("line axis: 2 kHz near mid-width at span 4 kHz",
+              near(lineFreqX(2000.f, 4000.f, 256, w), w / 2, 1.5), lineFreqX(2000.f, 4000.f, 256, w));
+        check("line axis: outside the span -> -1", near(lineFreqX(4500.f, 4000.f, 256, w), -1), 0);
+    }
+
     // 4. Mesh: anti-aliased stroke = core + transparent fringe, premultiplied.
     {
         Mesh m;

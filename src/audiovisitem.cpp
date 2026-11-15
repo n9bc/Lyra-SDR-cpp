@@ -289,6 +289,7 @@ void AudioVisItem::reseedShaper() {
 
 vis::Settings AudioVisItem::settings() const {
     vis::Settings s;   // the spec's defaults
+    bool autoFloor = true;
     if (prefs_) {
         s.attack      = prefs_->visAttack();
         s.decay       = prefs_->visDecay();
@@ -296,15 +297,35 @@ vis::Settings AudioVisItem::settings() const {
         s.peakHoldMs  = prefs_->visPeakHoldMs();
         s.sensitivity = prefs_->visSensitivity();
         s.floorDb     = static_cast<float>(prefs_->visFloorDb());
+        autoFloor     = prefs_->visAutoFloor();
     }
+    // Auto: the tracked noise floor; the manual Floor until it has a reading.
+    if (autoFloor) s.floorDb = autoFloor_.floorDb(s.floorDb);
     return s;
+}
+
+qreal AudioVisItem::freqToX(qreal hz) const {
+    const float w = static_cast<float>(width());
+    const float span = static_cast<float>(statusSpan_);
+    switch (view()) {
+    case 0:
+        return geom::barFreqX(static_cast<float>(hz),
+                              static_cast<float>(vis::AudioVisHub::kLowHz), span, w);
+    case 1:
+        return geom::lineFreqX(static_cast<float>(hz), span,
+                               static_cast<int>(std::size(frame_.lineDb)), w);
+    default:
+        return -1.0;
+    }
 }
 
 void AudioVisItem::setStatus(double spanHz, bool tx) {
     if (spanHz == statusSpan_ && tx == statusTx_ && !statusText_.isEmpty())
         return;
+    const bool spanChanged = spanHz != statusSpan_;
     statusSpan_ = spanHz;
     statusTx_ = tx;
+    if (spanChanged) emit spanHzChanged();
     const QString s = spanLabel(spanHz) +
         (tx ? QStringLiteral(" · TX") : QStringLiteral(" · RX"));
     if (s != statusText_) {
@@ -393,6 +414,7 @@ void AudioVisItem::onTick() {
         tx = false;
     }
     if (!got) silence(frame_);
+    else      autoFloor_.step(frame_.lineDb, static_cast<int>(std::size(frame_.lineDb)), dt);
     setStatus(span, tx);
 
     const vis::Settings s = settings();

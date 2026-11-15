@@ -3766,6 +3766,16 @@ At the top of the panel you get a **view picker**, a **Peak hold**
 toggle and a small label such as **0–4 kHz · RX** showing the frequency
 span and the source.
 
+Along the bottom of the **25-bar** and **FFT line** views runs a small
+**frequency scale in kHz**, so you can see where a voice or a tone sits.
+Each number lines up with the bar or the point of the line that shows
+that frequency. The FFT line is spread evenly (0, 1, 2 … kHz, or
+half-kHz steps when there is room); the bars are spaced like the ear
+hears, with more room for the low end, so their scale reads 0.1, 0.2,
+0.5, 1, 2 … kHz. The scale follows the span as you change the RX filter
+and drops numbers rather than crowd them when the panel is narrow.
+**Scope** and **Radial** have no frequency scale.
+
 ### The four views
 
 - **25-bar** — a classic 25-band equalizer-style bar display.
@@ -3811,8 +3821,17 @@ apply live to the open panel.
   (how fast they fall), **Smoothing** (averages successive frames) and
   **Peak hold time**.
 - **Audio reactivity** — **Sensitivity** (how strongly the level drives
-  the picture) and **Floor** (the level treated as silence — raise
-  it to keep a noisy band from lighting up the whole display).
+  the picture), **Floor** (the level treated as silence) and **Auto
+  floor**.
+  - **Auto floor** is on by default. The visualizer keeps measuring the
+    band noise in the audio and sets the floor just above it, so the
+    noise sits at the bottom of the display and real signals stand out.
+    It follows a quieter band within a moment and a noisier one over a
+    few seconds, so a single static crash does not flatten the picture.
+    While Auto floor is on the **Floor** slider is greyed out.
+  - Turn **Auto floor** off to set the **Floor** by hand — raise it to
+    keep a noisy band from lighting up the whole display, lower it to
+    see weaker signals.
 
 ### Remote desk
 

@@ -5,9 +5,11 @@
 //   run:   build/test_audio_vis_core
 #include "dsp/AudioVisCore.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -45,6 +47,23 @@ float run(Shaper &sh, float target, int frames, float dt, const Settings &s)
     const float t[1] = {target};
     for (int i = 0; i < frames; ++i) sh.step(t, dt, s);
     return sh.level[0];
+}
+
+// One FFT-line frame of noise: each point's power is exponential (a Hann bin
+// of white noise) around `meanDb`.
+void noiseFrame(float *out, int n, float meanDb, std::mt19937 &rng)
+{
+    std::exponential_distribution<float> pw(1.f);
+    for (int i = 0; i < n; ++i)
+        out[i] = meanDb + 10.f * std::log10(std::max(pw(rng), 1e-12f));
+}
+
+// Fraction of points that map above `unit` with floor `floorDb`.
+float fractionAbove(const float *db, int n, float floorDb, float unit)
+{
+    int c = 0;
+    for (int i = 0; i < n; ++i) c += dbToUnit(db[i], floorDb, 100) > unit;
+    return float(c) / float(n);
 }
 
 }  // namespace
@@ -200,6 +219,93 @@ int main()
         uint8_t c[3]; paletteColor(0, 0.25f, c);   // halfway 06021a -> 00e5ff
         check("Neon t=0.25 is the midpoint of stops 0,1",
               std::abs(int(c[0]) - 3) <= 1 && std::abs(int(c[1]) - 0x73) <= 1 && std::abs(int(c[2]) - 0x8c) <= 1, c[1]);
+    }
+
+    // 8. Auto floor.
+    {
+        constexpr int N = AutoFloor::kMaxPoints;
+        const float dt = 1.f / 60.f;
+        std::mt19937 rng(7);
+        float f[N];
+
+        AutoFloor af;
+        check("auto floor: fallback before any estimate", near(af.floorDb(-90.f), -90.0), af.floorDb(-90.f));
+        for (int i = 0; i < N; ++i) f[i] = -200.f;
+        af.step(f, N, dt);
+        check("auto floor: digital silence gives no estimate", !af.valid(), af.floorDb(-90.f));
+
+        // Steady noise around -60 dB for 10 s.
+        for (int k = 0; k < 600; ++k) { noiseFrame(f, N, -60.f, rng); af.step(f, N, dt); }
+        const float steady = af.floorDb(-90.f);
+        // 25th percentile of exponential power = -5.6 dB rel. mean; + 8 dB margin.
+        check("auto floor: steady noise -> floor near -57.6 dB", near(steady, -57.6, 1.5), steady);
+        noiseFrame(f, N, -60.f, rng);
+        const float above = fractionAbove(f, N, steady, 0.1f);
+        check("auto floor: < 3 % of noise points above 10 % height", above < 0.03f, above);
+        float sorted[N];
+        std::copy(f, f + N, sorted);
+        std::nth_element(sorted, sorted + N / 2, sorted + N);
+        const float medU = dbToUnit(sorted[N / 2], steady, 100);
+        check("auto floor: median noise point sits at the bottom (0)", medU == 0.f, medU);
+        // Manual floor -90 for comparison: the same noise fills a third.
+        const float medManual = dbToUnit(sorted[N / 2], -90.f, 100);
+        check("manual floor -90: median noise point at ~1/3 height", medManual > 0.3f, medManual);
+
+        // A tone 40 dB above the noise still reads high, and doesn't move the floor.
+        for (int k = 0; k < 120; ++k) {
+            noiseFrame(f, N, -60.f, rng);
+            for (int i = 100; i < 104; ++i) f[i] = -20.f;
+            af.step(f, N, dt);
+        }
+        const float withTone = af.floorDb(-90.f);
+        check("auto floor: tone leaves the floor alone (< 1 dB)", std::fabs(withTone - steady) < 1.f, withTone);
+        const float toneU = dbToUnit(-20.f, withTone, 100);
+        check("auto floor: -20 dB tone reads > 0.6", toneU > 0.6f, toneU);
+
+        // Speech-like: half the span 30 dB up.  The 25th percentile then
+        // lands on the noise half's median (~4 dB over its 25th percentile),
+        // so it lifts a little but stays in the noise.
+        for (int k = 0; k < 180; ++k) {
+            noiseFrame(f, N, -60.f, rng);
+            for (int i = 0; i < N / 2; ++i) f[i] += 30.f;
+            af.step(f, N, dt);
+        }
+        const float wide = af.floorDb(-90.f);
+        check("auto floor: signal over half the span lifts it < 5 dB", wide - steady < 5.f, wide);
+        for (int k = 0; k < 300; ++k) { noiseFrame(f, N, -60.f, rng); af.step(f, N, dt); }
+
+        // Burst: 0.5 s of noise 30 dB up, then back.  Slow up -> only part
+        // of the way during the burst; fast down -> back within 3 s.
+        const float before = af.floorDb(-90.f);
+        for (int k = 0; k < 30; ++k) { noiseFrame(f, N, -30.f, rng); af.step(f, N, dt); }
+        const float during = af.floorDb(-90.f);
+        check("auto floor: 0.5 s burst lifts it < 30 % of the 30 dB step",
+              during - before < 9.f && during > before, during);
+        for (int k = 0; k < 180; ++k) { noiseFrame(f, N, -60.f, rng); af.step(f, N, dt); }
+        const float after = af.floorDb(-90.f);
+        check("auto floor: back within 1 dB 3 s after the burst", std::fabs(after - before) < 1.f, after);
+
+        // A lasting rise is followed within a few seconds.
+        for (int k = 0; k < 600; ++k) { noiseFrame(f, N, -45.f, rng); af.step(f, N, dt); }
+        const float risen = af.floorDb(-90.f);
+        check("auto floor: follows a lasting 15 dB rise within 10 s", near(risen, -42.6, 1.5), risen);
+
+        // Silence (radio stopped / squelch) holds the estimate.
+        for (int i = 0; i < N; ++i) f[i] = -200.f;
+        for (int k = 0; k < 300; ++k) af.step(f, N, dt);
+        check("auto floor: silence holds the floor", near(af.floorDb(-90.f), risen, 1e-4), af.floorDb(-90.f));
+
+        // Clamped to the manual Floor's range.
+        AutoFloor loud; for (int i = 0; i < N; ++i) f[i] = -10.f;
+        loud.step(f, N, dt);
+        check("auto floor: loud noise clamps to -40", near(loud.floorDb(-90.f), -40.0), loud.floorDb(-90.f));
+        AutoFloor quiet; for (int i = 0; i < N; ++i) f[i] = -170.f;
+        quiet.step(f, N, dt);
+        check("auto floor: very quiet clamps to -120", near(quiet.floorDb(-90.f), -120.0), quiet.floorDb(-90.f));
+        // NaN points are ignored, not propagated.
+        AutoFloor nanf; noiseFrame(f, N, -60.f, rng); f[3] = NAN; f[9] = INFINITY;
+        nanf.step(f, N, dt);
+        check("auto floor: NaN / Inf points ignored", std::isfinite(nanf.floorDb(-90.f)), nanf.floorDb(-90.f));
     }
 
     std::printf(g_failures ? "FAILED (%d)\n" : "ALL PASS (0 failures)\n", g_failures);

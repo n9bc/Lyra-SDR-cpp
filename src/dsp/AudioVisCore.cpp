@@ -128,6 +128,35 @@ void Shaper::step(const float *targets, float dtSec, const Settings &s)
     }
 }
 
+void AutoFloor::step(const float *lineDb, int n, float dtSec) noexcept
+{
+    if (!lineDb || n <= 0) return;
+    n = std::min(n, kMaxPoints);
+    int m = 0;
+    for (int i = 0; i < n; ++i) {
+        const float v = lineDb[i];
+        if (std::isfinite(v) && v > kSilentDb) scratch_[m++] = v;
+    }
+    if (m < std::max(1, n / 4)) return;            // mostly silence: hold
+    const int k = std::min(m - 1, static_cast<int>(kPercentile * static_cast<float>(m)));
+    std::nth_element(scratch_, scratch_ + k, scratch_ + m);
+    const float est = scratch_[k];
+    if (!have_) {
+        noise_ = est;
+        have_ = true;
+        return;
+    }
+    if (!(dtSec > 0.f)) return;
+    const float tau = est < noise_ ? kDownSec : kUpSec;
+    noise_ += (est - noise_) * (1.f - std::exp(-dtSec / tau));
+}
+
+float AutoFloor::floorDb(float fallback) const noexcept
+{
+    if (!have_) return fallback;
+    return std::clamp(noise_ + kMarginDb, kMinDb, kMaxDb);
+}
+
 float dbToUnit(float db, float floorDb, int sensitivityPct) noexcept
 {
     if (std::isnan(db) || (std::isinf(db) && db < 0.f)) return 0.f;

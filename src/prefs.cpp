@@ -170,6 +170,7 @@ constexpr auto kVisSmoothing   = "visualizer/smoothing";
 constexpr auto kVisPeakHoldMs  = "visualizer/peakHoldMs";
 constexpr auto kVisSensitivity = "visualizer/sensitivity";
 constexpr auto kVisFloorDb     = "visualizer/floorDb";
+constexpr auto kVisAutoFloor   = "visualizer/autoFloor";
 // Task #74 — TUN separate-drive toggle + value.  Operator-tuned in
 // Settings → TX (toggle) and on TxPanel's inline tune-drive stepper.
 constexpr auto kUseTuneDrive = "tx/use_tune_drive";   // legacy (#74); migrated
@@ -486,6 +487,7 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
     visPeakHoldMs_ = std::clamp(s.value(kVisPeakHoldMs, 800).toInt(), 0, 3000);
     visSensitivity_ = std::clamp(s.value(kVisSensitivity, 100).toInt(), 20, 300);
     visFloorDb_ = std::clamp(s.value(kVisFloorDb, -90).toInt(), -120, -40);
+    visAutoFloor_ = s.value(kVisAutoFloor, true).toBool();
     autoStartOnLaunch_  = s.value(kAutoStartOnLaunch, true).toBool();
     // Process priority (per-PC).  Clamp to the valid 0..2 range, then apply
     // to the running process so the persisted choice takes effect at launch.
@@ -1966,6 +1968,14 @@ void Prefs::setVisFloorDb(int v) {
         visFloorDb_ = v;
         QSettings().setValue(kVisFloorDb, v);
         emit visFloorDbChanged();
+    }
+}
+
+void Prefs::setVisAutoFloor(bool v) {
+    if (v != visAutoFloor_) {
+        visAutoFloor_ = v;
+        QSettings().setValue(kVisAutoFloor, v);
+        emit visAutoFloorChanged();
     }
 }
 

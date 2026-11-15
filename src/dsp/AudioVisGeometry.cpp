@@ -62,6 +62,21 @@ Pt linePoint(int i, int n, float level, float w, float h) noexcept
     return Pt{x, h - clamp01(level) * h * kLineHeight};
 }
 
+float barFreqX(float hz, float lowHz, float spanHz, float w) noexcept
+{
+    if (!(lowHz > 0.f) || !(spanHz > lowHz) || !(hz >= lowHz) || hz > spanHz)
+        return -1.f;
+    return w * std::log(hz / lowHz) / std::log(spanHz / lowHz);
+}
+
+float lineFreqX(float hz, float spanHz, int n, float w) noexcept
+{
+    if (n < 2 || !(spanHz > 0.f) || !(hz >= 0.f) || hz > spanHz) return -1.f;
+    const float pos = hz / spanHz * float(n) - 0.5f;   // fractional point index
+    const float x = pos / float(n - 1) * w;
+    return x < 0.f ? 0.f : (x > w ? w : x);
+}
+
 Pt scopePoint(int i, int n, float sample, float w, float h) noexcept
 {
     const float x = n > 1 ? float(i) / float(n - 1) * w : 0.f;

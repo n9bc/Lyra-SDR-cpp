@@ -79,7 +79,10 @@ Item {
     readonly property alias statusText: vis.statusText
 
     // Background (under the effects, so glow and trails never tint it).
+    // Also the canvas's window sentinel: it must stay the FIRST child (see
+    // fx.echoOn).
     Rectangle {
+        id: backdrop
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, Math.max(0, Math.min(100, root.bgOpacity)) / 100)
     }
@@ -93,7 +96,16 @@ Item {
         // The software backend (graphics safe mode) can draw neither the
         // item nor ShaderEffect; the hosts show a notice there and never
         // activate the canvas.
-        readonly property bool echoOn: root.echo > 0 && root.active
+        // The feedback loop is a window-reference cycle: echoPass holds
+        // prevTex as an input and prevTex holds echoPass as its source, so
+        // neither count can reach zero on its own.  Docking or floating the
+        // panel makes QQuickWidget move the scene to a NEW offscreen window;
+        // the cycle would keep the old, deleted window ("Cannot use same item
+        // on different windows", then a crash).  So echo drops out the moment
+        // the scene leaves its window: backdrop is released first, being the
+        // first child, which unhooks prevTex before Qt reaches echoPass.
+        readonly property bool inWindow: backdrop.Window.window !== null
+        readonly property bool echoOn: root.echo > 0 && root.active && inWindow
         readonly property bool glowOn: root.glow > 0 && root.active
         // Half-float trail texture wherever the backend can render to one
         // (Metal, Vulkan, D3D, desktop OpenGL 3+); OpenGL ES / old GL keep

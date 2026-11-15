@@ -48,6 +48,16 @@
 // Assigning `undefined` (RESET) drops the item's own value and goes back to
 // following Prefs.
 //
+// Floor: with Prefs.visAutoFloor on (the default, and with no prefsSource)
+// the dB floor comes from a vis::AutoFloor fed every tick from the frame's
+// FFT line, so received noise sits at the bottom; off, Prefs.visFloorDb.
+//
+// Frequency axis (the dock draws its labels in QML): spanHz is the span on
+// screen (NOTIFY, follows the RX filter live), and freqToX(hz) is where the
+// current view draws hz -- AudioVisGeometry's barFreqX / lineFreqX, so the
+// labels line up with the bars / line exactly; -1 for Scope and Radial or
+// outside the span.
+//
 // demo: true = always animate the built-in DemoSignal (Settings thumbnails
 // with no audio, a remote desk) and never touch the rings or acquire the
 // hub.  false = the real tap; when the radio isn't streaming the hub hands
@@ -101,6 +111,8 @@ class AudioVisItem : public QQuickItem {
                NOTIFY engineSourceChanged)
     // "0–4 kHz · RX" / "0–6 kHz · TX" — the span and source on screen.
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
+    // Audio span on screen (Hz), 4000..10000.
+    Q_PROPERTY(double spanHz READ spanHz NOTIFY spanHzChanged)
 
 public:
     explicit AudioVisItem(QQuickItem *parent = nullptr);
@@ -129,6 +141,10 @@ public:
     void     setEngineSource(QObject *o);
 
     QString statusText() const { return statusText_; }
+    double  spanHz() const { return statusSpan_; }
+    // x in item coordinates where the current view draws `hz`; -1 when the
+    // view has no frequency axis (Scope, Radial) or hz is off the span.
+    Q_INVOKABLE qreal freqToX(qreal hz) const;
 
 signals:
     void viewChanged();
@@ -139,6 +155,7 @@ signals:
     void prefsSourceChanged();
     void engineSourceChanged();
     void statusTextChanged();
+    void spanHzChanged();
     // The drawn content changed (a tick, a view / palette / peak-hold
     // change): an AudioVisGlowItem following this item repaints too.
     void contentUpdated();
@@ -203,6 +220,7 @@ private:
     lyra::dsp::vis::DemoSignal demoSignal_;
     std::vector<float>         demoBuf_;   // latest kFftSize demo samples
     lyra::dsp::vis::Shaper     shaper_;
+    lyra::dsp::vis::AutoFloor  autoFloor_;   // fed every tick, used when on
     int                        shaperView_ = -1;   // view shaper_ is sized for
     std::vector<float>         targets_;  // dbToUnit'd frame values
     std::vector<float>         scope_;    // scaled, clamped scope samples
