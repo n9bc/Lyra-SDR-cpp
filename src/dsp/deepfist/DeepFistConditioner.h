@@ -34,11 +34,26 @@ public:
     static constexpr float  kBandLoHz  = 400.0f;
     static constexpr float  kBandHiHz  = 1200.0f;
 
+    // Where to look for the tone.  Default (centerHz <= 0) = the trained
+    // behaviour: strongest tone anywhere in 400-1200 Hz, last 4096 samples.
+    // centerHz > 0 pins the search to centerHz +/- halfSpanHz (the operator's
+    // CW pitch), so a louder neighbour outside that window is never locked.
+    // wholeWindow averages the spectrum over the full window instead of only
+    // the newest 4096 samples, so a pause in the last 1.28 s can't move the
+    // lock off the station being decoded.
+    struct ToneSearch {
+        float centerHz    = 0.0f;
+        float halfSpanHz  = 0.0f;
+        bool  wholeWindow = false;
+    };
+
     DeepFistConditioner();
 
     // Dominant CW tone (Hz) in 400-1200 Hz, from the last 4096 samples.
-    // Applies a Hann window and smooths across calls via an EMA (alpha ~0.3).
+    // Hann-windowed, smoothed across calls via an EMA (alpha ~0.3); the
+    // ToneSearch overload narrows where it looks (see ToneSearch).
     float detectTone(const float* audio, int n);
+    float detectTone(const float* audio, int n, const ToneSearch& s);
 
     // Impulse noise blanker, run on the 3200 Hz window BEFORE condition() —
     // port of DeepFist tools/despike.py.  A sample whose |x| exceeds k x the

@@ -4,11 +4,13 @@
 #include "dsp/deepfist/NeuralCwDecoder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <deque>
 #include <utility>
+#include <string>
 
 #include "dsp/deepfist/DeepFistCtc.h"
 
@@ -22,7 +24,7 @@ constexpr int    kTickMs    = 400;          // re-decode ~2.5x/s (tci_decode tic
 constexpr double kGuardBase = 1.3;          // commit delay at normal speeds
 constexpr double kGuardSlow = 2.4;          // max guard at very slow speeds (<=15 WPM)
 constexpr int    kMinSamp   = kSr;          // need >=1 s buffered before decoding
-constexpr float  kKeyingMin = 9.0f;         // min keying ratio (p90/p10) to decode
+constexpr float  kKeyingMin = 9.0f;         // default min keying ratio (p90/p10) to decode
                                             // (DeepFist squelch.py: dead air ~4, keyed
                                             // CW 12-600+) — gates dead air / steady
                                             // carriers so we don't hallucinate on no
@@ -231,6 +233,28 @@ bool isWordSpace(double t, const std::vector<KeyRun>& gaps, double wordGapS,
     }
     return !inAnyGap;           // no gap at all -> trust the model
 }
+
+constexpr float  kToneSpanHz = 80.0f;       // tone lock: pitch +/- this
+
+// Tone lock and clean-up mask from upstream (bench:
+// scratch/test_cw_neural_bench.cpp).  This branch keeps its own commit
+// pipeline (newChars + word-space filter + borrowed spacing) and kKeyingMin
+// above, so upstream's DeepFistCommit agree-commit is not used here.  Env
+// overrides for A/B on real signals:
+//   LYRA_CW_TONELOCK=loudest  strongest tone anywhere in 400-1200 Hz
+//   LYRA_CW_GATE=<ratio>      keying gate (p90/p10; upstream uses 6)
+//   LYRA_CW_MASK=0            no clean-up mask after the conditioner
+float envFloat(const char* name, float dflt) {
+    const char* e = std::getenv(name);
+    return e ? std::strtof(e, nullptr) : dflt;
+}
+bool envIs(const char* name, const char* value) {
+    const char* e = std::getenv(name);
+    if (!e) return false;
+    std::string s(e);
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s == value;
+}
 }  // namespace
 
 NeuralCwDecoder::NeuralCwDecoder() {
@@ -239,6 +263,11 @@ NeuralCwDecoder::NeuralCwDecoder() {
     // override it live via setBlankPenalty().
     if (const char* e = std::getenv("LYRA_CW_BLANKPEN"))
         blankPen_.store(std::strtof(e, nullptr), std::memory_order_relaxed);
+
+    pinTone_   = !envIs("LYRA_CW_TONELOCK", "loudest");
+    keyingMin_ = envFloat("LYRA_CW_GATE", kKeyingMin);
+    maskHz_    = envFloat("LYRA_CW_MASK", 150.0f);
+    model_.setOutputMaskHz(maskHz_);
 }
 
 NeuralCwDecoder::~NeuralCwDecoder() {
@@ -478,6 +507,17 @@ void NeuralCwDecoder::workerLoop() {
                                          return c.t >= winStart - kMatchTolS;
                                      }));
 
+        // Lock the station once per window; the gate, speed estimate and the
+        // model all use the same tone.
+        DeepFistConditioner::ToneSearch search;
+        const float pitch = toneHz_.load(std::memory_order_relaxed);
+        if (pinTone_ && pitch > 0.0f) {
+            search.centerHz    = pitch;
+            search.halfSpanHz  = kToneSpanHz;
+            search.wholeWindow = true;
+        }
+        const float tone = model_.lockTone(window.data(), kWindow, search);
+
         // Keying gate: only decode when the window actually contains keyed CW.
         // A steady carrier / birdie / the CW-AGC artifact tone clears any level
         // test but has a flat envelope, so the model would hallucinate on it.
@@ -491,14 +531,14 @@ void NeuralCwDecoder::workerLoop() {
         // transmission that way.  So first commit what the last KEYED window
         // already decoded but hadn't settled: it passed the gate, so this is
         // not the dead-air hallucination the gate exists to stop.
-        const float keyRatio = model_.keyingRatio(window.data(), kWindow);
+        const float keyRatio = model_.keyingRatio(window.data(), kWindow, tone);
         if (onKeying) onKeying(keyRatio);
         if (spaceFilter) {
             keyRuns(model_.keyingEnvelope(window.data(), kWindow), winStart, marks, gaps);
             spacing.learn(marks, gaps, audioEnd - kGuardBase);
             wordGapS = spacing.wordGapS();
         }
-        if (keyRatio < kKeyingMin) {
+        if (keyRatio < keyingMin_) {
             std::string flush;
             {
                 std::lock_guard<std::mutex> lk(mx_);
@@ -528,7 +568,7 @@ void NeuralCwDecoder::workerLoop() {
         // Estimated RX speed (WPM) from the keying envelope; emit on change.
         // Median of the last 5 ticks (~2 s): one window caught in a deep fade
         // can misread, and it would jump the readout and the guard below.
-        int wpm = model_.keyingWpm(window.data(), kWindow);
+        int wpm = model_.keyingWpm(window.data(), kWindow, tone);
         if (wpm > 0) {
             wpmHist.push_back(wpm);
             if (wpmHist.size() > 5) wpmHist.pop_front();
@@ -548,7 +588,7 @@ void NeuralCwDecoder::workerLoop() {
         const double settleTo = audioEnd - guardS;
 
         int T = 0, C = 0;
-        if (!model_.infer(window.data(), kWindow, logits, T, C)) continue;
+        if (!model_.inferAt(window.data(), kWindow, tone, logits, T, C)) continue;
         const CtcFrames fr = greedyCtcFrames(logits.data(), T, C,
                                              blankPen_.load(std::memory_order_relaxed));
 

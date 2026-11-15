@@ -18,8 +18,8 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(Lyra
-    VERSION 0.25.36
-    DESCRIPTION "Lyra Sheliak — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
+    VERSION 0.25.42
+    DESCRIPTION "Lyra Aladfar — Hermes Lite 2/2+ SDR transceiver (C++23 / Qt6 rebuild)"
     LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -64,6 +64,29 @@ find_package(Vulkan QUIET)
 set(PA_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(PA_BUILD_TESTS       OFF CACHE BOOL "" FORCE)
 set(PA_BUILD_EXAMPLES    OFF CACHE BOOL "" FORCE)
+# ASIO host support (docs/architecture/asio_vac_plan.md).  The Steinberg
+# ASIO SDK 2.3.4 host files are vendored in third_party/asiosdk (GPL v3
+# option, see LYRA-NOTES.md).  Defining ASIO::host here makes PortAudio
+# skip its own SDK lookup / internet download.  Compiled in, but OFF at
+# run time until the operator ticks "Enable ASIO devices" — no ASIO
+# driver is loaded otherwise (PaLyra_SetAsioEnabled, pa_win_hostapis.c).
+option(LYRA_WITH_ASIO "Build ASIO host support (opt-in at run time)" ON)
+if(WIN32 AND LYRA_WITH_ASIO)
+    set(LYRA_ASIOSDK "${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk")
+    add_library(ASIO::host INTERFACE IMPORTED)
+    target_sources(ASIO::host INTERFACE
+        "${LYRA_ASIOSDK}/common/asio.cpp"
+        "${LYRA_ASIOSDK}/host/asiodrivers.cpp"
+        "${LYRA_ASIOSDK}/host/pc/asiolist.cpp")
+    target_include_directories(ASIO::host INTERFACE
+        "${LYRA_ASIOSDK}/common"
+        "${LYRA_ASIOSDK}/host"
+        "${LYRA_ASIOSDK}/host/pc")
+    target_link_libraries(ASIO::host INTERFACE ole32 uuid)
+    set(PA_USE_ASIO ON CACHE BOOL "" FORCE)
+else()
+    set(PA_USE_ASIO OFF CACHE BOOL "" FORCE)
+endif()
 add_subdirectory(third_party/portaudio EXCLUDE_FROM_ALL)
 
 # --- ONNX Runtime (DeepFist neural CW decoder) ------------------------
@@ -368,6 +391,8 @@ qt_add_executable(lyra
     src/dsp/deepfist/DeepFistConditioner.cpp
     src/dsp/deepfist/DeepFistCtc.h
     src/dsp/deepfist/DeepFistCtc.cpp
+    src/dsp/deepfist/DeepFistCommit.h
+    src/dsp/deepfist/DeepFistCommit.cpp
     src/dsp/deepfist/DeepFistScp.h
     src/dsp/deepfist/DeepFistScp.cpp
     src/dsp/deepfist/DeepFistRescore.h
@@ -711,6 +736,17 @@ qt_add_resources(lyra "lyra_data"
         data/dxcc_prefix.csv
 )
 
+# ASIO Compatible logo (Steinberg artwork, unaltered) — the ASIO Usage
+# Guidelines require it in every dialog that enables / configures ASIO.
+if(WIN32 AND LYRA_WITH_ASIO)
+    qt_add_resources(lyra "lyra_asio"
+        PREFIX "/asio"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk/logo"
+        FILES
+            third_party/asiosdk/logo/ASIO-compatible-logo-white-transparent-RGB.png
+    )
+endif()
+
 # Panadapter shaders: qsb-compiles GLSL → SPIR-V/MSL/HLSL/GLSL and
 # embeds the .qsb in the binary at ":/shaders/<name>.qsb".  QML uses
 # them as layer.effect ShaderEffects (glow/glass).  Cross-platform by
@@ -756,11 +792,16 @@ target_include_directories(lyra PRIVATE src)
 # project(... VERSION ...) above flows to code as LYRA_VERSION, and the
 # GitHub repo coordinates as LYRA_REPO_OWNER/LYRA_REPO_NAME.  The About
 # dialog and the update checker both read these (no hardcoded strings).
+# Settings / app-data identity.  A side-by-side test build can set
+# -DLYRA_APP_NAME=Lyra-cpp-ASIO so it reads and writes its own registry
+# key and app-data folders and never touches the normal Lyra settings.
+set(LYRA_APP_NAME "Lyra-cpp" CACHE STRING "Settings / app-data name")
 target_compile_definitions(lyra PRIVATE
     LYRA_VERSION="${PROJECT_VERSION}"
-    LYRA_VERSION_NAME="Sheliak"
+    LYRA_VERSION_NAME="Aladfar"
     LYRA_REPO_OWNER="N8SDR1"
     LYRA_REPO_NAME="Lyra-SDR-cpp"
+    LYRA_APP_NAME="${LYRA_APP_NAME}"
 )
 
 # Embed the application icon into lyra.exe (Explorer / taskbar / shortcut
@@ -1595,6 +1636,36 @@ add_executable(test_cw_decoder EXCLUDE_FROM_ALL
 target_include_directories(test_cw_decoder PRIVATE src)
 if(MSVC)
     target_compile_options(test_cw_decoder PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+# DeepFist neural CW decoder offline bench (synthetic CW -> streaming decode
+# -> CER / latency / cost per tone-lock and commit-delay variant).
+# EXCLUDE_FROM_ALL; `cmake --build build --target test_cw_neural_bench`, run
+# from the repo root so it finds models/.
+add_executable(test_cw_neural_bench EXCLUDE_FROM_ALL
+    scratch/test_cw_neural_bench.cpp
+    src/dsp/deepfist/DeepFistResampler.h
+    src/dsp/deepfist/DeepFistResampler.cpp
+    src/dsp/deepfist/DeepFistSpectrogram.h
+    src/dsp/deepfist/DeepFistSpectrogram.cpp
+    src/dsp/deepfist/DeepFistConditioner.h
+    src/dsp/deepfist/DeepFistConditioner.cpp
+    src/dsp/deepfist/DeepFistCtc.h
+    src/dsp/deepfist/DeepFistCtc.cpp
+    src/dsp/deepfist/DeepFistCommit.h
+    src/dsp/deepfist/DeepFistCommit.cpp
+    src/dsp/deepfist/DeepFistModel.h
+    src/dsp/deepfist/DeepFistModel.cpp
+)
+target_include_directories(test_cw_neural_bench PRIVATE src)
+target_link_libraries(test_cw_neural_bench PRIVATE onnxruntime)
+if(MSVC)
+    target_compile_options(test_cw_neural_bench PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+if(WIN32)
+    add_custom_command(TARGET test_cw_neural_bench POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ORT_DIR}/lib/onnxruntime.dll" "$<TARGET_FILE_DIR:test_cw_neural_bench>")
 endif()
 
 # #49 Stage 1 — TX DSP rack save/load round-trip (the four model states the

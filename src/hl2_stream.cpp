@@ -583,10 +583,10 @@ HL2Stream::HL2Stream(QObject *parent) : QObject(parent) {
             s.value(QStringLiteral("hw/ioboardForcePresent"), false).toBool();
         ioboardXvtrAnalog_ =
             s.value(QStringLiteral("hw/ioboardXvtrAnalog"),
-                    QStringLiteral("holdLastHf")).toString()
-                    == QLatin1String("onAirRf")
-                ? lyra::wire::hl2iob::XvtrPolicy::OnAirRf
-                : lyra::wire::hl2iob::XvtrPolicy::HoldLastHf;
+                    QStringLiteral("onAirRf")).toString()
+                    == QLatin1String("holdLastHf")
+                ? lyra::wire::hl2iob::XvtrPolicy::HoldLastHf
+                : lyra::wire::hl2iob::XvtrPolicy::OnAirRf;
         ioboardSendRxFcodes_ =
             s.value(QStringLiteral("hw/ioboardSendRxFcodes"), true).toBool();
         lastHfTxHz_ =
@@ -1735,6 +1735,34 @@ void HL2Stream::close() {
     // create_xmtr's PS surface (out[3]/peer/…) is NOT torn down here
     // (that's app-quit destroy_xmtr), so it survives stop/start intact.
     lyra::wire::io_keep_running = 0;                  // ref network.c:1438
+    // Metis STOP (0xEFFE 0x04 0x00) MUST go out while sendto still
+    // works.  shutdown(SD_BOTH) below unblocks EP6 recv, but it also
+    // makes a later sendto fail — the radio then sits until the ~13 s
+    // gateware watchdog, and Start hangs.  Thetis SendStopToMetis
+    // (networkproto1.c) sends this packet on the live listenSock
+    // before the socket is torn down.
+    if (socket_ != kInvalidSocket) {
+        sockaddr_in dest{};
+        dest.sin_family = AF_INET;
+        dest.sin_port   = htons(kRadioPort);
+        ::inet_pton(AF_INET,
+                    targetIp_.toLatin1().constData(),
+                    &dest.sin_addr);
+        const QByteArray stopPkt = buildControlPacket(false);
+        // Connected-socket send -- see the START path above.
+#if defined(_WIN32)
+        const int sent = ::sendto(static_cast<SOCKET>(socket_),
+                                  stopPkt.constData(), stopPkt.size(), 0,
+                                  reinterpret_cast<sockaddr*>(&dest),
+                                  sizeof(dest));
+#else
+        (void) dest;
+        const int sent = static_cast<int>(
+            ::send(static_cast<SOCKET>(socket_),
+                   stopPkt.constData(), stopPkt.size(), 0));
+#endif
+        qWarning("[shutdown] HL2Stream::close Metis STOP sendto=%d", sent);
+    }
     // Unblock EP6 recv before join.  close() used to join first and
     // only then closesocket — if WSAWait was infinite and IQ had
     // already stopped, the GUI froze here (lyra-log stuck at
@@ -1776,27 +1804,9 @@ void HL2Stream::close() {
             ::ReleaseSemaphore(lyra::wire::prn->hobbuffsRun[1], 1, nullptr);
     }
 
-    // Both workers stopped — main thread sends STOP, then closes
-    // the socket.  Best-effort; if STOP doesn't reach the gateware
-    // its own watchdog will idle the stream within ~13 sec anyway.
+    // Both workers stopped — STOP already went out above, before
+    // shutdown().  Close the socket now.
     if (socket_ != kInvalidSocket) {
-        sockaddr_in dest{};
-        dest.sin_family = AF_INET;
-        dest.sin_port   = htons(kRadioPort);
-        ::inet_pton(AF_INET,
-                    targetIp_.toLatin1().constData(),
-                    &dest.sin_addr);
-        const QByteArray stopPkt = buildControlPacket(false);
-        // Connected-socket send -- see the START path above.
-#if defined(_WIN32)
-        ::sendto(static_cast<SOCKET>(socket_),
-                 stopPkt.constData(), stopPkt.size(), 0,
-                 reinterpret_cast<sockaddr*>(&dest), sizeof(dest));
-#else
-        (void) dest;
-        ::send(static_cast<SOCKET>(socket_),
-               stopPkt.constData(), stopPkt.size(), 0);
-#endif
         ::closesocket(static_cast<SOCKET>(socket_));
         socket_ = kInvalidSocket;
     }
@@ -3363,21 +3373,15 @@ void HL2Stream::pollIoboardSession() {
                                 : QStringLiteral("0 (RF1)")));
         } else if (iob::present()) {
             iobPresentReported_ = true;
-            const iob::Inputs in = ioboardInputs();
             const iob::Snapshot s = iob::unpack(iob::published());
-            const bool held = s.sendTx && in.txInXvtrSlot
-                && in.xvtrPolicy == iob::XvtrPolicy::HoldLastHf;
             const QString tx = !s.sendTx ? QStringLiteral("none")
-                : held ? QStringLiteral("held %1").arg(s.txHz)
-                       : QString::number(s.txHz);
+                                        : QString::number(s.txHz);
             report(QStringLiteral(
                 "[iob] IO board detected at 0x41 (PCA9536 0x%1) — sending 0x1D "
                 "every ≈346 ms: TX %2 Hz (%3), REG11 %4, REG13/14 %5")
                 .arg(unsigned(iob::last_reply_c4()), 2, 16, QLatin1Char('0'))
                 .arg(tx,
-                     in.xvtrPolicy == iob::XvtrPolicy::HoldLastHf
-                         ? QStringLiteral("hold last HF")
-                         : QStringLiteral("on-air RF"),
+                     QStringLiteral("on-air RF"),
                      s.reg11Alt ? QStringLiteral("2 (Alt RX)")
                                 : QStringLiteral("0 (RF1)"),
                      s.sendRxCodes ? QStringLiteral("on")

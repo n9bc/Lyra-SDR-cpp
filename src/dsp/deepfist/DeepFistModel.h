@@ -78,12 +78,26 @@ public:
     // frame-timed commit.  Returns false on failure.  Safe only when ready().
     bool infer(const float* audio, int n,
                std::vector<float>& logits, int& T, int& C);
+    // Same, conditioned at an already-locked tone (see lockTone()).
+    bool inferAt(const float* audio, int n, float toneHz,
+                 std::vector<float>& logits, int& T, int& C);
+
+    // The tone the conditioner centres on for this window.  Compute it once
+    // per window and pass it to inferAt / keyingRatio / keyingWpm so all three
+    // look at the same station.
+    float lockTone(const float* audio, int n,
+                   const DeepFistConditioner::ToneSearch& s = {}) const {
+        return cond_.detectTone(audio, n, s);
+    }
 
     // Keying-activity ratio (p90/p10) of the window at the auto-locked tone.
     // The streamer gates on this so the model doesn't hallucinate on dead air /
     // steady carriers (see DeepFistConditioner::keyingRatio).
     float keyingRatio(const float* audio, int n) const {
         return cond_.keyingRatio(audio, n, cond_.detectTone(audio, n));
+    }
+    float keyingRatio(const float* audio, int n, float toneHz) const {
+        return cond_.keyingRatio(audio, n, toneHz);
     }
 
     // Baseband envelope of the window at the tone keyingRatio() last locked to
@@ -94,9 +108,19 @@ public:
 
     // Estimated CW speed (WPM) of the window, 0 if indeterminate.
     int keyingWpm(const float* audio, int n) const {
-        const float w = cond_.estimateWpm(audio, n, cond_.detectTone(audio, n));
+        return keyingWpm(audio, n, cond_.detectTone(audio, n));
+    }
+    int keyingWpm(const float* audio, int n, float toneHz) const {
+        const float w = cond_.estimateWpm(audio, n, toneHz);
         return static_cast<int>(w + 0.5f);
     }
+
+    // Optional clean-up after the conditioner: keep only audio within
+    // +/- halfWidthHz of the 600 Hz output pitch (0 = off, the trained
+    // pipeline).  The conditioner's two 1-pole filters only take a
+    // neighbouring station down ~33 dB at 300 Hz, which the log spectrogram
+    // still shows clearly; this removes it.
+    void setOutputMaskHz(float halfWidthHz) { outMaskHz_ = halfWidthHz; }
 
     const std::vector<std::string>& tokens() const { return tokens_; }
     const std::string& lastError() const { return lastError_; }
@@ -114,6 +138,7 @@ private:
     std::vector<float>       condScratch_;
     std::vector<float>       specScratch_;
     std::vector<float>       tmScratch_;  // time-major copy of the tile (DeepCW)
+    float                    outMaskHz_ = 0.0f;
     bool                     ready_ = false;
     std::string              lastError_;
 };

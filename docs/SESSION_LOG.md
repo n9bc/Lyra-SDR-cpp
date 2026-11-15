@@ -4,6 +4,68 @@ Running EOD log. Newest entry on top. Short rough-outline format.
 
 ---
 
+## 2026-11-14 — v0.25.42 Aladfar RELEASED (WDSP 2.11)
+
+WDSP 2.11 DLL + CW neural NR models already on `feature/wdsp-2.10`
+(`a74a794`). Star name **Aladfar** (η Lyrae). Full installer
+`Lyra-Setup-0.25.42.exe`, app name **Lyra-cpp** (shared settings with
+Sulafat). Docs: `docs/releases/v0.25.42.md`, USER_GUIDE, README,
+KNOWN_ISSUES, wiki Feature Status / Home / FAQ / Roadmap. Tag
+`v0.25.42`. Branch name stays `feature/wdsp-2.10`. Mac stays
+`macos-port`. ASIO for VAC remains **test stage**.
+
+## 2026-11-14 — v0.25.41 Sulafat RELEASED (ASIO for VAC, test stage)
+
+Fast-forward `feature/asio-vac` (`e4b43cf` / `5174bfa` / `8073a8f`) onto
+`feature/wdsp-2.10`. Star name **Sulafat** (γ Lyrae). Full installer
+`Lyra-Setup-0.25.41.exe`, app name **Lyra-cpp** (shared settings with
+Sheliak). Docs: `docs/releases/v0.25.41.md`, USER_GUIDE, README,
+KNOWN_ISSUES, wiki Feature Status / Home / FAQ. Tag `v0.25.41`.
+`main` untouched. Mac stays `macos-port`. ASIO is public **test stage**.
+
+## 2026-11-14 — v0.25.40 Sheliak RELEASED (ANAN / Brick3 filters on Filters / BCD)
+
+Cherry-pick `4d575ca` of `45e01bc` (Settings → Filters / BCD read-only
+radio HPF/BPF + TX LPF + ANT lamps/grid; hidden HL2 / BrickSDR;
+Orion MkII Alex1 TX image in RX as deskHPSDR parity) onto
+`feature/wdsp-2.10`. Docs: `docs/releases/v0.25.40.md`, USER_GUIDE
+What's new + Filters / BCD, README, KNOWN_ISSUES, wiki Feature Status
+/ Home / FAQ. Tag `v0.25.40`. `main` untouched. Mac stays `macos-port`.
+
+## 2026-11-08 — v0.25.39 Sheliak RELEASED (HiDPI display, ANAN model, log on-screen)
+
+Cherry-pick `f909000` of `e516762` (panadapter ribbon + waterfall
+history 512→pane height, cap 1024) onto `feature/wdsp-2.10` already
+holding `4eac6aa` (ANAN blank model → filter profile) and `dffa47a`
+(Log window fit-to-screen). 4K @ 150%: use Windows Display scale, no
+`QT_SCALE_FACTOR`. DeepFist already in 0.25.38. Docs:
+`docs/releases/v0.25.39.md`, USER_GUIDE What's new + Display +
+Diagnostics, README, KNOWN_ISSUES, wiki Feature Status / Home / FAQ /
+PC Requirements. Tag `v0.25.39`. `main` untouched. Mac stays
+`macos-port`.
+
+## 2026-11-07 — v0.25.38 Sheliak RELEASED (DeepFist pitch lock + earlier commit)
+
+Cherry-pick `e7c465a` of `edd19a1` (11 DeepFist files: DeepFistCommit,
+conditioner/model/neural decoder, wdsp_engine pitch plumbing, bench)
+onto `feature/wdsp-2.10`. DeepFist searches ±80 Hz of the operator CW
+pitch; characters commit on two agreeing decodes, capped at the old
+1.3 s delay. Classic fldigi decoder untouched. Original decoder:
+Brent Crier (N9BC). Docs: `docs/releases/v0.25.38.md`, USER_GUIDE
+What's new + Reading CW, README, KNOWN_ISSUES, wiki Feature Status /
+Home. Tag `v0.25.38`. `main` untouched. Mac stays `macos-port`.
+
+## 2026-11-05 — v0.25.37 Sheliak RELEASED (7000DLE / 8000DLE TX, Xvtr IO, Stop)
+
+HEAD after `d7433bb` (7000/8000 TX notes), `ae127da` (Xvtr BYTE0-4
+on-air RF latch; K7MDL 0.25.36), `3aff798` (Metis STOP before socket
+close). Same tag includes `e17f42a` Orion MkII `txOnAirValidated` and
+`1a2d9c5` CMASIO / WING FAQ. G2 / G2-1K still dummy-load arm. Red
+Pitaya still no P2 TX profile. P1 ANAN still refused. Docs:
+`docs/releases/v0.25.37.md`, USER_GUIDE What's new, README,
+KNOWN_ISSUES, wiki Feature Status / Home. Tag `v0.25.37`. `main`
+untouched. Mac stays `macos-port`.
+
 ## 2026-11-04 — v0.25.36 Sheliak RELEASED (8 Xvtr slots, SWL J16 rows, digital-mode ALC)
 
 Five commits over v0.25.35. `546813d` Xvtr slots 4 → 8 (K7MDL's

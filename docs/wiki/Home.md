@@ -2,9 +2,9 @@
 
 <img src="https://n8sdr1.github.io/Lyra-SDR-cpp/logo.png" width="120" alt="Lyra logo">
 
-# Lyra — Hermes Lite 2 / 2+, BrickSDR2, and Brick3SDR
+# Lyra — Hermes Lite 2 / 2+, Brick, and ANAN (P2)
 
-**A native C++23 / Qt 6 SDR transceiver for the Hermes Lite 2 / 2+ (Protocol 1) and BrickSDR2 / Brick3SDR (Protocol 2) — full receive *and* transmit, a GPU-accelerated panadapter, and a studio-grade TX audio rack. No Python, no GIL, nothing in the signal path but native code.**
+**v0.25.42 Aladfar** — native C++23 / Qt 6 SDR for **Windows 10 / 11 x64**. Protocol 1 **HL2 / 2+**; Protocol 2 **BrickSDR2 / Brick3SDR** and **ANAN** (G2 dummy-load arm). Dual RX1/RX2 panadapters, independent SUB, **Diversity** (dual-ADC phasing), PureSignal + Amp View, **WDSP 2.11**, CW TX + decode, LAN remote. **ASIO for VAC is in test** (default off).
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6?logo=windows&logoColor=white)](PC-Requirements)
 [![Latest release](https://img.shields.io/github/v/release/N8SDR1/Lyra-SDR-cpp?label=latest&color=2f81f7)](https://github.com/N8SDR1/Lyra-SDR-cpp/releases/latest)
@@ -49,7 +49,7 @@ wired Ethernet link to the radio.
 | **ANAN-10 / 10E** (P2) | 🚧 BrickSDR2 TX (on-air, classic Alex). Pick model in Settings. |
 | **ANAN-100 / 100B / 100D / 200D** (P2) | 🚧 Brick3SDR TX (on-air, independent Enable PA). **100D / 200D**: SUB second pane. |
 | ANAN-G2 / G2-1K | 🚧 Dummy-load TX arm (Saturn BPF) |
-| ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3 | 🚧 **In tester hands** (not locked). RX/BPF on the bench; TX dummy-load + drive ceiling until RF is confirmed. |
+| ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3 | ✅ Protocol 2 TX like Brick3 (Enable PA + MOX + Drive; no Arm Protocol 2 TX). Dummy load on first TX. |
 | Brick / classic ANAN still on **Protocol 1** FPGA | ❌ Refused — HL2 TX layout would be wrong. Flash **P2**. |
 
 Full detail (why Open is refused, what TX would do, Brick flash help) on the **[Supported Radios](Supported-Radios)** page.
@@ -64,18 +64,18 @@ Full detail (why Open is refused, what TX would do, Brick flash help) on the **[
 
 ## At a glance — what works now
 
-✅ Full **receive** (all modes, WDSP 2.10 NR or NNR, RX EQ,
-captured-noise reduction, CTUN, RIT) · ✅ Full **transmit** — SSB / AM / SAM /
-DSB / FM / CW plus digital over TCI, VAC, and the **Apps** launcher · ✅ **SUB / RX2 + SPLIT** (second pan on Brick3 / 100D) ·
-✅ a **native TX audio rack**
-(8-band EQ, multiband Combinator, plate reverb, speech processing, voice
-keyer, VOX, TX profiles) · ✅ **CW** send + on-screen **CW decode** · ✅
-**DX spots**, **frequency calibration**, **tuner memory**, **CAT / TCI /
-VAC**, a **session recorder**, backup & restore, and a **dockable** Vulkan UI.
+✅ Full **receive** (WDSP 2.11 NR or NNR, RX EQ, NR-C, CTUN, RIT, APF, BIN) ·
+✅ Full **transmit** — SSB / AM / SAM / DSB / FM / CW plus TCI / VAC ·
+✅ **Dual panadapters / waterfalls** (RX1 + RX2 on two-converter radios) ·
+✅ **SUB / RX2 + SPLIT** (independent) · ✅ **Diversity** (dual-ADC phase/gain) ·
+✅ **PureSignal** + Amp View · ✅ native **TX rack** · ✅ **CW** send + **decode**
+(Classic / DeepFist) · ✅ dockable Vulkan/D3D11 UI · ✅ **Lyra Remote on the LAN**
+(not WAN) · ✅ **ASIO for VAC in test** (v0.25.41, default off; not CMASIO).
 
 See the full checklist on **[Feature Status](Feature-Status)**.
-Lyra is not Thetis-CMASIO: a Behringer WING / X32 over ASIO will not map
-the way it does there — **[FAQ](FAQ-and-Troubleshooting#can-i-use-cmasio-or-a-behringer-wing--x32-with-lyra)**.
+**ASIO for VAC is in test** (v0.25.41, default off). That is not Thetis
+CMASIO and not a WING used as the radio mixer —
+**[FAQ](FAQ-and-Troubleshooting#can-i-use-cmasio-or-a-behringer-wing--x32-with-lyra)**.
 
 ## A studio rack, inside the radio
 
@@ -94,13 +94,13 @@ gear — all native, all in front of the WDSP transmitter:
 
 ## Shipped highlights
 
-✅ **v0.25.36 Sheliak** (eight Xvtr slots, SWL J16 rows, digital-mode ALC) · ✅ **v0.25.35 Sheliak** (previous public build — GEN RF1 / Alt + LNA per slot, RPT drops on band change) · ✅ **v0.25.34 Sheliak** (HL2 IO board sequencer + detection) · ✅ **v0.25.33 Sheliak** (stability upgrade for Protocol 2) · ✅ **OC on P2** · ✅ **USB-BCD FTDI** · ✅ **Parked Help balloon** · ✅ **v0.25.28 Sheliak** · ✅ **Pico RX fcodes** (GitHub #23) · ✅ **PureSignal dock ON** · ✅ **VFO LED digit vs Step** (GitHub #22) · ✅ **Helios TX SWR** · ✅ **View → Freq Cal** (GitHub #21) · ✅ **v0.25.22** (long return point) · ✅ **HL2 RF1 / Alt RX** · ✅ **Helios / Sonar / Cluster** meters · ✅ **Lyra Remote** (separate browser desk) · ✅ **PureSignal** (HL2 coupler / Brick ADC0 /
+✅ **v0.25.42 Aladfar** (WDSP 2.11 + CW NNR models; ASIO for VAC still in **test**) · ✅ **v0.25.41 Sulafat** (ASIO for VAC in **test**; default off; not CMASIO) · ✅ **v0.25.40 Sheliak** (previous public build — ANAN / Brick3 filters on Filters / BCD; HiDPI already in 0.25.39) · ✅ **v0.25.39 Sheliak** (HiDPI display, ANAN blank model, log on-screen; DeepFist already in 0.25.38) · ✅ **v0.25.38 Sheliak** (DeepFist CW pitch lock ±80 Hz + earlier commit; Classic unchanged; N9BC original decoder) · ✅ **v0.25.37 Sheliak** (7000DLE / 8000DLE TX, Xvtr on-air RF on BYTE0–4, Metis STOP) · ✅ **v0.25.36 Sheliak** (eight Xvtr slots, SWL J16 rows, digital-mode ALC) · ✅ **v0.25.35 Sheliak** (GEN RF1 / Alt + LNA per slot, RPT drops on band change) · ✅ **v0.25.34 Sheliak** (HL2 IO board sequencer + detection) · ✅ **v0.25.33 Sheliak** (stability upgrade for Protocol 2) · ✅ **OC on P2** · ✅ **USB-BCD FTDI** · ✅ **Parked Help balloon** · ✅ **v0.25.28 Sheliak** · ✅ **Pico RX fcodes** (GitHub #23) · ✅ **PureSignal dock ON** · ✅ **VFO LED digit vs Step** (GitHub #22) · ✅ **Helios TX SWR** · ✅ **View → Freq Cal** (GitHub #21) · ✅ **v0.25.22** (long return point) · ✅ **HL2 RF1 / Alt RX** · ✅ **Helios / Sonar / Cluster** meters · ✅ **Lyra Remote** (separate browser desk) · ✅ **PureSignal** (HL2 coupler / Brick ADC0 /
 Brick3 PS jack) · ✅ **VAC2** · ✅ **SUB / SPLIT** (second pan on Brick3 /
 100D; RX2 jack isolate on TX) · ✅ **Diversity** (Brick3 / 100D / 200D —
 RX2 jack / Ext1, not ANT2; not a second VFO) · ✅ **Band stack** (three
 frequencies per chip) · ✅ **Separate RX / TX filter lows** · 🚧 **ANAN-10…200D** P2
 (10/10E = Brick2 TX; 100-series = Brick3 TX; G2 dummy-load) ·
-🚧 **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** (in tester hands; TX dummy-load) · 🗺️ **Linux, then macOS**.
+✅ **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** (P2 TX, no Arm Protocol 2 TX) · 🗺️ **Linux, then macOS**.
 
 Details, ordering, and status on the **[Roadmap](Roadmap)**.
 
@@ -148,10 +148,6 @@ session.
 - **Brent Crier (N9BC)** — co-contributor and tester.
 - **Timmy Davis (KC8TYK)** — tester (v0.1 tester flight).
 - **W5UDX** — DSP2024P Plate Reverb presets and verification.
-- **Cursor Grok 4.6** (SpaceXAI / Cursor) — coding assistant for
-  implementation and debug pairing on the native C++ rebuild.
-  Rick remains the project author; this is pairing help, not a
-  licensed-operator co-author credit.
 
 **Special thanks:** **Heiko (DL1BZ)** — DeskHPSDR, again — and
 **Anton (linoobs)** — BrickSDR FPGA / Protocol 2 flash help.
@@ -171,4 +167,4 @@ linHPSDR, HL2 gateware), WDSP / Thetis / fldigi:
 
 ---
 
-*Lyra is built by Rick Langford (N8SDR) for the Hermes Lite 2 community, with development assistance from Cursor Grok 4.6. 73.*
+*Lyra is built by Rick Langford (N8SDR) for the Hermes Lite 2 and HPSDR community. 73.*

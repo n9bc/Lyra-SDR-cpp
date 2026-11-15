@@ -72,6 +72,13 @@ public:
 
     void setSampleRate(double hz);      // input rate (default 48 kHz)
 
+    // Operator's CW pitch (Hz).  The tone lock searches only +/- 80 Hz around
+    // it, so a louder station elsewhere in the passband is never decoded
+    // instead.  0 = search the whole 400-1200 Hz band for the loudest tone
+    // (the original behaviour; also forced by LYRA_CW_TONELOCK=loudest).
+    void setToneHz(double hz) { toneHz_.store(static_cast<float>(hz),
+                                              std::memory_order_relaxed); }
+
     // Explicitly stop the worker thread and join it.  Idempotent (thin
     // wrapper over the private stopWorker(), which no-ops via
     // running_.exchange(false) if already stopped) — safe to call from an
@@ -128,6 +135,12 @@ private:
     std::atomic<CwSpaceTimeline*> spacePub_{nullptr};   // publish commits here
     std::atomic<CwSpaceTimeline*> spaceSrc_{nullptr};   // borrow spaces from here
     std::atomic<bool>             borrowSpacing_{false};
+    std::atomic<float> toneHz_{0.0f};   // operator CW pitch (0 = loudest tone)
+
+    // Tuning, fixed at construction (env overrides for A/B -- see the .cpp).
+    bool   pinTone_   = true;
+    float  keyingMin_ = 9.0f;
+    float  maskHz_    = 150.0f;
 
     // Shared rolling window (audio thread writes, worker reads), under mx_.
     std::mutex          mx_;

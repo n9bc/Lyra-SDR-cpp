@@ -145,6 +145,13 @@
 #include <cmath>
 #include <iterator>
 
+// ASIO opt-in state (wire/Ivac.cpp).  Declared here rather than
+// including wire/Ivac.h, whose macros clash with other headers.
+namespace lyra::wire {
+bool ivacAsioCompiledIn();
+bool ivacAsioActive();
+}
+
 namespace lyra::ui {
 
 namespace {
@@ -514,6 +521,144 @@ QWidget *SettingsDialog::buildAudioTab() {
                 txLo->setValue(prefs_->txFilterLow());
         });
         form->addRow(tr("TX filter low:"), txLo);
+    }
+
+    // ── ASIO devices for VAC (opt-in; docs/architecture/asio_vac_plan.md)
+    // Off by default: with it off Lyra never loads an ASIO driver.  The
+    // ASIO Compatible logo sits beside the switch — the Steinberg ASIO
+    // Usage Guidelines require it in every dialog that enables/configures
+    // ASIO (ASIO is manually activated in Lyra).
+    if (lyra::wire::ivacAsioCompiledIn()) {
+        auto *grp = new QGroupBox(tr("ASIO® devices"), page);
+        auto *row = new QHBoxLayout(grp);
+        auto *col = new QVBoxLayout;
+        QSettings s;
+        auto *asioChk = new QCheckBox(
+            tr("Enable ASIO devices for VAC (takes effect after restarting "
+               "Lyra)"), grp);
+        asioChk->setChecked(
+            s.value(QStringLiteral("audio/asioEnabled"), false).toBool());
+        asioChk->setToolTip(tr(
+            "Adds \"ASIO\" to the VAC Driver list, so VAC1 or VAC2 can use "
+            "an ASIO audio interface (e.g. a mixer's USB ASIO driver) for "
+            "the TX mic and RX audio.\n\n"
+            "Off by default: when off, Lyra never loads any ASIO driver.  "
+            "Only one VAC can use ASIO at a time, pick the SAME ASIO driver "
+            "for its input and output, and close any other program using "
+            "that driver.  64-bit ASIO drivers only."));
+        auto *asioState = new QLabel(grp);
+        asioState->setWordWrap(true);
+        asioState->setStyleSheet(QStringLiteral("QLabel{color:#8fa6ba;}"));
+        auto updateState = [asioChk, asioState]() {
+            QSettings st;
+            QString t;
+            if (lyra::wire::ivacAsioActive())
+                t = tr("ASIO is active this session.");
+            else if (asioChk->isChecked())
+                t = tr("Restart Lyra to load ASIO drivers.");
+            else if (st.value(QStringLiteral("audio/asioDisabledAfterCrash"),
+                              false).toBool())
+                t = tr("ASIO was switched off because Lyra did not finish "
+                       "starting while loading ASIO drivers last time.  An "
+                       "installed ASIO driver may be faulty.");
+            else
+                t = tr("Off — no ASIO driver is loaded.");
+            asioState->setText(t);
+        };
+        connect(asioChk, &QCheckBox::toggled, grp, [updateState](bool on) {
+            QSettings st;
+            st.setValue(QStringLiteral("audio/asioEnabled"), on);
+            if (on)
+                st.remove(QStringLiteral("audio/asioDisabledAfterCrash"));
+            updateState();
+        });
+        updateState();
+        col->addWidget(asioChk);
+        col->addWidget(asioState);
+
+        // ASIO stream options — read when the VAC stream starts (turn the
+        // VAC off and on, or change its device, to apply).
+        auto *opts = new QFormLayout;
+        auto *inCh = new QSpinBox(grp);
+        inCh->setRange(1, 64);
+        inCh->setValue(s.value(QStringLiteral("audio/asioInChannel"), 1).toInt());
+        inCh->setToolTip(tr(
+            "First ASIO input channel carrying the mic.  A mixer such as the "
+            "WING has many USB channels — pick the one your mic is routed to."));
+        auto *inMono = new QCheckBox(tr("Mono (that channel only)"), grp);
+        inMono->setChecked(s.value(QStringLiteral("audio/asioInMono"), false).toBool());
+        inMono->setToolTip(tr(
+            "On: read only the channel above and copy it to both sides.  "
+            "Off: read it and the next channel as a stereo pair."));
+        auto *inRow = new QHBoxLayout;
+        inRow->addWidget(inCh);
+        inRow->addWidget(inMono);
+        inRow->addStretch(1);
+        opts->addRow(tr("Mic input channel:"), inRow);
+
+        auto *outCh = new QSpinBox(grp);
+        outCh->setRange(1, 64);
+        outCh->setValue(s.value(QStringLiteral("audio/asioOutChannel"), 1).toInt());
+        outCh->setToolTip(tr("First of the two ASIO output channels for RX audio."));
+        opts->addRow(tr("Audio output channels:"), outCh);
+
+        auto *block = new QComboBox(grp);
+        block->addItem(tr("Auto (match Lyra's audio block)"), 0);
+        for (int n : {64, 128, 256, 512, 1024, 2048})
+            block->addItem(tr("%1 frames").arg(n), n);
+        {
+            const int i = block->findData(
+                s.value(QStringLiteral("audio/asioBlock"), 0).toInt());
+            block->setCurrentIndex(i >= 0 ? i : 0);
+        }
+        block->setToolTip(tr(
+            "ASIO driver buffer size.  Small blocks keep audio flowing in "
+            "even steps.  If the driver can't do the size asked for, its own "
+            "preferred size is used (see the log)."));
+        opts->addRow(tr("Block size:"), block);
+
+        auto *pin = new QCheckBox(tr("Hold the rate ratio at 1.0"), grp);
+        pin->setChecked(s.value(QStringLiteral("audio/asioPinRate"), true).toBool());
+        pin->setToolTip(tr(
+            "On (default): VAC does not keep adjusting its rate to the ASIO "
+            "device.  Off: the normal adaptive rate matching is used."));
+        opts->addRow(QString(), pin);
+
+        auto *applyNote = new QLabel(
+            tr("These apply when the VAC starts — turn the VAC off and on "
+               "again after changing them."), grp);
+        applyNote->setWordWrap(true);
+        applyNote->setStyleSheet(QStringLiteral("QLabel{color:#8fa6ba;}"));
+        opts->addRow(applyNote);
+
+        connect(inCh, &QSpinBox::valueChanged, grp, [](int v) {
+            QSettings().setValue(QStringLiteral("audio/asioInChannel"), v); });
+        connect(inMono, &QCheckBox::toggled, grp, [](bool on) {
+            QSettings().setValue(QStringLiteral("audio/asioInMono"), on); });
+        connect(outCh, &QSpinBox::valueChanged, grp, [](int v) {
+            QSettings().setValue(QStringLiteral("audio/asioOutChannel"), v); });
+        connect(block, &QComboBox::currentIndexChanged, grp, [block](int) {
+            QSettings().setValue(QStringLiteral("audio/asioBlock"),
+                                 block->currentData().toInt()); });
+        connect(pin, &QCheckBox::toggled, grp, [](bool on) {
+            QSettings().setValue(QStringLiteral("audio/asioPinRate"), on); });
+        col->addLayout(opts);
+
+        auto *attr = new QLabel(
+            tr("ASIO is a registered trademark of Steinberg Media "
+               "Technologies GmbH."), grp);
+        attr->setWordWrap(true);
+        attr->setStyleSheet(QStringLiteral("QLabel{color:#6c7f8f;font-size:10px;}"));
+        col->addWidget(attr);
+        row->addLayout(col, 1);
+        auto *logo = new QLabel(grp);
+        const QPixmap pm(QStringLiteral(
+            ":/asio/ASIO-compatible-logo-white-transparent-RGB.png"));
+        if (!pm.isNull())
+            logo->setPixmap(pm.scaledToHeight(56, Qt::SmoothTransformation));
+        logo->setToolTip(tr("ASIO Compatible"));
+        row->addWidget(logo, 0, Qt::AlignTop);
+        form->addRow(grp);
     }
 
     // ── #158 — Virtual Audio Cable (VAC1) ───────────────────────────
@@ -4351,6 +4496,38 @@ QWidget *SettingsDialog::buildHardwareTab() {
         // the live P2 reply (deskHPSDR reads the same bytes [13]/[20]/[23]).
         if (discovery_ && p2_ && p2_->isOpen())
             discovery_->probe(p2_->targetIp());
+        // Selecting a Protocol 2 radio shows THAT radio's saved model, so
+        // the box never displays a model the radio isn't actually using.
+        connect(list, &QListWidget::currentRowChanged, radioBox,
+                [list, modelCombo, status](int) {
+                    auto *it = list->currentItem();
+                    if (!it || it->data(Qt::UserRole + 7).toInt() != 2) return;
+                    auto p = lyra::rig::registry::rig(
+                        lyra::rig::registry::rigIdForMac(
+                            it->data(Qt::UserRole + 1).toString()));
+                    if (!p.isValid()) return;
+                    // Blank model on an ANAN: fill it from the board the
+                    // radio reported (Orion → ANAN-200D) and save it.
+                    if (p.hardwareModelKey.isEmpty() &&
+                        p.family == lyra::rig::RadioFamily::AnanP2) {
+                        if (const auto *dm =
+                                lyra::hardware::defaultModelForBoardName(
+                                    it->data(Qt::UserRole + 2).toString(),
+                                    true)) {
+                            p.hardwareModelKey = QLatin1String(dm->key);
+                            lyra::rig::registry::upsertRig(p);
+                        }
+                    }
+                    if (p.hardwareModelKey.isEmpty()) {
+                        status->setText(tr("This radio has no model saved — "
+                                           "pick its model so Lyra can "
+                                           "drive its filters."));
+                        return;
+                    }
+                    const int i = modelCombo->findData(p.hardwareModelKey);
+                    if (i >= 0 && i != modelCombo->currentIndex())
+                        modelCombo->setCurrentIndex(i);
+                });
         connect(list, &QListWidget::currentRowChanged, radioBox,
                 [refresh](int) { refresh(); });
         connect(modelCombo,
@@ -5251,6 +5428,29 @@ QWidget *SettingsDialog::buildFiltersBcdTab() {
         }
     }
 
+    // Protocol 2 ANAN / Brick3: the radio's OWN band filters (Alex HPF/BPF
+    // + TX LPF) are switched by the per-packet Alex words, not the J16 OC
+    // pins — so they are shown read-only right next to the J16 pins: a
+    // lamp row under "Live pins" and ticked columns in the per-band grid.
+    // Display only.  {Alex halfword bit, band-pass label, high-pass label}
+    // — the RX bits are band-pass filters on the Orion MkII / Saturn board
+    // and high-pass filters on classic Alex.
+    struct RadioLamp { int bit; const char *bpf; const char *hpf; };
+    static const RadioLamp kRadioRx[] = {
+        {6, "160", "1.5M"}, {5, "80/60", "6.5M"}, {4, "40/30", "9.5M"},
+        {1, "20-15", "13M"}, {2, "12/10", "20M"}, {3, "6m", "6m pre"},
+        {12, "Byp", "Byp"}};
+    static const RadioLamp kRadioTx[] = {
+        {7, "160", nullptr}, {6, "80", nullptr}, {5, "60/40", nullptr},
+        {4, "30/20", nullptr}, {15, "17/15", nullptr}, {14, "12/10", nullptr},
+        {13, "6m", nullptr}};
+    const QString radioLampOn = QStringLiteral(
+        "QLabel{background:#9acd32;color:#0b1116;border-radius:4px;"
+        "font-weight:bold;padding:0 4px;}");
+    const QString radioLampOff = QStringLiteral(
+        "QLabel{background:#26333c;color:#5b6b78;border-radius:4px;"
+        "padding:0 4px;}");
+
     if (oc) {
         auto *ocBox = section(tr("Filter board — OC Control (J16 pins)"));
         auto *ocv = new QVBoxLayout(ocBox);
@@ -5323,6 +5523,66 @@ QWidget *SettingsDialog::buildFiltersBcdTab() {
         refreshPins(stream_->ocBits());
         connect(stream_, &lyra::ipc::HL2Stream::ocBitsChanged, page, refreshPins);
         ocv->addLayout(topRow);
+
+        // Radio's own filters (P2 ANAN / Brick3) — lamps right under the
+        // J16 Live pins.  Hidden unless such a radio is open.
+        QWidget *radioLampHost = nullptr;
+        if (p2_) {
+            radioLampHost = new QWidget;
+            auto *rl = new QGridLayout(radioLampHost);
+            rl->setContentsMargins(0, 0, 0, 0);
+            rl->setHorizontalSpacing(4);
+            rl->setVerticalSpacing(3);
+            auto *rxName = new QLabel;
+            rl->addWidget(rxName, 0, 0);
+            rl->addWidget(new QLabel(tr("Radio TX low-pass:")), 1, 0);
+            QVector<QLabel *> rxL, txL;
+            for (int i = 0; i < 7; ++i) {
+                auto *r = new QLabel(QString::fromLatin1(kRadioRx[i].bpf));
+                auto *t = new QLabel(QString::fromLatin1(kRadioTx[i].bpf));
+                for (QLabel *c : {r, t}) {
+                    c->setAlignment(Qt::AlignCenter);
+                    c->setMinimumSize(44, 22);
+                }
+                rl->addWidget(r, 0, 1 + i);
+                rl->addWidget(t, 1, 1 + i);
+                rxL.append(r);
+                txL.append(t);
+            }
+            auto *antL = new QLabel;
+            antL->setStyleSheet(QStringLiteral(
+                "QLabel{color:#7fd4a0;font-weight:bold;padding-left:8px;}"));
+            rl->addWidget(antL, 1, 8);
+            rl->setColumnStretch(9, 1);
+            ocv->addWidget(radioLampHost);
+            auto refreshRadioLamps = [this, radioLampHost, rxName, rxL, txL,
+                                      antL, radioLampOn, radioLampOff]() {
+                const int rxw = p2_->frontEndRxWord();
+                const int txw = p2_->frontEndTxWord();
+                const bool show = !p2_->frontEndFilters().isEmpty() &&
+                                  !p2_->frontEndOnboard();
+                radioLampHost->setVisible(show);
+                if (!show) return;
+                const bool hpf = p2_->frontEndClassicHpf();
+                rxName->setText(hpf ? tr("Radio RX high-pass:")
+                                    : tr("Radio RX band-pass:"));
+                for (int i = 0; i < 7; ++i) {
+                    rxL[i]->setText(QString::fromLatin1(
+                        hpf ? kRadioRx[i].hpf : kRadioRx[i].bpf));
+                    rxL[i]->setStyleSheet(((rxw >> kRadioRx[i].bit) & 1)
+                                              ? radioLampOn : radioLampOff);
+                    txL[i]->setStyleSheet(((txw >> kRadioTx[i].bit) & 1)
+                                              ? radioLampOn : radioLampOff);
+                }
+                antL->setText(((txw >> 8) & 1)    ? tr("ANT1")
+                              : ((txw >> 9) & 1)  ? tr("ANT2")
+                              : ((txw >> 10) & 1) ? tr("ANT3")
+                                                  : QString());
+            };
+            refreshRadioLamps();
+            connect(p2_, &lyra::wire::P2RxBridge::frontEndFiltersChanged,
+                    radioLampHost, refreshRadioLamps);
+        }
 
         auto *pinHelp = new QLabel(tr(
             "<b>N2ADR example (stock board)</b> — column 1–7 mean this on that "
@@ -5413,6 +5673,89 @@ QWidget *SettingsDialog::buildFiltersBcdTab() {
                             stream_->noteOcGridEdited();
                         });
             }
+        }
+
+        // Radio's own filters per band (P2 ANAN / Brick3): read-only ticks
+        // in columns to the right of the J16 pins, computed from the same
+        // functions that build the radio's filter words (band centre).
+        // Hidden unless such a radio is open.
+        if (p2_) {
+            constexpr int kRxCol0 = 17;          // after the TX pins + gap
+            constexpr int kTxCol0 = kRxCol0 + 8;
+            grid->setColumnMinimumWidth(16, 14);
+            QVector<QWidget *> radioCells;
+            auto *rdiv = new QFrame;
+            rdiv->setFrameShape(QFrame::VLine);
+            rdiv->setStyleSheet(QStringLiteral("QFrame{color:#5a7c94;}"));
+            grid->addWidget(rdiv, 0, 16, 2 + nB, 1);
+            radioCells.append(rdiv);
+            auto *rxHdr = colHdr(QString(), QStringLiteral("#9acd32"));
+            auto *txHdr = colHdr(tr("Radio TX low-pass"),
+                                 QStringLiteral("#9acd32"));
+            grid->addWidget(rxHdr, 0, kRxCol0, 1, 7, Qt::AlignCenter);
+            grid->addWidget(txHdr, 0, kTxCol0, 1, 7, Qt::AlignCenter);
+            radioCells << rxHdr << txHdr;
+            QVector<QLabel *> rxColHdr;
+            for (int i = 0; i < 7; ++i) {
+                auto *rh = colHdr(QString(), QStringLiteral("#9acd32"));
+                auto *th = colHdr(QString::fromLatin1(kRadioTx[i].bpf),
+                                  QStringLiteral("#9acd32"));
+                grid->addWidget(rh, 1, kRxCol0 + i);
+                grid->addWidget(th, 1, kTxCol0 + i);
+                rxColHdr.append(rh);
+                radioCells << rh << th;
+            }
+            QVector<QVector<QCheckBox *>> rRx(nB), rTx(nB);
+            for (int b = 0; b < nB; ++b) {
+                for (int i = 0; i < 7; ++i) {
+                    auto *r = new QCheckBox;
+                    auto *t = new QCheckBox;
+                    for (QCheckBox *c : {r, t}) {
+                        // Read-only: the radio picks its own filters.
+                        c->setAttribute(Qt::WA_TransparentForMouseEvents);
+                        c->setFocusPolicy(Qt::NoFocus);
+                        c->setToolTip(tr("Chosen by the radio — not editable"));
+                    }
+                    grid->addWidget(r, 2 + b, kRxCol0 + i, Qt::AlignCenter);
+                    grid->addWidget(t, 2 + b, kTxCol0 + i, Qt::AlignCenter);
+                    rRx[b].append(r);
+                    rTx[b].append(t);
+                    radioCells << r << t;
+                }
+            }
+            const auto *bandList = &bands;   // static table
+            auto refreshRadioGrid = [this, radioCells, rxHdr, rxColHdr, rRx,
+                                     rTx, nB, bandList]() {
+                const bool show = !p2_->frontEndFilters().isEmpty() &&
+                                  !p2_->frontEndOnboard();
+                for (QWidget *w : radioCells) w->setVisible(show);
+                if (!show) return;
+                const bool hpf = p2_->frontEndClassicHpf();
+                rxHdr->setText(hpf ? tr("Radio RX high-pass")
+                                   : tr("Radio RX band-pass"));
+                for (int i = 0; i < 7; ++i)
+                    rxColHdr[i]->setText(QString::fromLatin1(
+                        hpf ? kRadioRx[i].hpf : kRadioRx[i].bpf));
+                for (int b = 0; b < nB; ++b) {
+                    const auto &bd = (*bandList)[static_cast<size_t>(b)];
+                    const quint32 mid = static_cast<quint32>(
+                        (static_cast<qint64>(bd.low) + bd.high) / 2);
+                    const int rxw = p2_->frontEndRxWordFor(mid);
+                    const int txw = p2_->frontEndTxWordFor(mid);
+                    for (int i = 0; i < 7; ++i) {
+                        rRx[b][i]->setChecked(
+                            rxw >= 0 && ((rxw >> kRadioRx[i].bit) & 1));
+                        rTx[b][i]->setChecked(
+                            txw >= 0 && ((txw >> kRadioTx[i].bit) & 1));
+                    }
+                }
+            };
+            // Only hide at build (a show() before the grid is parented would
+            // float the widget); the deferred refresh runs once it is.
+            for (QWidget *w : radioCells) w->hide();
+            QTimer::singleShot(0, page, refreshRadioGrid);
+            connect(p2_, &lyra::wire::P2RxBridge::frontEndFiltersChanged,
+                    page, refreshRadioGrid);
         }
 
         auto *xvHdr = new QLabel(tr("Xvtr chips (empty = pins off)"));
@@ -5762,14 +6105,14 @@ QWidget *SettingsDialog::buildFiltersBcdTab() {
             xv->addItem(tr("On-air RF frequency"), true);
             xv->setCurrentIndex(stream_->ioboardXvtrOnAirRf() ? 1 : 0);
             xv->setToolTip(tr(
-                "TX frequency sent to the IO board (registers 0–4) while TX is "
-                "inside a transverter slot.\n\n"
-                "Hold last HF frequency (default): keep sending the last HF TX "
-                "frequency, so an HF-only band-volts amplifier on J4 "
-                "(GPA100 / XPA125B class) stays on its HF band. If no HF "
-                "frequency has been used yet, registers 0–4 are not sent.\n\n"
-                "On-air RF frequency: send the RF frequency on every band "
-                "(for example 144.2 MHz gives the 2 m band volts on J4)."));
+                "TX frequency sent to the IO board (registers 0–4).\n\n"
+                "On-air RF frequency (default): the TX dial in Hertz — the "
+                "same on-air RF the RX frequency codes (registers 13 / 14) "
+                "use on simplex. Analog band volts (J4 / GPA100 / XPA125) "
+                "update on a hop, including transverter chips, and stay put "
+                "between hops.\n\n"
+                "Hold last HF frequency is kept in this list for older "
+                "settings; packing always sends on-air RF."));
             connect(xv, &QComboBox::currentIndexChanged, page, [this, xv](int) {
                 stream_->setIoboardXvtrAnalog(xv->currentData().toBool());
             });

@@ -27,9 +27,9 @@ like Brick3SDR (on-air). **G2** still dummy-load arm. Discovery **Hermes**
 defaults to BrickSDR2 — pick the marketed ANAN model in Settings → Hardware.
 A Brick or classic ANAN still on **Protocol 1** is **refused on Open**.
 Flash **Protocol 2**; Brick FPGA help: **Anton (linoobs)** on Discord.
-**7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** are **in tester hands**
-(not locked; RX/BPF on the bench; TX dummy-load + drive ceiling). See
-**[Supported Radios](Supported-Radios)**.
+**7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** transmit like Brick3
+(Enable PA + MOX + Drive; no Arm Protocol 2 TX). **G2** still dummy-load
+arm. See **[Supported Radios](Supported-Radios)**.
 
 **Does Lyra support MIDI controllers?**
 Not inside the radio. A USB knob that Windows treats as a **mouse wheel**
@@ -137,8 +137,9 @@ at a time. The connected one is shown green/bold in the list.
 
 **NNR vs NR vs NR-C — which one?**
 - **NR** — classic WDSP EMNR (Modes 1–4, AEPF, NPE).
-- **NNR** — WDSP 2.10 neural denoiser. **Standard** is the default (lighter
+- **NNR** — WDSP 2.11 neural denoiser. **Standard** is the default (lighter
   CPU); **Premium** uses more and is comfortable on the Recommended PC tier.
+  In **CWU / CWL** Lyra uses the CW-trained version of the model you picked.
   Mask runs **−10…−50 dB**, default **−40**. **NR** and **NNR** cannot run
   at the same time.
 - **NR-C** — captured band-noise profile (your QTH). It can run with either
@@ -172,25 +173,26 @@ exclusive — Lyra will not also arm VAC TX. If **Auto-enable for digital**
 is on, switch to **DIGU / DIGL**; USB turns that auto path off.
 
 **Can I use CMASIO or a Behringer WING / X32 with Lyra?**
-No. Lyra does not offer CMASIO because it does not use Thetis’s PC audio
-host. In Thetis (and Thetis-based builds), speaker and mic can go to
-CMASIO / ASIO — exclusive, multi-channel — which is why a Behringer WING
-works there: you pick the driver and which pair is phones vs mic. Lyra’s
-speaker path is ordinary Windows audio (WASAPI): stereo 48 kHz, the
-device Windows calls Speakers. The HL2 can play from the radio’s own
-headphone jack. Digital apps (STD, WSJT, …) use TCI or a VAC stereo pipe,
-not ASIO channel maps. Lyra cannot park RX on WING channel 17 and TX from
-an arbitrary bus. A Scarlett-style USB interface still works via its
-Windows speaker/mic names. A WING used as a console over ASIO does not.
-Some operators find Lyra RX smoother / less fatiguing; the receive audio
-is paced with the radio and played as a simple stereo stream. Native ASIO
-(device + stereo pair pickers) is not a hidden setting today. ASIO is a
-separate Steinberg kit from the radio code, so it is not a copy-paste from
-Thetis even though both programs are GPL.
+**ASIO for VAC is in test** (shipped in **v0.25.41**, still test in
+**v0.25.42**; default **off**). Settings →
+Audio → **Enable ASIO devices for VAC**, restart Lyra, then set VAC
+Driver to **ASIO**. Use the **same** driver for Input and Output (full
+duplex: mic in + RX out). Qt speaker **Out** and the HL2 jack do not
+change. 48 kHz. If last start failed while loading ASIO, Lyra forces
+ASIO off.
+
+**Still not:** Thetis **CMASIO**. Lyra is not Thetis’s PC audio host and
+does not route the whole radio through ChannelMaster’s 48-channel mixer.
+Lyra cannot park RX on WING channel 17 and TX from an arbitrary bus. A
+WING used as that kind of console is still not how Lyra works. You can
+try the WING USB ASIO driver as a **VAC** device in this test and report
+what you hear. A Scarlett-style USB interface still works via Windows
+speaker/mic names, or via its ASIO driver on VAC after the opt-in.
 
 **Why is there no CMASIO like Thetis?**
-Same answer as **Can I use CMASIO or a Behringer WING / X32 with Lyra?**
-above. Lyra is not Thetis’s PC audio host.
+Lyra is not Thetis’s PC audio host. Optional **ASIO for VAC** (test
+stage) is a PortAudio path, not a CMASIO port. Same FAQ as **Can I use
+CMASIO or a Behringer WING / X32 with Lyra?** above.
 
 ---
 
@@ -316,6 +318,26 @@ does not arm the mix.
 ---
 
 ## Settings &amp; layout
+
+**Filters / BCD Live pins stay dark on an ANAN while the relays click.**
+Install **v0.25.40**. ANAN / Brick3 band filters are switched by the
+Alex words, not the J16 OC pins, so Live pins can stay dark. The same
+tab now shows the radio's own RX HPF or BPF, TX LPF, and antenna as
+read-only lamps and grid ticks. Hidden on HL2 / BrickSDR.
+
+**The spectrum looks thin / the waterfall looks dim or smeared on 4K at 150%.**
+Install **v0.25.39**. GPU lines used to draw one **screen** pixel, so the
+trace went faint at 150% scale; the waterfall was a 512-row image
+stretched to a tall pane. The trace is now a one-logical-pixel ribbon,
+and waterfall history grows with the pane (capped at 1024). Use
+**Windows Display scale** — do **not** set `QT_SCALE_FACTOR`. **Auto-fit
+the waterfall dB range** (Settings → Visuals) is the colour map, not a
+DPI fix. See [User Guide → Display panel](User-Guide#display-panel).
+
+**Help → Show Log… hides Copy all / Save at the bottom of a 4K screen.**
+Install **v0.25.39**. The Log window now shrinks and moves so the whole
+frame, including **Copy all** / **Save** / **Open log folder**, sits
+inside the visible area (inside the taskbar).
 
 **How do I rearrange / lock the panels?**
 Drag a panel by its title bar — a cyan zone previews where it lands (edge /
@@ -451,6 +473,12 @@ row wins (7.200–7.300 is 40 m); CB and GEN still get no row.
 **I need more than four transverter chips.**
 Install **v0.25.36** — there are eight. Slots 5–8 start disabled; right-
 click a chip to enable and name it. Your first four are unchanged.
+
+**MOX on my 7000DLE / 8000DLE / Orion MkII does nothing (or I was told to Arm Protocol 2 TX).**
+Install **v0.25.37**. Those models (and Anvelina-Pro3) transmit like
+Brick3: pick the marketed model, Protocol 2, **Enable PA**, Drive above
+0. You do **not** need **Arm Protocol 2 TX**. **G2 / G2-1K** still do.
+Dummy load on first TX. Protocol 1 ANAN is still refused — flash P2.
 
 **What do the colours mean?**
 **Orange TUNE A** + **cyan** passband = RX1. **Lime TUNE B** + **green**

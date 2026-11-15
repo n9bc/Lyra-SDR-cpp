@@ -1,5 +1,11 @@
 # Lyra (C++23 / Qt 6 rebuild) — Feature Catalog
 
+> **Live tree is v0.25.42 Aladfar.** Dual panadapters, Diversity, PureSignal,
+> WDSP 2.11, CW decode, and ASIO-for-VAC (test) are in the published Windows
+> installer. This file is the **2026-05-20 rebuild lock**, not current status.
+> Operator checklist: [Feature Status](https://github.com/N8SDR1/Lyra-SDR-cpp/wiki/Feature-Status)
+> · [Releases](https://github.com/N8SDR1/Lyra-SDR-cpp/releases/latest).
+
 **Status:** LOCKED 2026-05-20. All 7 open questions resolved.
 Ready for Step 2 sequencing (HL2/HL2+ wire path: open the
 radio, receive IQ on a dedicated RX thread, parse samples).
@@ -67,7 +73,7 @@ Status legend used below:
 | Hermes Lite 2 Plus (HL2+) | HPSDR Protocol 1 | 🟢 PORT — operator's daily-driver |
 | Apache Labs ANAN-G2 / G2-1K | HPSDR Protocol 2 | 🟡 P2 profile live; TX dummy-load arm (not on-air validated) |
 | Apache Labs ANAN-10 / 10E / 100 / 100B / 100D / 200D | HPSDR Protocol 2 | 🟡 Classic Alex HPF (deskHPSDR edges); TX dummy-load arm; pick marketed model in Settings |
-| Apache Labs ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3 | HPSDR Protocol 2 | 🟡 IN TESTER HANDS — RX/BPF on the bench (Anvelina PROIII BPF follow); TX dummy-load + drive ceiling until RF is confirmed |
+| Apache Labs ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3 | HPSDR Protocol 2 | 🟢 P2 TX like Brick3 (Enable PA + MOX + Drive; no Arm Protocol 2 TX) since v0.25.37 |
 | Apache Labs ANAN still on Protocol 1 FPGA | HPSDR Protocol 1 | 🟡 LOCKED — refuse HL2 TX path; use P2 firmware if the box can (most capable 10/100/200-class units already have) |
 | **Brick SDR** | HPSDR Protocol 2 (ANAN-class, pending Timmy confirm) | 🟡 LOCKED |
 

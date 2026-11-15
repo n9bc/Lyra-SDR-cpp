@@ -15,6 +15,7 @@
 
 #include "wire/AAMix.h"  // P0.c direct port (reference aamix.h verbatim)
 #include "wire/ObBuffs.h" // P4.b — OutBound(0,…): RX audio → r1 ring → ob_main → sendOutbound (the asioOUT-pattern tee, cmasio.c:137-145)
+#include <QTimer>
 #include "wire/Ivac.h"   // #158 — create_ivac / destroy_ivac / xvacOUT / xvacIN / ivacGet
 #include "dsp/ParamEq.h"     // #59 — RX EQ engine (processMonoDup / bypassed)
 #include "dsp/EqAnalyzer.h"  // #59 — RX EQ analyzer feed (pre/post)
@@ -775,6 +776,8 @@ WdspEngine::WdspEngine(WdspNative *wdsp, QObject *parent)
     }
     cwPitchHz_ = std::clamp(
         s.value(QStringLiteral("dsp/cwPitchHz"), 600).toInt(), 200, 1500);
+    neuralCw_.setToneHz(cwPitchHz_);   // tone lock stays on the operator's station
+    deepCw_.setToneHz(cwPitchHz_);     // spacing lender locks the same station
     // RX DSP operator state (NR + AGC mode).  Defaults match old Lyra's
     // first-light: NR off, Mode 3 (MMSE-LSA), AEPF on, NPE OSMS, AGC med.
     nrEnabled_   = s.value(QStringLiteral("dsp/nrEnabled"), false).toBool();
@@ -1848,7 +1851,8 @@ void WdspEngine::rebuildVac(int id)
         emitLog(QStringLiteral("%1 not started — need an input device and "
                                "either an output device or \"(none)\" that "
                                "resolve under the selected driver "
-                               "(out='%2' in='%3')")
+                               "(out='%2' in='%3'); for ASIO pick the same "
+                               "driver for both")
                     .arg(tag,
                          v.outName.isEmpty() ? QStringLiteral("(unset)") : v.outName,
                          v.inName.isEmpty()  ? QStringLiteral("(unset)") : v.inName));
@@ -1936,10 +1940,18 @@ void WdspEngine::rebuildVac(int id)
 
     const int rc = StartAudioIVAC(id);   // 1 = open + start OK
     if (rc != 1) {
-        emitLog(QStringLiteral("%1 PortAudio open FAILED (rc=%2; out='%3' "
+        const PaHostApiInfo *hai = Pa_GetHostApiInfo(sel.hostApi);
+        const bool asioApi = hai && hai->type == paASIO;
+        emitLog(QStringLiteral("%1 PortAudio open FAILED (rc=%2: %8; out='%3' "
                                "in='%4' hostApi=%5 out#%6 in#%7); VAC off this "
-                               "session").arg(tag).arg(rc).arg(v.outName, v.inName)
-                    .arg(sel.hostApi).arg(sel.outDev).arg(sel.inDev));
+                               "session%9").arg(tag).arg(rc).arg(v.outName, v.inName)
+                    .arg(sel.hostApi).arg(sel.outDev).arg(sel.inDev)
+                    .arg(QString::fromUtf8(lyra::wire::ivacLastOpenErrorText()),
+                         asioApi ? QStringLiteral(
+                             " — ASIO: close any other program using this "
+                             "driver (only one ASIO stream at a time), and "
+                             "set the interface to the VAC sample rate")
+                                 : QString()));
         StopAudioIVAC(id);   // null-safe close if OpenStream succeeded then StartStream failed
         destroy_ivac(id);
         return;
@@ -1968,6 +1980,38 @@ void WdspEngine::rebuildVac(int id)
                 .arg(cfg_.outRate).arg(v.vacSize)
                 .arg(sel.outDev >= 0 ? QStringLiteral("duplex")
                                      : QStringLiteral("input-only, transmit-only VAC")));
+    {
+        // [diag] what the device actually opened with — ASIO buffer sizes
+        // explain bursty callbacks (VAC rings over/underflowing).
+        double inLat = 0, outLat = 0, rate = 0;
+        long aMin = -1, aMax = -1, aPref = -1, aGran = -1;
+        if (lyra::wire::ivacStreamDiag(id, &inLat, &outLat, &rate,
+                                       &aMin, &aMax, &aPref, &aGran)) {
+            QString asio;
+            if (aPref >= 0)
+                asio = QStringLiteral("; ASIO driver buffer min %1 / "
+                                      "preferred %2 / max %3 frames "
+                                      "(granularity %4)")
+                           .arg(aMin).arg(aPref).arg(aMax).arg(aGran);
+            emitLog(QStringLiteral("%1 stream: %2 Hz, input latency %3 ms, "
+                                   "output latency %4 ms%5")
+                        .arg(tag).arg(rate, 0, 'f', 0)
+                        .arg(inLat * 1000.0, 0, 'f', 1)
+                        .arg(outLat * 1000.0, 0, 'f', 1).arg(asio));
+            if (aPref >= 0) {
+                // ASIO: re-centre the rings once the startup transients are
+                // over (they settle at an edge otherwise).  Skipped if this
+                // VAC was rebuilt or torn down in the meantime.
+                const auto gen = lyra::wire::ivacStreamGeneration(id);
+                const auto inst = lyra::wire::ivacGet(id);
+                QTimer::singleShot(2000, this, [id, gen, inst]() {
+                    if (lyra::wire::ivacGet(id) == inst &&
+                        lyra::wire::ivacStreamGeneration(id) == gen)
+                        lyra::wire::ivacRecenterRings(id);
+                });
+            }
+        }
+    }
 }
 
 // Stop the VAC-out tee + device + engine instance.  Idempotent.  Main
@@ -2610,6 +2654,8 @@ void WdspEngine::applyModeFilter()
         coachRxa_.mode = modeToWdsp(mode_);   // eSSB Coach mirror
         coachPublishRxa();
     }
+    if (nnrEnabled_ && api.SetRXANNRModel)   // voice <-> CW model
+        api.SetRXANNRModel(channel_, nnrSlotFor(mode_));
     double lo, hi;
     computePassband(&lo, &hi);
     if (api.RXASetPassband) {
@@ -2774,6 +2820,8 @@ void WdspEngine::setCwPitchHz(int hz)
     }
     cwPitchHz_ = static_cast<double>(hz);
     cwDecoder_.setToneHz(cwPitchHz_);   // #173 — bind decoder AFC centre to the pitch
+    neuralCw_.setToneHz(cwPitchHz_);   // neural tone lock follows the pitch too
+    deepCw_.setToneHz(cwPitchHz_);     // spacing lender locks the same station
     zbMarkerHz_.store(cwMarkerOffsetForMode(mode_), std::memory_order_relaxed);
     keepShack(QStringLiteral("dsp/cwPitchHz"), hz);
     recomputePassband();   // CW filter recentres on the new pitch
@@ -2795,6 +2843,8 @@ void WdspEngine::setCwDecodeEnabled(bool on)
     }
     if (on) {
         cwDecoder_.setToneHz(cwPitchHz_);
+        neuralCw_.setToneHz(cwPitchHz_);
+        deepCw_.setToneHz(cwPitchHz_);     // spacing lender locks the same station
         cwDecoder_.reset();
     }
     cwDecodeOn_.store(on, std::memory_order_relaxed);
@@ -3854,6 +3904,17 @@ void WdspEngine::setBalance(double b)
 // WDSP when the channel is open, emit NOTIFY.  The push helpers below
 // are channel-parameterized (use channel_) so RX2 reuses them verbatim.
 
+// Neural NR model slot for a channel.  WDSP 2.11 ships four models: 0/1 =
+// Standard/Premium for voice, 2/3 = the same pair trained for CW.  The
+// operator picks Standard/Premium; CW modes use the CW version.  A DLL
+// without the CW slots keeps its current model (SetRXANNRModel ignores
+// an unloaded slot).
+int WdspEngine::nnrSlotFor(const QString &mode) const
+{
+    const bool cw = (mode == QLatin1String("CWU") || mode == QLatin1String("CWL"));
+    return std::clamp(nnrModel_, 0, 1) + (cw ? 2 : 0);
+}
+
 void WdspEngine::pushNrState()
 {
     if (!opened_ || !wdsp_) return;
@@ -3876,7 +3937,8 @@ void WdspEngine::pushNrState()
         if (api.SetRXANNRRun) {
             if (nnrOn) {
                 if (api.SetRXANNRModel)
-                    api.SetRXANNRModel(ch, nnrModel_);
+                    api.SetRXANNRModel(ch, nnrSlotFor(
+                        ch == channel_ ? mode_ : modeRx2_));
                 if (api.SetRXANNRMaskFloor)
                     api.SetRXANNRMaskFloor(ch, nnrMaskFloorDb_);
             }
@@ -6023,6 +6085,20 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
                 }
             }
             lyra::wire::xvacOUT(kVac1Id, /*stream*/1, vac_[0].rxScaled_.data());
+            {
+                // [diag] ~1/s: device callbacks per second vs RX frames fed.
+                // At 48 kHz with a 2048-frame VAC block a steady device gives
+                // ~23.4 callbacks/s; fewer means the device drains slower
+                // than Lyra fills (TO VAC ring overflows).
+                static long long diagFrames = 0;
+                diagFrames += nframes;
+                if (diagFrames >= 48000) {
+                    qInfo("[vac1] RX feed %lld frames; device callbacks %ld "
+                          "in the same span",
+                          diagFrames, lyra::wire::ivacTakeCallbackCount(kVac1Id));
+                    diagFrames = 0;
+                }
+            }
             // #90 Route 2 — feed the TX monitor into VAC stream-2 (mixer
             // input 1) when monitoring; else silence so the 2-input mixer
             // never starves.  Unscaled: SetIVACmonVol applies the Monitor

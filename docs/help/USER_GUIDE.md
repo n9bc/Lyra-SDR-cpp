@@ -22,14 +22,160 @@ not programmers — if you can click a menu, you can use this.
 
 ## Current build
 
-**v0.25.36 Sheliak** — **eight transverter slots** (was four); **SWL
-broadcast rows** in OC Control (J16 pins for 120 m … 13 m, seeded from
-N2ADR only when you press **Reload N2ADR HF**, RX-only, ham row wins on
-overlap); in **DIGU / DIGL** the **ALC** is a peak limiter only and the
-**Leveler** is held off automatically; the dead TCI **TX-in gain**
-control is gone. No change to the IO-board wire traffic, to the ham-band
-J16 pattern, or to any receive DSP. **v0.25.35** is the previous public
-build. See [What's new in 0.25.36](#whats-new-in-02536).
+**v0.25.42 Aladfar** — **WDSP 2.11** (CW neural NR models) plus everything
+in v0.25.41. Star name **Aladfar** (η Lyrae), next after Sulafat. Full
+installer over Sulafat: **Lyra-cpp** settings stay. **v0.25.41** is the
+previous public build. See [What's new in 0.25.42](#whats-new-in-02542).
+
+## What's new in 0.25.42
+
+- **WDSP 2.11.** The bundled DSP engine is NR0V **2.11** (official
+  release, October 2026; `GetWDSPVersion` 211). Besides the new neural
+  models below, 2.11 updates AGC, classic NR (EMNR), the auto-notch
+  (ANF), the FM demodulator and PureSignal calibration.
+- **CW models for NNR.** 2.11 ships four neural models: **Standard** and
+  **Premium** for voice, plus a Standard and Premium trained on CW. The
+  NNR **Model** control still offers Standard / Premium. In **CWU / CWL**
+  Lyra uses the CW version of the model you picked, separately on RX1
+  and RX2, and goes back to the voice model when you change mode. See
+  [Row 3 — Noise Reduction](#row-3--noise-reduction-character).
+- **One-time FFT optimization.** The first start after updating shows
+  the **Optimizing FFT plans** splash for a few minutes while the FFT
+  cache is rebuilt for the new engine. Later starts are normal.
+- **ASIO for VAC (test stage)** from **v0.25.41** is unchanged. Keep
+  **Hold the rate ratio at 1.0** on (the default); see
+  [ASIO for VAC (test stage)](#asio-for-vac-test-stage).
+- **v0.25.41 Sulafat** is the previous public build. **v0.25.22** remains
+  the long return point. Settings stay. First launch after this update
+  rebuilds the FFT cache (splash for a few minutes). If this build
+  misbehaves, reinstall **v0.25.41**.
+
+## What's new in 0.25.41
+
+- **ASIO for VAC (test stage).** Optional. Default **off**. Settings →
+  Audio → **Enable ASIO devices for VAC**, then **restart** Lyra. VAC
+  Driver can then be **ASIO**: one driver for both Input and Output
+  (full duplex — mic in + RX out). Pick mic/output channels, block
+  size, and **Hold the rate ratio at 1.0** if the VAC rings wander.
+  48 kHz. Brick / ANAN PC path; the **HL2 jack** is still the codec
+  path. Qt speaker **Out** is unchanged.
+- **Not CMASIO.** This does not port Thetis ChannelMaster ASIO, and it
+  does not make a Behringer WING the radio mixer (no parking RX on
+  channel 17 / TX from an arbitrary bus). You may try a mixer's USB
+  ASIO driver as a VAC device and report what you hear.
+- **Crash guard.** If Lyra did not finish starting while loading ASIO
+  last time, ASIO is forced off until you tick Enable again.
+- **Unchanged elsewhere:** ANAN / Brick3 filters on Filters / BCD
+  (v0.25.40). HiDPI / Log-on-screen (v0.25.39). DeepFist pitch lock
+  (v0.25.38). 7000DLE / 8000DLE TX, Xvtr BYTE0–4, Metis STOP, G2
+  dummy-load arm, Protocol 1 ANAN refused.
+- **v0.25.40 Sheliak** is the previous public build. **v0.25.22**
+  remains the long return point. Settings stay. If this build
+  misbehaves, reinstall **v0.25.40**.
+
+## What's new in 0.25.40
+
+- **The radio's own filters on Filters / BCD.** On Protocol 2 **ANAN**
+  and **Brick3**, band filters (Alex high-pass or band-pass, TX
+  low-pass, antenna) are switched by the per-packet Alex words, not
+  the J16 OC pins — so **Live pins** used to stay dark while the
+  relays clicked. Settings → **Filters / BCD** now shows them
+  **read-only** next to the J16 pins: a lit lamp row under Live pins
+  (RX HPF or BPF, TX LPF, ANT1/2/3) and ticked per-band columns in
+  the OC grid. The lamps are decoded from the same functions that
+  build the words sent to the radio, so the display cannot disagree
+  with the wire. Display only — you still pick antenna and HPF bypass
+  on the Band dock, not by ticking these columns.
+- **Hidden on HL2 / BrickSDR.** Those radios have no Alex-driven
+  front-end to show (BrickSDR: onboard filters, automatic).
+- **Orion MkII receive packet.** The 7000DLE / 8000DLE profile now
+  sends the Alex1 TX image (TX LPF + antenna, plus the T/R relay when
+  the PA is on) in receive as well as transmit, matching deskHPSDR.
+  Transmit is unchanged. This was not shown to be required on the
+  Cyclone V 7000 that prompted it.
+- **Unchanged elsewhere:** HiDPI display and Log-on-screen from
+  **v0.25.39**. DeepFist pitch lock from **v0.25.38**. 7000DLE /
+  8000DLE TX, Xvtr BYTE0–4, Metis STOP, G2 dummy-load arm, Protocol 1
+  ANAN refused. J16 OC bits are the same as 0.25.39.
+- **v0.25.39 Sheliak** is the previous public build. **v0.25.22**
+  remains the long return point. Settings stay. If this build
+  misbehaves, reinstall **v0.25.39**.
+
+## What's new in 0.25.39
+
+- **HiDPI display.** The spectrum trace and peak-hold line are a
+  ribbon one **logical** pixel thick. GPU lines always draw one
+  **screen** pixel wide, so at 150% / 4K the trace used to look
+  thinner and fainter than on 1080p. Waterfall history grows from 512
+  rows to the pane's on-screen height (capped at 1024), so a tall pane
+  is no longer a 512-row image stretched into a soft blur.
+- **4K / scaling.** Use **Windows Display scale** (Settings → System →
+  Display). Do **not** set `QT_SCALE_FACTOR`. **Auto-fit the waterfall
+  dB range** (Settings → Visuals / the Display panel) is the
+  colour-map control — it does not replace Windows scale.
+- **ANAN blank model → filter profile.** A Protocol 2 ANAN whose
+  saved record had a blank model now fills one from the reported
+  board (Orion → **ANAN-200D**) or from Settings, so BPF/LPF relays
+  follow Lyra instead of the last program. Brick and any radio that
+  already has a model are untouched.
+- **Log window stays on screen.** **Help → Show Log…** shrinks and
+  moves so **Copy all** / **Save** / **Open log folder** sit inside
+  the visible area (inside the taskbar) at 4K @ 150%. A window that
+  already fits is left alone.
+- **DeepFist** pitch lock (±80 Hz) and earlier commit stay from
+  **v0.25.38**. Original decoder: **Brent Crier (N9BC)**. **Classic**
+  unchanged.
+- **Unchanged elsewhere:** 7000DLE / 8000DLE / Orion MkII /
+  Anvelina-Pro3 TX, Xvtr BYTE0–4, Metis STOP, G2 dummy-load arm,
+  Protocol 1 ANAN refused. No Protocol 2 wire change.
+- **v0.25.38 Sheliak** is the previous public build. **v0.25.22**
+  remains the long return point. Settings stay. If this build
+  misbehaves, reinstall **v0.25.38**.
+
+## What's new in 0.25.38
+
+- **DeepFist locks to your CW pitch.** The neural decoder searches
+  only within **±80 Hz** of the operator **CW Pitch** (the same tone
+  the rest of the radio uses). A louder station nearby is no longer
+  copied instead. Put the beat note on your pitch, same as Classic.
+- **Characters print sooner.** A letter is committed once **two
+  consecutive decodes agree** on it, still capped at the old delay so
+  a disagreement cannot stall the copy.
+- **Classic unchanged.** The **Classic** chip is still the fldigi
+  decoder. **DeepFist** and **Auto** sit beside it on the CW Decoder
+  panel. Original DeepFist decoder: **Brent Crier (N9BC)**.
+- **Unchanged elsewhere:** 7000DLE / 8000DLE / Orion MkII /
+  Anvelina-Pro3 TX, Xvtr BYTE0–4, Metis STOP, G2 dummy-load arm,
+  Protocol 1 ANAN refused. No Protocol 2 wire change.
+- **v0.25.37 Sheliak** is the previous public build. **v0.25.22**
+  remains the long return point. Settings stay. If this build
+  misbehaves, reinstall **v0.25.37**.
+
+## What's new in 0.25.37
+
+- **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3 transmit.** Protocol
+  2 TX on the Orion MkII board class keys like Brick3SDR / ANAN-100D:
+  pick the **marketed model** in Settings → Hardware, run **Protocol 2**,
+  tick **Enable PA**, set Drive above 0. You do **not** need
+  **Settings → TX → Arm Protocol 2 TX**. First RF on a new box: dummy
+  load. See [Supported radios](#supported-radios).
+- **IO board: Xvtr hops send on-air RF on BYTE0–4** (was last HF). Analog
+  J4 / GPA100 / XPA125 band volts follow the RF dial on a hop instead of
+  leftover HF. Same registers on Randy’s analog path. Reported by Mike
+  K7MDL on 0.25.36.
+- **HL2 Stop sends Metis STOP before the socket closes.** Start after
+  Stop should not wait on the ~13 s radio watchdog. Same report.
+- **Unchanged:** **G2 / G2-1K** still use the dummy-load arm. Red
+  Pitaya still has no Protocol 2 TX profile. A Brick or classic ANAN
+  on Protocol 1 is still **refused on Open** — flash P2. HL2 / Brick /
+  10 / 100-series TX posture is otherwise unchanged.
+- **Docs:** FAQ now says Lyra is not Thetis-CMASIO (a Behringer WING /
+  X32 over ASIO will not map the way it does there). Ordinary Windows
+  audio still works. See [Audio devices](#audio-devices) and the wiki
+  FAQ.
+- **v0.25.36 Sheliak** is the previous public build. **v0.25.22**
+  remains the long return point. Settings stay. If this build
+  misbehaves, reinstall **v0.25.36**.
 
 **Coming next (unreleased):** a new **Visualizer** — a floating
 panel (header **Visualizer** chip) that draws what you hear, or your mic
@@ -491,9 +637,9 @@ arm). Still **beta testing**: first RF into a dummy load.
 Hardware. **ANAN-10 / 10E** follow BrickSDR2 TX. **ANAN-100 / 100B /
 100D / 200D** follow Brick3SDR TX (on-air, independent **Enable PA**).
 **G2 / G2-1K** still use the dummy-load arm. **7000DLE / 8000DLE /
-Orion MkII / Anvelina-Pro3** are **in tester hands** (not locked) — RX and
-BPF follow on Anvelina PROIII; TX dummy-load + drive ceiling until RF is
-confirmed. Pick the marketed model in Settings → Hardware.
+Orion MkII / Anvelina-Pro3** transmit like Brick3SDR / ANAN-100D
+(Enable PA + MOX + Drive — no Arm Protocol 2 TX). Pick the marketed
+model in Settings → Hardware. First RF: dummy load.
 
 **PureSignal dock** — ON, 2-tone, **Voice** (male-voice shaped noise +
 level), ATT, FB, Reset. Engine chips (st / cal / D0 / D1) live on
@@ -719,6 +865,12 @@ Dummy load first.
 
 ## Contents
 
+- [What's new in 0.25.42](#whats-new-in-02542)
+- [What's new in 0.25.41](#whats-new-in-02541)
+- [What's new in 0.25.40](#whats-new-in-02540)
+- [What's new in 0.25.39](#whats-new-in-02539)
+- [What's new in 0.25.38](#whats-new-in-02538)
+- [What's new in 0.25.37](#whats-new-in-02537)
 - [What's new in 0.25.36](#whats-new-in-02536)
 - [What's new in 0.25.35](#whats-new-in-02535)
 - [What's new in 0.25.34](#whats-new-in-02534)
@@ -824,6 +976,7 @@ Dummy load first.
 - [Settings → Audio](#settings--audio)
   - [Virtual Audio Cable (VAC1)](#virtual-audio-cable-vac1)
   - [Virtual Audio Cable (VAC2)](#virtual-audio-cable-vac2)
+  - [ASIO for VAC (test stage)](#asio-for-vac-test-stage)
 - [Settings → DSP (filter type)](#settings--dsp-filter-type)
 - [Settings → TX (Mic + ALC + Leveler + TR sequencing + cos² fade)](#settings--tx-mic--alc--leveler-tr-sequencing--cos-fade)
 - [Settings → VOX (voice-operated transmit)](#settings--vox-voice-operated-transmit)
@@ -936,7 +1089,7 @@ to BrickSDR2). Leftover P1 rows stay refused.
 | **ANAN-100 / 100B** | Like **Brick3SDR** TX (on-air, independent Enable PA). One ADC + classic Alex — SUB overlay, not a second pane. |
 | **ANAN-100D / 200D** | Like **Brick3SDR** TX **and** two converters: **SUB** opens a second panadapter. **Diversity** is the same path as Brick3. **RX2 jack isolate on TX** default on. |
 | **ANAN-G2 / G2-1K** | Dummy-load **Arm P2 TX** until a tester validates RF. Two ADC. |
-| **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** | **In tester hands** (not locked). Pick the marketed model. Anvelina PROIII: filters follow the band. TX dummy-load arm + drive ceiling — dummy load on first TX. |
+| **7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** | Like **Brick3SDR** TX (on-air, Enable PA + MOX + Drive — no Arm Protocol 2 TX). Pick the marketed model. Anvelina PROIII: filters follow the band. Dummy load on first TX. |
 
 ---
 
@@ -992,7 +1145,7 @@ graphics are fine.
 | &nbsp;&nbsp;• Intel | HD Graphics 4000 (Ivy Bridge) or newer / UHD / Iris | UHD 620 / Iris Xe / Arc | Arc A-series or newer |
 | **Storage** | ~300 MB free (SSD recommended) | SSD, ~500 MB free | NVMe Gen4 SSD |
 | **Network** | 100 Mbit **wired** Ethernet to the radio | Gigabit Ethernet, ideally a dedicated NIC | Dedicated Gigabit / 2.5 GbE NIC, wired straight to the radio |
-| **Display** | 1600 × 900 | 1920 × 1080 | Dual / triple monitor; 1440p or 4K |
+| **Display** | 1600 × 900 | 1920 × 1080 | Dual / triple monitor; 1440p or 4K. Use **Windows Display scale** (e.g. 150% on 4K). Do **not** set `QT_SCALE_FACTOR`. |
 
 **About the display minimum — what you get at 1600 × 900.** Lyra's front panel
 is a set of dockable panels, and they need real estate, so it's worth being
@@ -2278,13 +2431,17 @@ laid out in old Lyra's three-row arrangement:
 Use **either** classic **NR** (EMNR) **or** **NNR** (neural). They are
 exclusive. **NR-C** (captured profile) is independent of both.
 
-- **NNR** — WDSP 2.10 neural denoiser. Default **off**. While on, Row 3
+- **NNR** — WDSP 2.11 neural denoiser. Default **off**. While on, Row 3
   shows **Model** and **Mask** instead of Mode / AEPF / NPE:
   - **Standard** (default) vs **Premium**. Premium is the heavier model
     and uses more CPU. Standard is the start; switch to Premium when
     you want to hear the stronger model (a mask around **−40** is the
     amount to try while listening). On a Minimum-tier PC, stay on
     Standard — or classic NR — if the machine is already busy.
+  - **CW modes** — in **CWU / CWL**, Lyra automatically uses the
+    CW-trained version of the model you picked (Standard or Premium),
+    on RX1 and RX2 separately, and switches back to the voice model
+    when you leave CW. Nothing to set.
   - **Mask** −10 dB (least suppression) … **−50 dB** (most). Default
     **−40**. More negative = more noise cut (and more chance of watery
     artifacts). This is the main NNR amount control.
@@ -2397,16 +2554,16 @@ between them (see *Multiple radios & switching rigs*).
 - Feed RX audio to WSJT-X / FLDigi / a recorder → **PC sound device via
   VAC**, or **TCI** if the app speaks it (see *Digital modes* below).
 
-**Behringer WING / X32 / CMASIO.** Lyra does not use Thetis’s PC audio
-host, so there is no CMASIO and no ASIO channel map. Speaker out is
-ordinary Windows audio (WASAPI): stereo 48 kHz, the device Windows calls
-Speakers. A Scarlett-style USB interface still works via its Windows
-speaker/mic names. A WING used as a console over ASIO does not — Lyra
-cannot park RX on channel 17 and TX from an arbitrary bus. The HL2 can
-also play from its own headphone jack. Digital apps (STD, WSJT, …) use
-TCI or a VAC stereo pipe. Native ASIO (device + stereo pair pickers) is
-not a hidden setting. Online FAQ:
-[Can I use CMASIO or a Behringer WING / X32 with Lyra?](https://github.com/N8SDR1/Lyra-SDR-cpp/wiki/FAQ-and-Troubleshooting#can-i-use-cmasio-or-a-behringer-wing--x32-with-lyra).
+**ASIO for VAC (test stage, v0.25.41).** Qt speaker **Out** is still
+ordinary Windows audio (WASAPI), and the HL2 jack is still the codec
+path. VAC1 / VAC2 can optionally open an **ASIO** driver (full duplex
+on one device: mic in + RX out) after you tick **Enable ASIO devices
+for VAC** and restart. Default off. This is **not** Thetis **CMASIO**
+and not a 48-channel WING-as-mixer: Lyra still cannot park RX on
+channel 17 and TX from an arbitrary bus. A Scarlett-style USB
+interface still works via Windows names or, in this test, via its
+ASIO driver on VAC. Online FAQ:
+[Can I use ASIO / a Behringer WING / X32 / CMASIO with Lyra?](https://github.com/N8SDR1/Lyra-SDR-cpp/wiki/FAQ-and-Troubleshooting#can-i-use-cmasio-or-a-behringer-wing--x32-with-lyra).
 
 The HL2 jack is the easy button: the radio and its codec share one clock,
 so there's no drift to correct — glitch-free audio, lowest latency, zero
@@ -2751,7 +2908,13 @@ is laid out in old Lyra's three-row arrangement:
   Tuning panel's fine step.)
 - **Spec** — spectrum frame rate (how many times per second the panadapter
   redraws).
-- **WF** — waterfall scroll rate (history rows per second).
+- **WF** — waterfall scroll rate (history rows per second). On a
+  high-DPI screen (4K at 150% Windows scale) the waterfall keeps as
+  many history rows as the pane is tall on screen (512…1024), so a
+  tall pane is not a stretched 512-row smear. Use **Windows Display
+  scale** — do not set `QT_SCALE_FACTOR`. **Auto-fit** (below, and in
+  Settings → Visuals) is the waterfall **dB colour map**, not a DPI
+  substitute.
 - **Peak Hold** — how the [peak markers](#peak-markers) behave:
   - **Off** — no peak markers.
   - **Live** — markers ride the current spectrum.
@@ -3204,9 +3367,9 @@ and place** you last used after a chip-close or a restart.
 6. Next keyup should land **near** the previous FB, not a full hunt.
 7. Kill-test once, then antenna when you are ready.
 
-> **ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** are in tester
-> hands. TX is not on-air validated (dummy-load arm + drive ceiling). Do
-> not expect PureSignal there yet.
+> **ANAN-7000DLE / 8000DLE / Orion MkII / Anvelina-Pro3** transmit
+> without Arm Protocol 2 TX (Enable PA + MOX + Drive). First RF: dummy
+> load. PureSignal on those boxes is still unproven — dummy-load first.
 
 ---
 
@@ -3634,8 +3797,23 @@ to pop open the floating **CW Decoder** (it floats and remembers where you
 put it, or dock it like any panel). It reads **only in CWU/CWL** — outside
 CW the detector controls dim and a "switch to CW to decode" note shows.
 
-The decoder is a faithful port of **fldigi's** CW receiver (the W1HKJ
-open-source Morse engine), so if you know fldigi's CW behaviour, this is it.
+The panel has three **Engine** chips:
+
+- **Classic** — a faithful port of **fldigi's** CW receiver (the W1HKJ
+  open-source Morse engine). If you know fldigi's CW behaviour, this
+  is it. **v0.25.38 does not change Classic.**
+- **DeepFist** — neural decoder by **Brent Crier (N9BC)**. Since
+  **v0.25.38** it searches only within **±80 Hz of your CW Pitch**, so
+  a louder neighbour is not copied instead. Put the beat note on your
+  pitch (same as Classic). Characters **print sooner**: a letter is
+  committed once **two consecutive decodes agree**, still capped at
+  the old delay so a disagreement cannot stall the copy.
+- **Auto** — uses DeepFist while the keying is solid and falls back
+  to Classic through a fade.
+
+If DeepFist's model is missing, the panel stays on Classic and shows
+"model not found". The detector knobs below are Classic (fldigi)
+controls; they hide while DeepFist is selected.
 
 > **Quick copy — the 60-second recipe.** The one thing that matters is
 > putting the signal *on your pitch*; the rest is defaults.
@@ -4869,7 +5047,9 @@ log** you can read, copy, and send to us.
 
 - **Help → Show Log…** opens the log viewer — a scrolling view of this
   session's diagnostic messages with **Copy all**, **Save…**, and **Open
-  log folder** buttons. It updates live while open.
+  log folder** buttons. It updates live while open. On a 4K screen at
+  150% Windows scale the window shrinks and moves so that button row
+  stays on screen (inside the taskbar).
 - **Enable verbose debug logging** (here in Diagnostics, also a checkbox
   in the log viewer) turns on detailed capture. Leave it **off** for
   normal use — the log then keeps only warnings and errors and stays
@@ -5118,6 +5298,14 @@ the OC bits. Analog on **J3** is the separate Band Volts checkbox.
 - **Live pins** (top-right) — the seven cells light to show which J16
   pins are being driven **right now**, on the wire. They follow the band
   as you tune and flip to the transmit pattern while you're keyed.
+- **Radio's own filters** (Protocol 2 **ANAN** / **Brick3**, since
+  0.25.40) — a second lamp row under Live pins, plus read-only ticks
+  in the per-band grid, for the Alex **RX high-pass or band-pass**,
+  **TX low-pass**, and **ANT1/2/3** the radio is actually using.
+  Classic Alex (ANAN-10…200D, Brick3) labels the RX row as high-pass
+  (1.5 MHz … 20 MHz / 6 m pre / Byp). Orion MkII / Saturn labels it
+  as band-pass (160 … 6 m / Byp). Hidden on **HL2** and **BrickSDR**
+  (onboard filters). Display only; the ticks do not change the wire.
 - **The per-band grid** — one row per amateur band (160 m–6 m), then
   **named Xvtr chips** under that, then a folded **SWL broadcast rows**
   section (below).
@@ -5310,10 +5498,12 @@ controls here are:
   every other mode (including USB). USB with this ticked will **stop**
   VAC even if Enable looks on.
 - **Driver** — the audio backend (PortAudio host API: **WASAPI**,
-  DirectSound, MME, or WDM-KS) the VAC devices live under. **WASAPI is the
-  right choice for virtual cables.** Changing the driver repopulates the
-  Output and Input device lists below with that backend's devices;
-  existing selections carry over by name where the device still exists.
+  DirectSound, MME, WDM-KS, or **ASIO** after you enable it). **WASAPI is
+  the right choice for virtual cables.** **ASIO** is a **test-stage**
+  option (v0.25.41): tick **Enable ASIO devices for VAC**, restart, then
+  pick the **same** ASIO driver for Input and Output. Changing the
+  driver repopulates the Output and Input device lists below; existing
+  selections carry over by name where the device still exists.
 - **Output device** — the PC output Lyra sends RX audio to (the cable's
   playback endpoint your digital app records from). Pick the **virtual
   cable, not your speakers**. `(none)` leaves the RX→PC direction off.
@@ -5356,6 +5546,38 @@ only VAC2 auto-digital is live.
 VAC2 **enable / auto-digital / gains / latency / buffer size** save with
 the active TX/RX profile (same as VAC1). Device names stay in Settings →
 Audio. Recalling a pre-VAC2 profile leaves VAC2 off.
+
+### ASIO for VAC (test stage)
+
+**v0.25.41.** Optional. Default **off**. Qt **Out** and the HL2 jack do
+not switch to ASIO.
+
+1. Settings → Audio → **Enable ASIO devices for VAC**, then **restart**.
+2. VAC1 or VAC2: **Driver = ASIO**. Pick the **same** driver for Input
+   and Output (full duplex). Only one VAC can use ASIO at a time. Close
+   any other program using that driver (Thetis included).
+3. **Mic input channel** / **Mono** / **Audio output channels** / **Block
+   size** as needed (1 = channels 1–2 as a pair). Changes apply when the
+   VAC starts — turn Enable off and on after changing them.
+4. Leave **Hold the rate ratio at 1.0** on (the default). In testing,
+   turning it off made TO VAC overflow and underflow steadily.
+5. Lyra VAC is **48 kHz** — set the interface to 48 kHz.
+6. Brick / ANAN listen on the PC path. HL2 operators who stay on the
+   **jack** do not need this.
+7. If Lyra did not finish starting while loading ASIO last time, Enable
+   is forced off (crash guard). Tick it again only after you trust the
+   driver.
+8. **Healthy readings.** About two seconds after the VAC starts, Lyra
+   re-centres both rings. The **Monitor** line should then hold TO VAC
+   and FROM VAC around **45–55 %** full with **0 ovf / 0 unf**. Counts
+   only reset when the VAC restarts, so turn Enable off and on before
+   judging.
+9. **Use VAC1 as TX source** follows your TX profile's mic source. If it
+   keeps unticking at start-up, tick it and press **Save** on the
+   Profile bar.
+
+This is **not** Thetis CMASIO and **not** WING-as-the-radio-mixer. See
+[FAQ](https://github.com/N8SDR1/Lyra-SDR-cpp/wiki/FAQ-and-Troubleshooting#can-i-use-cmasio-or-a-behringer-wing--x32-with-lyra).
 
 ---
 
@@ -7217,8 +7439,6 @@ the GPL-licensed components it depends on:
 - **Timmy Davis (KC8TYK)** — tester (v0.1 tester flight).
 - **W5UDX** — DSP2024P Plate Reverb presets and verification (lands
   with the Plate Reverb in v0.2.1).
-- **Cursor Grok 4.6** (SpaceXAI / Cursor) — coding assistant for
-  implementation and debug pairing on the native C++ rebuild.
 
 ### License
 
@@ -7277,10 +7497,9 @@ band. When in doubt, run less power.
 
 Lyra is **free**, **open-source** (GPL v3 or later — see the License), and
 primarily built by **Rick Langford (N8SDR)** in his spare time, with
-**Brent Crier (N9BC)** joining as co-contributor during early testing,
-**Timmy Davis (KC8TYK)** joining for the v0.1 tester flight, and
-**Cursor Grok 4.6** (SpaceXAI / Cursor) as coding assistant on the
-native C++ rebuild. There are no
+**Brent Crier (N9BC)** joining as co-contributor during early testing
+and **Timmy Davis (KC8TYK)** joining for the v0.1 tester flight.
+There are no
 ads, no telemetry, no subscription tier, no "pro" upsells.
 
 If Lyra has saved you from a clunky SDR workflow, helped you work a new
