@@ -121,6 +121,8 @@ class Panadapter : public QQuickItem {
                NOTIFY peakColorChanged)
     Q_PROPERTY(bool peakShowDb READ peakShowDb WRITE setPeakShowDb
                NOTIFY peakShowDbChanged)
+    Q_PROPERTY(bool peakShowAudioHz READ peakShowAudioHz WRITE setPeakShowAudioHz
+               NOTIFY peakShowAudioHzChanged)
     // Numeric dB labels for the strongest in-view peaks — each entry is
     // {frac: 0..1 across width, db: value}.  Rendered as QML Text in
     // PanadapterPanel (text in the scene graph is impractical here).
@@ -195,6 +197,8 @@ public:
     void   setPeakColor(const QColor &c);
     bool peakShowDb() const { return peakShowDb_; }
     void setPeakShowDb(bool v);
+    bool peakShowAudioHz() const { return peakShowAudioHz_; }
+    void setPeakShowAudioHz(bool v);
     QVariantList peakLabels() const { return peakLabels_; }
     double noiseFloorDb() const { return noiseFloorDb_; }
 
@@ -220,6 +224,7 @@ signals:
     void peakStyleChanged();
     void peakColorChanged();
     void peakShowDbChanged();
+    void peakShowAudioHzChanged();
     void peakLabelsChanged();
     void noiseFloorChanged();
 
@@ -270,6 +275,7 @@ private:
     int    peakStyle_     = 1;       // 0 line / 1 dots / 2 triangles
     QColor peakColor_     = QColor(0xff, 0xbe, 0x5a);
     bool   peakShowDb_    = false;
+    bool   peakShowAudioHz_ = false;
     QVariantList           peakLabels_;
     std::vector<float>     peakDb_;       // per-bin hold buffer (size of pix_)
     std::vector<double>    peakUpdated_;  // per-bin last-updated (seconds)

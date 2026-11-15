@@ -166,6 +166,7 @@ Item {
                 peakStyle: Prefs.peakStyle
                 peakColor: Prefs.peakColor
                 peakShowDb: Prefs.peakShowDb
+                peakShowAudioHz: Prefs.peakShowAudioHz
                 layer.enabled: Prefs.glow > 0
                 layer.effect: ShaderEffect {
                     fragmentShader: "qrc:/shaders/glow.frag.qsb"

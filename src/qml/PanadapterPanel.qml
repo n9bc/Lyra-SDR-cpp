@@ -379,6 +379,7 @@ Item {
                 peakStyle: Prefs.peakStyle
                 peakColor: Prefs.peakColor
                 peakShowDb: Prefs.peakShowDb
+                peakShowAudioHz: Prefs.peakShowAudioHz
 
                 // Peak glow: render to a layer texture + additive-bloom
                 // ShaderEffect (off when glow == 0, so no GPU cost).
@@ -880,31 +881,48 @@ Item {
                 y: 0
             }
 
-            // ---- peak dB labels (strongest in-view peaks) ----
-            // Numeric readout for the top peaks the panadapter detected
-            // (peakLabels = [{frac, db}, …]); only populated when Peak
-            // Hold + "Show dB" are on.  Positioned by fraction-of-width
-            // and mapped to the live effective dB range.
+            // ---- peak labels (strongest in-view peaks) ----
+            // Readout for the top peaks the panadapter detected
+            // (peakLabels = [{frac, db, audioHz, hzText}, …]); populated
+            // when Peak Hold is on and either "Show dB" or "Show audio
+            // frequency" is enabled.  The dB number and the audio-frequency
+            // text are independent rows of a Column: whichever is on shows,
+            // and when both are on the Hz text sits under the dB number.
+            // Positioned by fraction-of-width and mapped to the live dB range.
             Repeater {
                 model: pan.peakLabels
-                delegate: Text {
+                delegate: Column {
                     required property var modelData
                     readonly property real db: modelData.db
                     readonly property real norm: Math.max(0, Math.min(1,
                         (db - root.effMin)
                         / Math.max(1, root.effMax - root.effMin)))
                     z: 5
-                    text: (db >= 0 ? "+" : "") + Math.round(db)
-                    color: Prefs.peakColor
-                    font.pixelSize: 11
-                    font.bold: true
-                    font.family: "Consolas"
-                    style: Text.Outline
-                    styleColor: "#cc000000"
+                    spacing: 0
                     x: Math.max(0, Math.min(spectrumArea.width - width,
                                  modelData.frac * spectrumArea.width + 4))
                     y: Math.max(2, Math.min(spectrumArea.height - height - 2,
                                  (1 - norm) * spectrumArea.height - height - 2))
+                    Text {
+                        visible: Prefs.peakShowDb
+                        text: (parent.db >= 0 ? "+" : "") + Math.round(parent.db)
+                        color: Prefs.peakColor
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "Consolas"
+                        style: Text.Outline
+                        styleColor: "#cc000000"
+                    }
+                    Text {
+                        visible: Prefs.peakShowAudioHz
+                        text: parent.modelData.hzText
+                        color: Prefs.peakColor
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.family: "Consolas"
+                        style: Text.Outline
+                        styleColor: "#cc000000"
+                    }
                 }
             }
 

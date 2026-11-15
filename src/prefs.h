@@ -132,6 +132,9 @@ class Prefs : public QObject {
                NOTIFY peakColorChanged)
     Q_PROPERTY(bool peakShowDb READ peakShowDb WRITE setPeakShowDb
                NOTIFY peakShowDbChanged)
+    // Independent of peakShowDb: a peak may show dB, audio Hz, or both.
+    Q_PROPERTY(bool peakShowAudioHz READ peakShowAudioHz WRITE setPeakShowAudioHz
+               NOTIFY peakShowAudioHzChanged)
     // #173 CW-5b — CW decoder display prefs (decoded-text colour + font px).
     Q_PROPERTY(QString cwDecodeColor READ cwDecodeColor WRITE setCwDecodeColor
                NOTIFY cwDecodeColorChanged)
@@ -627,6 +630,8 @@ public:
     void    setCwDecodeSquelchValue(double v);
     bool peakShowDb() const { return peakShowDb_; }
     void setPeakShowDb(bool v);
+    bool peakShowAudioHz() const { return peakShowAudioHz_; }
+    void setPeakShowAudioHz(bool v);
     bool noiseFloorEnabled() const { return noiseFloorEnabled_; }
     void setNoiseFloorEnabled(bool v);
     QString noiseFloorColor() const { return noiseFloorColor_; }
@@ -884,6 +889,7 @@ signals:
     void peakStyleChanged();
     void peakColorChanged();
     void peakShowDbChanged();
+    void peakShowAudioHzChanged();
     void cwDecodeColorChanged();
     void cwDecodeFontSizeChanged();
     void cwDecodeBandwidthChanged();
@@ -1023,6 +1029,7 @@ private:
     int     peakStyle_;
     QString peakColor_;
     bool    peakShowDb_;
+    bool    peakShowAudioHz_;
     QString cwDecodeColor_;
     int     cwDecodeFontSize_;
     int     cwDecodeBandwidth_;

@@ -77,6 +77,7 @@ constexpr auto kCwDecMfilt  = "cw/decodeMatchedFilter";
 constexpr auto kCwDecSqlOn  = "cw/decodeSquelchOn";
 constexpr auto kCwDecSqlVal = "cw/decodeSquelchValue";
 constexpr auto kPkShow  = "panadapter/peakShowDb";
+constexpr auto kPkShowHz = "panadapter/peakShowAudioHz";
 constexpr auto kNfEn    = "panadapter/noiseFloorEnabled";
 constexpr auto kNfColor = "panadapter/noiseFloorColor";
 constexpr auto kWmark  = "panadapter/watermark";
@@ -329,6 +330,14 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
     cwDecodeSquelchOn_     = s.value(kCwDecSqlOn, false).toBool();
     cwDecodeSquelchValue_  = std::clamp(s.value(kCwDecSqlVal, 5.0).toDouble(), 0.0, 100.0);
     peakShowDb_    = s.value(kPkShow, false).toBool();
+    // Corrupt/non-bool stored value loads as the default false: QVariant's
+    // toBool() treats any non-empty string ("xyz") as true, so match the
+    // genuine serialised-bool forms instead of trusting toBool() blindly.
+    {
+        const QString hz = s.value(kPkShowHz, false).toString();
+        peakShowAudioHz_ = hz.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0
+                           || hz == QLatin1String("1");
+    }
     noiseFloorEnabled_ = s.value(kNfEn, true).toBool();
     noiseFloorColor_   = s.value(kNfColor, QStringLiteral("#78c88c")).toString();
     watermark_   = s.value(kWmark, true).toBool();
@@ -1109,6 +1118,14 @@ void Prefs::setPeakShowDb(bool v) {
         peakShowDb_ = v;
         QSettings().setValue(kPkShow, v);
         emit peakShowDbChanged();
+    }
+}
+
+void Prefs::setPeakShowAudioHz(bool v) {
+    if (v != peakShowAudioHz_) {
+        peakShowAudioHz_ = v;
+        QSettings().setValue(kPkShowHz, v);
+        emit peakShowAudioHzChanged();
     }
 }
 

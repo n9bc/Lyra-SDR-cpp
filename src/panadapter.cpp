@@ -3,6 +3,7 @@
 #include "panadapter.h"
 
 #include "palettes.h"
+#include "panadapter_peakmath.h"
 #include "wdsp_engine.h"
 
 #include <QQuickWindow>
@@ -269,8 +270,22 @@ void Panadapter::setPeakColor(const QColor &c) {
 void Panadapter::setPeakShowDb(bool v) {
     if (v != peakShowDb_) {
         peakShowDb_ = v;
-        if (!v && !peakLabels_.isEmpty()) { peakLabels_.clear(); emit peakLabelsChanged(); }
+        // Clear only when neither label kind is wanted any more; otherwise
+        // the Hz label still needs the entries.
+        if (!v && !peakShowAudioHz_ && !peakLabels_.isEmpty()) {
+            peakLabels_.clear(); emit peakLabelsChanged();
+        }
         emit peakShowDbChanged();
+    }
+}
+
+void Panadapter::setPeakShowAudioHz(bool v) {
+    if (v != peakShowAudioHz_) {
+        peakShowAudioHz_ = v;
+        if (!v && !peakShowDb_ && !peakLabels_.isEmpty()) {
+            peakLabels_.clear(); emit peakLabelsChanged();
+        }
+        emit peakShowAudioHzChanged();
     }
 }
 
@@ -428,11 +443,16 @@ void Panadapter::onFrame() {
     // dB labels: top-3 in-view peaks ≥ 6 dB over the in-view minimum,
     // separated by ≥ 16 px.  Computed here (GUI thread) and exposed for
     // the QML Text overlay; each entry is {frac: 0..1, db: value}.
-    if (peakEnabled_ && peakShowDb_ && !peakDb_.empty()) {
+    if (peakEnabled_ && (peakShowDb_ || peakShowAudioHz_) && !peakDb_.empty()) {
         const int W = static_cast<int>(width());
         QVariantList labels;
         int pbLo = 0, pbHi = W;
         passbandPx(W, &pbLo, &pbHi);
+        // Display span: RX2 reads the IQ rate, RX1 the panadapter span.
+        const double span = engine_
+            ? (receiver_ == 2 ? static_cast<double>(engine_->iqRateHz())
+                              : static_cast<double>(engine_->spanHz()))
+            : 0.0;
         // Only inside the RX passband (old-Lyra parity), like the overlay.
         if (W >= 12 && (pbHi - pbLo) > 10) {
             std::vector<float> col(static_cast<size_t>(W), -300.0f);
@@ -470,9 +490,13 @@ void Panadapter::onFrame() {
                 if (far) {
                     chosen.push_back(c.second);
                     QVariantMap m;
-                    m[QStringLiteral("frac")] =
+                    const double frac =
                         static_cast<double>(c.second) / static_cast<double>(W);
+                    m[QStringLiteral("frac")] = frac;
                     m[QStringLiteral("db")] = static_cast<double>(c.first);
+                    const double audioHz = lyra::peakAudioHz(frac, span);
+                    m[QStringLiteral("audioHz")] = audioHz;
+                    m[QStringLiteral("hzText")] = lyra::formatPeakHz(audioHz);
                     labels.push_back(m);
                 }
                 if (chosen.size() >= 3) break;

@@ -10817,6 +10817,15 @@ QWidget *SettingsDialog::buildVisualsTab() {
         });
         r1->addWidget(pShow);
 
+        auto *pShowHz = new QCheckBox(tr("Show audio frequency"), pbox);
+        pShowHz->setChecked(prefs_->peakShowAudioHz());
+        connect(pShowHz, &QCheckBox::toggled, prefs_, &Prefs::setPeakShowAudioHz);
+        connect(prefs_, &Prefs::peakShowAudioHzChanged, pbox, [this, pShowHz]() {
+            if (pShowHz->isChecked() != prefs_->peakShowAudioHz())
+                pShowHz->setChecked(prefs_->peakShowAudioHz());
+        });
+        r1->addWidget(pShowHz);
+
         r1->addWidget(new QLabel(tr("Colour:"), pbox));
         auto *pSwatch = new QPushButton(pbox);
         pSwatch->setFixedSize(44, 22);

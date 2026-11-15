@@ -526,6 +526,8 @@ qt_add_executable(lyra
     src/noisereducer.cpp
     src/panadapter.h
     src/panadapter.cpp
+    src/panadapter_peakmath.h
+    src/panadapter_peakmath.cpp
     src/waterfall.h
     src/waterfall.cpp
     src/audiovisitem.h
@@ -1784,6 +1786,40 @@ target_include_directories(test_prefs_visualizer PRIVATE src)
 target_link_libraries(test_prefs_visualizer PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
 if(MSVC)
     target_compile_options(test_prefs_visualizer PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+# Build + run:  cmake --build build --target test_prefs_peaklabel
+add_executable(test_prefs_peaklabel EXCLUDE_FROM_ALL
+    scratch/test_prefs_peaklabel.cpp
+    src/prefs.h
+    src/prefs.cpp
+    src/palettes.cpp
+    src/grid.cpp
+    src/win_perf.cpp
+    src/backup.cpp
+    src/rig/RigScope.cpp
+    src/rig/RigRegistry.cpp
+    src/rig/RadioCapabilities.cpp
+    src/hardware/HardwareCatalog.cpp
+)
+target_include_directories(test_prefs_peaklabel PRIVATE src)
+target_link_libraries(test_prefs_peaklabel PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
+if(MSVC)
+    target_compile_options(test_prefs_peaklabel PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+# Panadapter peak-math helpers (src/panadapter_peakmath.h) — a peak's audio
+# frequency from its screen fraction + span, and the Hz/kHz label format.
+# Qt Core only.  Build + run:  cmake --build build --target test_panadapter_peakmath
+add_executable(test_panadapter_peakmath EXCLUDE_FROM_ALL
+    scratch/test_panadapter_peakmath.cpp
+    src/panadapter_peakmath.h
+    src/panadapter_peakmath.cpp
+)
+target_include_directories(test_panadapter_peakmath PRIVATE src)
+target_link_libraries(test_panadapter_peakmath PRIVATE Qt6::Core)
+if(MSVC)
+    target_compile_options(test_panadapter_peakmath PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
 # VFO style digit hit-testing (src/vfo_digit_hit.h) — which digit place a
