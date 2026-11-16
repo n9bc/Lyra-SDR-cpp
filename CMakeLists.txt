@@ -333,15 +333,6 @@ qt_add_executable(lyra
     # #50 Stage-2b — live mic-spectrum analyzer behind the EQ curve.
     src/dsp/EqAnalyzer.h
     src/dsp/EqAnalyzer.cpp
-    # Audio visualizer — Qt-free core (span rule, source choice, shaping, palettes).
-    src/dsp/AudioVisCore.h
-    src/dsp/AudioVisCore.cpp
-    # Audio visualizer — lock-free RX/TX sample rings, GUI-thread FFT hub, demo signal.
-    src/dsp/AudioVisHub.h
-    src/dsp/AudioVisHub.cpp
-    # Audio visualizer — view layout + anti-aliased triangle mesh (Qt-free).
-    src/dsp/AudioVisGeometry.h
-    src/dsp/AudioVisGeometry.cpp
     # #88 — native TX speech pre-processor (Auto-AGC leveller + De-esser),
     # a pre-EQ rack stage.
     src/dsp/SpeechProcessor.h
@@ -530,8 +521,6 @@ qt_add_executable(lyra
     src/panadapter_peakmath.cpp
     src/waterfall.h
     src/waterfall.cpp
-    src/audiovisitem.h
-    src/audiovisitem.cpp
     src/freqdisplay.h
     src/freqdisplay.cpp
     src/wheel_steps.h
@@ -678,10 +667,6 @@ qt_add_qml_module(lyra
         src/qml/SpeechPanel.qml
         src/qml/CwConsolePanel.qml
         src/qml/CwDecoderPanel.qml
-        src/qml/AudioVisCanvas.qml
-        src/qml/AudioVisThumb.qml
-        src/qml/AudioVisThumbs.qml
-        src/qml/AudioVisPanel.qml
         src/qml/EssbCoachPanel.qml
         src/qml/CalibrationPanel.qml
         src/qml/VoiceKeyerPanel.qml
@@ -759,8 +744,6 @@ qt_add_shaders(lyra "lyra_panadapter_shaders"
     FILES
         src/shaders/glow.frag
         src/shaders/watermark.frag
-        src/shaders/audiovis_glow.frag
-        src/shaders/audiovis_echo.frag
 )
 
 target_link_libraries(lyra PRIVATE
@@ -1498,48 +1481,6 @@ if(MSVC)
     target_compile_options(test_eq_analyzer PRIVATE /utf-8 /Zc:preprocessor)
 endif()
 
-# Audio visualizer core — span / source choice / level+peak shaping / dB map /
-# palettes unit test.  No Qt.  EXCLUDE_FROM_ALL.
-# Build + run:  cmake --build build --target test_audio_vis_core
-add_executable(test_audio_vis_core EXCLUDE_FROM_ALL
-    scratch/test_audio_vis_core.cpp
-    src/dsp/AudioVisCore.h
-    src/dsp/AudioVisCore.cpp
-)
-target_include_directories(test_audio_vis_core PRIVATE src)
-if(MSVC)
-    target_compile_options(test_audio_vis_core PRIVATE /utf-8 /Zc:preprocessor)
-endif()
-
-# Audio visualizer hub — sample rings / FFT analysis / demo signal unit test.
-# No Qt.  EXCLUDE_FROM_ALL.
-# Build + run:  cmake --build build --target test_audio_vis_hub
-add_executable(test_audio_vis_hub EXCLUDE_FROM_ALL
-    scratch/test_audio_vis_hub.cpp
-    src/dsp/AudioVisHub.h
-    src/dsp/AudioVisHub.cpp
-    src/dsp/AudioVisCore.h
-    src/dsp/AudioVisCore.cpp
-    src/dsp/MonitorRing.h
-)
-target_include_directories(test_audio_vis_hub PRIVATE src)
-if(MSVC)
-    target_compile_options(test_audio_vis_hub PRIVATE /utf-8 /Zc:preprocessor)
-endif()
-
-# Audio visualizer view layout — 25-bar rects / Radial spokes / line points and
-# the anti-aliased triangle mesh the scene-graph item uploads.  No Qt.
-# EXCLUDE_FROM_ALL.
-# Build + run:  cmake --build build --target test_audio_vis_geometry
-add_executable(test_audio_vis_geometry EXCLUDE_FROM_ALL
-    scratch/test_audio_vis_geometry.cpp
-    src/dsp/AudioVisGeometry.h
-    src/dsp/AudioVisGeometry.cpp
-)
-target_include_directories(test_audio_vis_geometry PRIVATE src)
-if(MSVC)
-    target_compile_options(test_audio_vis_geometry PRIVATE /utf-8 /Zc:preprocessor)
-endif()
 
 # eSSB Coach — band layout / targets / zones / analyzer / speech-gate unit test.  No Qt.
 # EXCLUDE_FROM_ALL; `cmake --build build --target test_essb_coach`.

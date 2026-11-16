@@ -443,39 +443,6 @@ class Prefs : public QObject {
     Q_PROPERTY(QString vfoStyle READ vfoStyle WRITE setVfoStyle
                NOTIFY vfoStyleChanged)
 
-    // Audio visualizer (dock + Settings tab).  View: 0 = 25-bar, 1 = FFT
-    // line, 2 = Scope, 3 = Radial.  Palette: 0..8 (Neon default).  Echo,
-    // glow, background opacity, smoothing and sensitivity are percents;
-    // attack/decay are the bar ballistics; peakHoldMs is the peak-hold time;
-    // floorDb is the bottom of the level range; autoFloor (default on) tracks
-    // the received noise and sets the bottom itself, floorDb applying only
-    // while it is off.  Persisted under visualizer/.
-    Q_PROPERTY(int visView READ visView WRITE setVisView
-               NOTIFY visViewChanged)
-    Q_PROPERTY(bool visPeakHold READ visPeakHold WRITE setVisPeakHold
-               NOTIFY visPeakHoldChanged)
-    Q_PROPERTY(int visPalette READ visPalette WRITE setVisPalette
-               NOTIFY visPaletteChanged)
-    Q_PROPERTY(int visEcho READ visEcho WRITE setVisEcho
-               NOTIFY visEchoChanged)
-    Q_PROPERTY(int visGlow READ visGlow WRITE setVisGlow
-               NOTIFY visGlowChanged)
-    Q_PROPERTY(int visBgOpacity READ visBgOpacity WRITE setVisBgOpacity
-               NOTIFY visBgOpacityChanged)
-    Q_PROPERTY(int visAttack READ visAttack WRITE setVisAttack
-               NOTIFY visAttackChanged)
-    Q_PROPERTY(int visDecay READ visDecay WRITE setVisDecay
-               NOTIFY visDecayChanged)
-    Q_PROPERTY(int visSmoothing READ visSmoothing WRITE setVisSmoothing
-               NOTIFY visSmoothingChanged)
-    Q_PROPERTY(int visPeakHoldMs READ visPeakHoldMs WRITE setVisPeakHoldMs
-               NOTIFY visPeakHoldMsChanged)
-    Q_PROPERTY(int visSensitivity READ visSensitivity WRITE setVisSensitivity
-               NOTIFY visSensitivityChanged)
-    Q_PROPERTY(int visFloorDb READ visFloorDb WRITE setVisFloorDb
-               NOTIFY visFloorDbChanged)
-    Q_PROPERTY(bool visAutoFloor READ visAutoFloor WRITE setVisAutoFloor
-               NOTIFY visAutoFloorChanged)
 
 public:
     explicit Prefs(QObject *parent = nullptr);
@@ -804,33 +771,6 @@ public:
     void setTooltipsEnabled(bool on);
     QString vfoStyle() const { return vfoStyle_; }
     void    setVfoStyle(const QString &id);
-    // Audio visualizer preferences (see the Q_PROPERTY block).
-    int  visView() const { return visView_; }
-    void setVisView(int v);
-    bool visPeakHold() const { return visPeakHold_; }
-    void setVisPeakHold(bool v);
-    int  visPalette() const { return visPalette_; }
-    void setVisPalette(int v);
-    int  visEcho() const { return visEcho_; }
-    void setVisEcho(int v);
-    int  visGlow() const { return visGlow_; }
-    void setVisGlow(int v);
-    int  visBgOpacity() const { return visBgOpacity_; }
-    void setVisBgOpacity(int v);
-    int  visAttack() const { return visAttack_; }
-    void setVisAttack(int v);
-    int  visDecay() const { return visDecay_; }
-    void setVisDecay(int v);
-    int  visSmoothing() const { return visSmoothing_; }
-    void setVisSmoothing(int v);
-    int  visPeakHoldMs() const { return visPeakHoldMs_; }
-    void setVisPeakHoldMs(int v);
-    int  visSensitivity() const { return visSensitivity_; }
-    void setVisSensitivity(int v);
-    int  visFloorDb() const { return visFloorDb_; }
-    void setVisFloorDb(int v);
-    bool visAutoFloor() const { return visAutoFloor_; }
-    void setVisAutoFloor(bool v);
     // Task #33 — operator-facing token list with display labels.  Used
     // by the Settings → TX → Mic Source dropdown.  Order matches the
     // dropdown order (Mic In default first).  Disabled entries get a
@@ -968,20 +908,6 @@ signals:
     void micSourceChanged();
     void tooltipsEnabledChanged();
     void vfoStyleChanged();
-    // Audio visualizer.
-    void visViewChanged();
-    void visPeakHoldChanged();
-    void visPaletteChanged();
-    void visEchoChanged();
-    void visGlowChanged();
-    void visBgOpacityChanged();
-    void visAttackChanged();
-    void visDecayChanged();
-    void visSmoothingChanged();
-    void visPeakHoldMsChanged();
-    void visSensitivityChanged();
-    void visFloorDbChanged();
-    void visAutoFloorChanged();
 
 private:
     int     gridLevel_;
@@ -1134,20 +1060,6 @@ private:
     QString micSource_   = QStringLiteral("mic1");
     bool    tooltipsEnabled_ = true;   // Settings → Visuals; ui/tooltips_enabled
     QString vfoStyle_;                 // Tuning-panel VFO style id; ui/vfo_style
-    // Audio visualizer (defaults = Appendix B of the design spec); visualizer/*
-    int     visView_ = 3;
-    bool    visPeakHold_ = true;
-    int     visPalette_ = 0;
-    int     visEcho_ = 40;
-    int     visGlow_ = 50;
-    int     visBgOpacity_ = 0;
-    int     visAttack_ = 70;
-    int     visDecay_ = 12;
-    int     visSmoothing_ = 30;
-    int     visPeakHoldMs_ = 800;
-    int     visSensitivity_ = 100;
-    int     visFloorDb_ = -90;
-    bool    visAutoFloor_ = true;
     QHash<QString, int> splitShiftHz_;
     QHash<QString, int> vfoStepHz_;
     QHash<QString, int> vfoStepHzRx2_;

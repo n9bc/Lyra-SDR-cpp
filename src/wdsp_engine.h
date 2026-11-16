@@ -1100,24 +1100,6 @@ public:
     // operator is recording an RX clip, so it costs nothing otherwise.
     void setRxRecordTap(std::function<void(const double *audio, int nframes)> tap);
 
-    // Audio visualizer (dock) -- engine side of the AudioVisHub taps.  The RX
-    // tap (dispatchAudioFrame) and the TX tap (txMonitorTapCb) feed
-    // lyra::dsp::vis::AudioVisHub directly; these two getters tell the GUI
-    // item what to analyse.  GUI/main thread ONLY (never the audio or TX pump
-    // threads).
-    //   visSpanHz()  - audio span (Hz) for the mix the operator hears: the
-    //                  wider of RX1 / RX2 (RX2 only when mixed in), a muted
-    //                  receiver excluded; 4000..10000 (vis::combinedSpanHz).
-    //                  Always the RX span -- during TX the display keeps it.
-    //   visUsesTx()  - true when the visualizer should show TX mic audio
-    //                  instead of the RX tap: wire MOX up, a voice/digital
-    //                  mode, and not TUN / two-tone (vis::useTxSource).
-    //   setVisTuneActive - HL2Stream tune OR two-tone armed (wired in
-    //                  main.cpp); the engine has no other way to know, and
-    //                  the TUN/two-tone carrier has no mic audio in it.
-    double visSpanHz() const;
-    bool   visUsesTx() const;
-    void   setVisTuneActive(bool on) { visTuneActive_.store(on, std::memory_order_relaxed); }
 
     // Step 3d: feed interleaved baseband IQ — (I,Q,I,Q,…) doubles
     // already normalized to [-1,1) — from the RX worker thread.
@@ -1498,8 +1480,6 @@ private:
     // Gain calc OR's (muted_) with (autoMuteOnTx_ AND txMuted_).
     std::atomic<bool>   txMuted_{false};
     std::atomic<bool>   autoMuteOnTx_{true};
-    // TUN or two-tone armed (setVisTuneActive); read by visUsesTx() only.
-    std::atomic<bool>   visTuneActive_{false};
     // RX-on-unkey delay (queued thud/echo fix).  On the keyup MOX-off edge
     // (setTxMuted(false)) the un-mute is deferred by rxResumeDelayMs_ via
     // rxResumeTimer_ (single-shot, main-thread like levelsTimer_) so the

@@ -83,7 +83,6 @@ signals:
     void requestRigSwitch(const QString &rigId);
 
 private:
-    QWidget *buildVisualizerTab(); // audio visualizer look/effects + live thumbnails
     QWidget *buildVisualsTab();
     QWidget *buildHardwareTab();
     QWidget *buildFiltersBcdTab();  // #199 — editable OC table + USB-BCD (moved off Hardware)

@@ -11,7 +11,6 @@
 #include "hl2_stream.h"
 #include "panadapter.h"
 #include "waterfall.h"
-#include "audiovisitem.h"
 #include "freqdisplay.h"
 #include "wdsp_engine.h"
 #include "mic_source.h"
@@ -1033,20 +1032,6 @@ int main(int argc, char *argv[])
     // (Red-on-air + the meter still follow CW via txDisplayActive / the
     // meter's keyed OR; only the spectrum SOURCE stays RX.)
 
-    // Audio visualizer: TUN / two-tone carry no mic audio, so the visualizer
-    // keeps its RX tap for them even with wire MOX up (WdspEngine::visUsesTx).
-    // The two are mutually exclusive in HL2Stream; either signal re-reads both
-    // flags, so the order of the disarm / arm emits doesn't matter.
-    {
-        auto syncVisTune = [stream, wdspEngine]() {
-            wdspEngine->setVisTuneActive(stream->tuneEnabled() ||
-                                         stream->twoToneEnabled());
-        };
-        QObject::connect(stream, &lyra::ipc::HL2Stream::tuneEnabledChanged,
-                         wdspEngine, syncVisTune);
-        QObject::connect(stream, &lyra::ipc::HL2Stream::twoToneEnabledChanged,
-                         wdspEngine, syncVisTune);
-    }
 
     // P4.b TUN display-honesty — feed the panadapter the TX-analyzer
     // NCO−dial offset so its TX-state crop renders the TUN carrier at its
@@ -1165,8 +1150,6 @@ int main(int argc, char *argv[])
     // module's auto-registration).  Main.qml: `import LyraUI`.
     qmlRegisterType<lyra::ui::Panadapter>("LyraUI", 1, 0, "Panadapter");
     qmlRegisterType<lyra::ui::Waterfall>("LyraUI", 1, 0, "Waterfall");
-    qmlRegisterType<lyra::ui::AudioVisItem>("LyraUI", 1, 0, "AudioVisItem");
-    qmlRegisterType<lyra::ui::AudioVisGlowItem>("LyraUI", 1, 0, "AudioVisGlowItem");
     qmlRegisterType<lyra::ui::FreqDisplay>("LyraUI", 1, 0, "FreqDisplay");
 
     // The app shell is a QtWidgets QMainWindow (dock framework +

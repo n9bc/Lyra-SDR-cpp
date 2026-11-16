@@ -301,7 +301,7 @@ public:
 // cyan highlight, or ⧉); while panels are locked a floating one only moves.
 constexpr const char *kChipSummonedPanels[] = {
     "txspeech", "txeq", "txcombinator", "txplate", "rxeq",
-    "cwconsole", "cwdecoder", "audiovis", "essbcoach", "voicekeyer", "tuner", "freqcal",
+    "cwconsole", "cwdecoder", "essbcoach", "voicekeyer", "tuner", "freqcal",
     "recorder", "ps", "ampview", "diversity",
 };
 
@@ -3367,44 +3367,6 @@ void MainWindow::buildDocks() {
     // scope / radial.  Own floating dock + "Visualizer" chip, hidden by
     // default.  Hiding a QDockWidget does NOT hide the QML items inside its
     // QQuickWidget, so the panel's `dockOpen` is driven from the dock's real
-    // visibility: hidden (closed, tabbed behind another dock, host window
-    // hidden, or minimised) means the canvas releases the hub and no FFT or
-    // rendering runs.
-    addQuickDock(QStringLiteral("audiovis"), tr("Audio Visualizer"),
-                 QStringLiteral("AudioVisPanel.qml"),
-                 QStringLiteral("audiovis"), Qt::BottomDockWidgetArea,
-                 /*resizable=*/true);
-    if (QDockWidget *d = docks_.value(QStringLiteral("audiovis"))) {
-        d->setFloating(true);
-        d->hide();
-        new FloatingDockMemory(d, QStringLiteral("ui/audioVisDock"),
-                               &layoutRestoring_, d);
-        // Floating, the bar and the status label need this much room, and
-        // the panel would otherwise open at its ~220 px size hint.  Docked
-        // (main window or the Options rack) the host decides; the bar gives
-        // up the status label first there.
-        const auto visMin = [d](bool floating) {
-            d->setMinimumWidth(floating ? 320 : 0);
-        };
-        connect(d, &QDockWidget::topLevelChanged, d, visMin);
-        visMin(d->isFloating());
-        const auto syncVis = [d]() {
-            QWidget *w = d->window();
-            const bool open = d->isVisible() && w && w->isVisible()
-                              && !w->isMinimized();
-            if (auto *qw = d->findChild<QQuickWidget *>())
-                if (QQuickItem *root = qw->rootObject())
-                    root->setProperty("dockOpen", open);
-        };
-        connect(d, &QDockWidget::visibilityChanged, d, syncVis);
-        new DockStateWatcher(d, syncVis, d);
-        // QML loads late: a dock restored open fires its visibility events
-        // while rootObject() is still null, so re-sync once it is ready.
-        if (auto *qw = d->findChild<QQuickWidget *>())
-            connect(qw, &QQuickWidget::statusChanged, d,
-                    [syncVis](QQuickWidget::Status) { syncVis(); });
-        syncVis();
-    }
     // eSSB Coach — RX1 audio / splatter measurement panel (EssbCoachModel).
     // Own floating dock + "eSSB" chip, hidden by default.  The model attaches
     // its WdspEngine taps only while the panel is open, so a closed panel
@@ -4965,17 +4927,6 @@ void MainWindow::buildToolbar() {
                 btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
             }
         }
-        // Audio Visualizer launcher — floating visualizer panel.
-        if (QDockWidget *d = docks_.value(QStringLiteral("audiovis"))) {
-            QAction *act = d->toggleViewAction();
-            act->setText(tr("Visualizer"));
-            tb->addAction(act);
-            if (auto *btn = qobject_cast<QToolButton *>(
-                    tb->widgetForAction(act))) {
-                btn->setObjectName(QStringLiteral("txDspChip"));
-                btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
-            }
-        }
         // eSSB Coach launcher — floating RX1 audio coach panel.
         if (QDockWidget *d = docks_.value(QStringLiteral("essbcoach"))) {
             QAction *act = d->toggleViewAction();
@@ -5004,7 +4955,6 @@ void MainWindow::buildToolbar() {
                                     QStringList{ QStringLiteral("tuner"),
                                                  QStringLiteral("cwconsole"),
                                                  QStringLiteral("cwdecoder"),
-                                                 QStringLiteral("audiovis"),
                                                  QStringLiteral("essbcoach"),
                                                  QStringLiteral("voicekeyer") });
             optionsRack_ = orr.first; optionsRackChip_ = orr.second;
