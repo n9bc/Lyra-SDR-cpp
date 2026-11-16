@@ -881,47 +881,92 @@ Item {
                 y: 0
             }
 
-            // ---- peak labels (strongest in-view peaks) ----
+            // ---- peak markers (strongest in-view peaks) ----
             // Readout for the top peaks the panadapter detected
-            // (peakLabels = [{frac, db, audioHz, hzText}, …]); populated
-            // when Peak Hold is on and either "Show dB" or "Show audio
-            // frequency" is enabled.  The dB number and the audio-frequency
-            // text are independent rows of a Column: whichever is on shows,
-            // and when both are on the Hz text sits under the dB number.
-            // Positioned by fraction-of-width and mapped to the live dB range.
+            // (peakLabels = [{frac, db, audioHz, hzText}, …], up to 8);
+            // populated when Peak Hold is on and either "Show dB" or "Show
+            // audio frequency" is enabled.  Each marker is a Column with the
+            // audio-frequency over the dB value (whichever toggles are on),
+            // centred on its peak's X and pinned to a common baseline row
+            // near the bottom of the spectrum — a tidy strip rather than
+            // labels floating at each peak's height.
             Repeater {
                 model: pan.peakLabels
-                delegate: Column {
+                delegate: Item {
+                    id: peakFlag
+                    required property int index
                     required property var modelData
                     readonly property real db: modelData.db
+                    // Map the peak's dB to the live display range (0 = bottom, 1 = top).
                     readonly property real norm: Math.max(0, Math.min(1,
                         (db - root.effMin)
                         / Math.max(1, root.effMax - root.effMin)))
+                    // The pixel Y where the signal sits on the spectrum trace.
+                    readonly property real signalY:
+                        Math.max(flagTopY + flagCol.height + 4,
+                                 (1 - norm) * spectrumArea.height)
+                    // Stagger flags vertically so overlapping ones don't collide:
+                    // even-indexed flags at 20 px, odd at 38 px from top.
+                    readonly property real flagTopY: (index % 2 === 0) ? 20 : 38
                     z: 5
-                    spacing: 0
+                    width: flagCol.width
+                    height: spectrumArea.height
                     x: Math.max(0, Math.min(spectrumArea.width - width,
-                                 modelData.frac * spectrumArea.width + 4))
-                    y: Math.max(2, Math.min(spectrumArea.height - height - 2,
-                                 (1 - norm) * spectrumArea.height - height - 2))
-                    Text {
-                        visible: Prefs.peakShowDb
-                        text: (parent.db >= 0 ? "+" : "") + Math.round(parent.db)
-                        color: Prefs.peakColor
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.family: "Consolas"
-                        style: Text.Outline
-                        styleColor: "#cc000000"
+                                 modelData.frac * spectrumArea.width - width / 2))
+                    y: 0
+
+                    // ---- flag label (freq over dB, DX-spot style) ----
+                    Column {
+                        id: flagCol
+                        y: peakFlag.flagTopY
+                        spacing: 0
+                        width: Math.max(freqText.implicitWidth,
+                                        dbText.implicitWidth)
+                        Text {
+                            id: freqText
+                            width: flagCol.width
+                            horizontalAlignment: Text.AlignHCenter
+                            visible: Prefs.peakShowAudioHz
+                            text: peakFlag.modelData.hzText
+                            color: Prefs.peakColor
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: "Consolas"
+                            style: Text.Outline
+                            styleColor: "#cc000000"
+                        }
+                        Text {
+                            id: dbText
+                            width: flagCol.width
+                            horizontalAlignment: Text.AlignHCenter
+                            visible: Prefs.peakShowDb
+                            text: (peakFlag.db >= 0 ? "+" : "") + Math.round(peakFlag.db)
+                            color: Prefs.peakColor
+                            font.pixelSize: 11
+                            font.bold: true
+                            font.family: "Consolas"
+                            style: Text.Outline
+                            styleColor: "#cc000000"
+                        }
                     }
-                    Text {
-                        visible: Prefs.peakShowAudioHz
-                        text: parent.modelData.hzText
+
+                    // ---- vertical line from flag down to signal peak ----
+                    Rectangle {
+                        width: 1
+                        x: Math.round(flagCol.width / 2)
+                        y: peakFlag.flagTopY + flagCol.height
+                        height: Math.max(0, peakFlag.signalY
+                                            - peakFlag.flagTopY - flagCol.height)
                         color: Prefs.peakColor
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.family: "Consolas"
-                        style: Text.Outline
-                        styleColor: "#cc000000"
+                        opacity: 0.6
+                    }
+
+                    // ---- small dot at the signal peak ----
+                    Rectangle {
+                        width: 5; height: 5; radius: 2.5
+                        x: Math.round(flagCol.width / 2) - 2
+                        y: peakFlag.signalY - 2
+                        color: Prefs.peakColor
                     }
                 }
             }

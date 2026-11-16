@@ -440,9 +440,15 @@ void Panadapter::onFrame() {
         peakUpdated_.clear();
     }
 
-    // dB labels: top-3 in-view peaks ≥ 6 dB over the in-view minimum,
-    // separated by ≥ 16 px.  Computed here (GUI thread) and exposed for
-    // the QML Text overlay; each entry is {frac: 0..1, db: value}.
+    // Peak markers: the top in-view peaks ≥ 6 dB over the in-view minimum,
+    // separated by ≥ kPeakSepPx so the QML baseline row does not collide.
+    // Computed here (GUI thread) and exposed for the QML overlay; each entry
+    // is {frac: 0..1, db, audioHz, hzText}.
+    //
+    // kMaxPeakLabels raised from 3 to 8 and the separation widened from 16 px
+    // so eight freq/dB markers read as a tidy strip across the passband.
+    constexpr int kMaxPeakLabels = 8;
+    constexpr int kPeakSepPx     = 40;
     if (peakEnabled_ && (peakShowDb_ || peakShowAudioHz_) && !peakDb_.empty()) {
         const int W = static_cast<int>(width());
         QVariantList labels;
@@ -470,7 +476,11 @@ void Panadapter::onFrame() {
             float mn = col[static_cast<size_t>(pbLo)];
             for (int x = pbLo; x < pbHi; ++x)
                 mn = std::min(mn, col[static_cast<size_t>(x)]);
-            const float thr = mn + 6.0f;
+            // Threshold: at least 8 dB above the rolling noise floor
+            // (previous frame's EWMA), or 6 dB above the passband min —
+            // whichever is higher.  Keeps noise bumps out of the flags.
+            const float nfThr = noiseFloorDb_ + 8.0f;
+            const float thr = std::max(mn + 6.0f, nfThr);
             const int lo = std::max(pbLo + 1, 1);
             const int hi = std::min(pbHi - 1, W - 1);
             std::vector<std::pair<float, int>> cand;
@@ -486,7 +496,7 @@ void Panadapter::onFrame() {
             for (const auto &c : cand) {
                 bool far = true;
                 for (int cx : chosen)
-                    if (std::abs(c.second - cx) < 16) { far = false; break; }
+                    if (std::abs(c.second - cx) < kPeakSepPx) { far = false; break; }
                 if (far) {
                     chosen.push_back(c.second);
                     QVariantMap m;
@@ -499,7 +509,7 @@ void Panadapter::onFrame() {
                     m[QStringLiteral("hzText")] = lyra::formatPeakHz(audioHz);
                     labels.push_back(m);
                 }
-                if (chosen.size() >= 3) break;
+                if (static_cast<int>(chosen.size()) >= kMaxPeakLabels) break;
             }
         }
         if (labels != peakLabels_) { peakLabels_ = labels; emit peakLabelsChanged(); }
