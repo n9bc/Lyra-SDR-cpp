@@ -201,16 +201,32 @@ Rectangle {
                     required property int index
                     required property string modelData
                     readonly property bool sel: Tuner.activeAntenna === index
+                    readonly property bool covers: Tuner.antennaCoversFreq(index, Tuner.currentFreqHz)
                     radius: 6; implicitHeight: 22
                     implicitWidth: antLbl.implicitWidth + 16
                     color: sel ? "#10323a" : "#161e28"
-                    border.color: sel ? root.cAccent : "#2a3a4a"
+                    border.color: sel ? (covers ? root.cAccent : root.cAmber)
+                                      : (covers ? "#2a5a4a" : "#2a3a4a")
+                    opacity: covers ? 1.0 : 0.5
                     Label { id: antLbl; anchors.centerIn: parent; text: parent.modelData
-                            color: parent.sel ? root.cAccent : root.cText; font.pixelSize: 13 }
+                            color: parent.sel ? (parent.covers ? root.cAccent : root.cAmber)
+                                              : root.cText; font.pixelSize: 13 }
                     MouseArea { anchors.fill: parent
                         onClicked: Tuner.activeAntenna = parent.index }
                 }
             }
+            Item { Layout.fillWidth: true }
+        }
+
+        // ── Out-of-band warning ──
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !Tuner.collapsed && !Tuner.activeCovers
+                     && Tuner.currentFreqHz > 0
+            spacing: 4
+            Label { text: "⚠"; color: root.cAmber; font.pixelSize: 13 }
+            Label { text: qsTr("Antenna out of band"); color: root.cAmber
+                    font.pixelSize: 11; font.italic: true }
             Item { Layout.fillWidth: true }
         }
 

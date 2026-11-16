@@ -54,6 +54,12 @@ class TunerMemory : public QObject {
     // Operator-configurable in Settings → Tuner.  Default 1000 Hz.
     Q_PROPERTY(double matchToleranceHz READ matchToleranceHz
                WRITE setMatchToleranceHz NOTIFY matchToleranceChanged)
+    // Auto-select: switch to the best antenna whose band coverage includes
+    // the current dial frequency when it leaves the active antenna's range.
+    Q_PROPERTY(bool autoSelect READ autoSelect WRITE setAutoSelect
+               NOTIFY autoSelectChanged)
+    // Whether the active antenna covers the current dial frequency.
+    Q_PROPERTY(bool activeCovers READ activeCovers NOTIFY matchChanged)
 
 public:
     explicit TunerMemory(lyra::ipc::HL2Stream *stream,
@@ -79,11 +85,18 @@ public:
     void setCollapsed(bool v);
     double matchToleranceHz() const { return matchToleranceHz_; }
     void   setMatchToleranceHz(double hz);
+    bool   autoSelect() const { return autoSelect_; }
+    void   setAutoSelect(bool on);
+    bool   activeCovers() const;
 
     // Set the live dial (Hz); recomputes the match.  Driven from
     // HL2Stream::rx1FreqChanged, but Q_INVOKABLE so QML can drive it too.
     Q_INVOKABLE void setCurrentFreqHz(double hz);
     Q_INVOKABLE void renameAntenna(int i, const QString &name);
+    Q_INVOKABLE void setBandCoverage(int i, double loHz, double hiHz);
+    Q_INVOKABLE double antennaBandLo(int i) const;
+    Q_INVOKABLE double antennaBandHi(int i) const;
+    Q_INVOKABLE bool antennaCoversFreq(int i, double hz) const;
     // Insert or overwrite (within tolerance) a point at freqHz for the active
     // antenna.  Empty fields are allowed (operator fills them in later).
     Q_INVOKABLE void storePoint(double freqHz, const QString &input,
@@ -116,25 +129,37 @@ signals:
     void currentChanged();
     void collapsedChanged();
     void matchToleranceChanged();
+    void autoSelectChanged();
+    void bandCoverageChanged();
 
 private:
     struct Point {
         double  freqHz = 0.0;
         QString band, input, output, inductor, note;
     };
-    struct Antenna { QString name; QVector<Point> points; };
+    struct Antenna {
+        QString name;
+        QVector<Point> points;
+        double bandLoHz = 0.0;   // 0 = no coverage defined
+        double bandHiHz = 0.0;
+        bool coversFreq(double hz) const {
+            return bandLoHz > 0 && bandHiHz > 0 && hz >= bandLoHz && hz <= bandHiHz;
+        }
+    };
 
     void recomputeMatch();
     void sortAntenna(int i);
     void save() const;
     void load();
 
-    QVector<Antenna> ant_;          // exactly 3
+    void autoSelectAntenna();
+    QVector<Antenna> ant_;          // exactly kNumAntennas (4)
     int    active_   = 0;
     double curHz_    = 0.0;
     int    matchIdx_ = -1;          // nearest point in ant_[active_], or -1
     bool   collapsed_ = false;
     double matchToleranceHz_ = 1000.0;   // operator-set exact-match window
+    bool   autoSelect_ = true;          // auto-switch antenna on band change
 
     // Two stored points closer than this are treated as the SAME point (a
     // re-store overwrites rather than adding a near-duplicate).  Fixed +

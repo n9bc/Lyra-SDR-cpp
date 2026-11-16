@@ -15,9 +15,14 @@
 namespace lyra::ui {
 
 namespace {
-constexpr int kNumAntennas = 3;
-const QString kDefaultNames[kNumAntennas] = {
-    QStringLiteral("Beam"), QStringLiteral("Dipole"), QStringLiteral("Vertical")};
+constexpr int kNumAntennas = 4;
+struct AntDefault { const char *name; double loHz; double hiHz; };
+const AntDefault kDefaults[kNumAntennas] = {
+    {"Delta Loop",  7'000'000,  29'700'000},   // 40–10 m
+    {"Hex Beam",   14'000'000,  54'000'000},    // 20–6 m
+    {"Vertical",    3'500'000,  29'700'000},    // 80–10 m
+    {"Antenna 4",   0,          0},             // spare, unconfigured
+};
 
 // Ham-band edges (Hz) → short label.  HF + 6 m + 4 m; the manual-tuner
 // audience is overwhelmingly HF.
@@ -36,7 +41,11 @@ const BandSpan kBands[] = {
 TunerMemory::TunerMemory(lyra::ipc::HL2Stream *stream, QObject *parent)
     : QObject(parent) {
     ant_.resize(kNumAntennas);
-    for (int i = 0; i < kNumAntennas; ++i) ant_[i].name = kDefaultNames[i];
+    for (int i = 0; i < kNumAntennas; ++i) {
+        ant_[i].name     = QString::fromLatin1(kDefaults[i].name);
+        ant_[i].bandLoHz = kDefaults[i].loHz;
+        ant_[i].bandHiHz = kDefaults[i].hiHz;
+    }
     load();
     if (stream) {
         curHz_ = stream->rx1FreqHz();
@@ -132,7 +141,75 @@ void TunerMemory::setCurrentFreqHz(double hz) {
     if (hz == curHz_) return;
     curHz_ = hz;
     emit currentChanged();
+    if (autoSelect_)
+        autoSelectAntenna();
     recomputeMatch();
+}
+
+void TunerMemory::autoSelectAntenna() {
+    if (active_ >= 0 && active_ < ant_.size()
+        && ant_[active_].coversFreq(curHz_))
+        return;   // current antenna covers the dial — no switch
+    // Pick the first antenna that covers this frequency.  Prefer one with
+    // tuner points on this band (the operator has used it here before).
+    const QString band = bandLabel(curHz_);
+    int best = -1;
+    bool bestHasPoints = false;
+    for (int i = 0; i < ant_.size(); ++i) {
+        if (!ant_[i].coversFreq(curHz_)) continue;
+        bool hasPoints = false;
+        if (!band.isEmpty()) {
+            for (const auto &p : ant_[i].points)
+                if (p.band == band) { hasPoints = true; break; }
+        }
+        if (best < 0 || (hasPoints && !bestHasPoints)) {
+            best = i;
+            bestHasPoints = hasPoints;
+        }
+    }
+    if (best >= 0 && best != active_) {
+        active_ = best;
+        save();
+        emit activeChanged();
+        emit pointsChanged();
+    }
+}
+
+void TunerMemory::setAutoSelect(bool on) {
+    if (on == autoSelect_) return;
+    autoSelect_ = on;
+    save();
+    emit autoSelectChanged();
+    if (on) {
+        autoSelectAntenna();
+        recomputeMatch();
+    }
+}
+
+bool TunerMemory::activeCovers() const {
+    if (active_ < 0 || active_ >= ant_.size()) return false;
+    return ant_[active_].coversFreq(curHz_);
+}
+
+void TunerMemory::setBandCoverage(int i, double loHz, double hiHz) {
+    if (i < 0 || i >= ant_.size()) return;
+    ant_[i].bandLoHz = std::max(0.0, loHz);
+    ant_[i].bandHiHz = std::max(0.0, hiHz);
+    save();
+    emit bandCoverageChanged();
+    emit matchChanged();  // activeCovers may have changed
+}
+
+double TunerMemory::antennaBandLo(int i) const {
+    return (i >= 0 && i < ant_.size()) ? ant_[i].bandLoHz : 0.0;
+}
+
+double TunerMemory::antennaBandHi(int i) const {
+    return (i >= 0 && i < ant_.size()) ? ant_[i].bandHiHz : 0.0;
+}
+
+bool TunerMemory::antennaCoversFreq(int i, double hz) const {
+    return (i >= 0 && i < ant_.size()) && ant_[i].coversFreq(hz);
 }
 
 void TunerMemory::renameAntenna(int i, const QString &name) {
@@ -268,9 +345,12 @@ void TunerMemory::save() const {
     s.setValue(QStringLiteral("active"), active_);
     s.setValue(QStringLiteral("collapsed"), collapsed_);
     s.setValue(QStringLiteral("matchToleranceHz"), matchToleranceHz_);
+    s.setValue(QStringLiteral("autoSelect"), autoSelect_);
     for (int i = 0; i < ant_.size(); ++i) {
         s.beginGroup(QStringLiteral("antenna%1").arg(i));
         s.setValue(QStringLiteral("name"), ant_[i].name);
+        s.setValue(QStringLiteral("bandLoHz"), ant_[i].bandLoHz);
+        s.setValue(QStringLiteral("bandHiHz"), ant_[i].bandHiHz);
         QJsonArray arr;
         for (const auto &p : ant_[i].points) {
             QJsonObject o;
@@ -291,13 +371,17 @@ void TunerMemory::save() const {
 void TunerMemory::load() {
     QSettings s;
     s.beginGroup(QStringLiteral("tuner"));
-    active_    = std::clamp(s.value(QStringLiteral("active"), 0).toInt(), 0, kNumAntennas - 1);
-    collapsed_ = s.value(QStringLiteral("collapsed"), false).toBool();
+    active_     = std::clamp(s.value(QStringLiteral("active"), 0).toInt(), 0, kNumAntennas - 1);
+    collapsed_  = s.value(QStringLiteral("collapsed"), false).toBool();
+    autoSelect_ = s.value(QStringLiteral("autoSelect"), true).toBool();
     matchToleranceHz_ = std::clamp(
         s.value(QStringLiteral("matchToleranceHz"), 1000.0).toDouble(), 50.0, 20000.0);
     for (int i = 0; i < ant_.size(); ++i) {
         s.beginGroup(QStringLiteral("antenna%1").arg(i));
-        ant_[i].name = s.value(QStringLiteral("name"), kDefaultNames[i]).toString();
+        ant_[i].name     = s.value(QStringLiteral("name"),
+                                    QString::fromLatin1(kDefaults[i].name)).toString();
+        ant_[i].bandLoHz = s.value(QStringLiteral("bandLoHz"), kDefaults[i].loHz).toDouble();
+        ant_[i].bandHiHz = s.value(QStringLiteral("bandHiHz"), kDefaults[i].hiHz).toDouble();
         ant_[i].points.clear();
         const auto doc = QJsonDocument::fromJson(
             s.value(QStringLiteral("points")).toString().toUtf8());
