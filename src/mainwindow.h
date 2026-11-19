@@ -33,6 +33,7 @@ class QTimer;
 class QSystemTrayIcon;
 
 namespace lyra::wx { class WxService; }
+namespace lyra::qrv { class QrvClient; }
 namespace lyra::solar { class SolarService; }
 namespace lyra::wire { class P2RxBridge; }
 namespace lyra::hardware { class ActiveFrontEndModel; }
@@ -324,6 +325,8 @@ private:
     void importSettings();
     void ensureSettingsDialog();   // construct settingsDlg_ if needed (no show)
     void openSettings();
+    void showQrvPanel();
+    void tuneQrvSpot(qint64 hz, const QString &mode);
     // Per-panel "?" badge targets (driven by the Help bridge).
     void showHelp(const QString &topic);        // open the User Guide at topic
     void openSettingsTopic(const QString &topic);// Settings tab, or guide fallback
@@ -362,6 +365,7 @@ private:
     Prefs   *prefs_      = nullptr;
     TunerMemory *tuner_  = nullptr;   // manual-ATU memory (Tuner panel)
     lyra::wx::WxService *wx_ = nullptr;
+    lyra::qrv::QrvClient *qrv_ = nullptr;
     lyra::solar::SolarService *solar_ = nullptr;   // HamQSL solar/propagation
     NcdxfFollow         *ncdxfFollow_ = nullptr;   // NCDXF beacon auto-follow
     WxIndicator         *wxIndicator_ = nullptr;   // header alert badges
