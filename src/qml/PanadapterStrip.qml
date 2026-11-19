@@ -13,7 +13,7 @@ import QtQuick.Layouts
 Rectangle {
     id: strip
     implicitHeight: 26
-    color: "#101820"
+    color: Prefs.panelBgColor
 
     readonly property var zoomLevels: [1, 2, 4, 8, 16]
     function zoomIndex(z) {

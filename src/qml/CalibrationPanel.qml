@@ -25,7 +25,7 @@ Rectangle {
     // dock never visibly opens.
     implicitWidth: 560
     implicitHeight: 380
-    color: "#101820"
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     readonly property color cAccent: "#00e5ff"

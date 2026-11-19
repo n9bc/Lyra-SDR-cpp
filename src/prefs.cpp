@@ -101,6 +101,7 @@ constexpr auto kCursorRdt = "panadapter/cursorReadout";
 constexpr auto kXhair    = "panadapter/crosshair";
 constexpr auto kXhairCol = "panadapter/crosshairColor";
 constexpr auto kXhairSty = "panadapter/crosshairStyle";
+constexpr auto kPanelBg  = "visuals/panelBgColor";
 constexpr auto kZeroBeat = "visuals/zeroBeatMarkers";
 constexpr auto kDspGrouped = "visuals/dspPanelsGrouped";
 constexpr auto kOptGrouped = "visuals/optionsPanelsGrouped";
@@ -359,6 +360,7 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
     panafallCrosshair_ = s.value(kXhair, false).toBool();
     crosshairColor_    = s.value(kXhairCol, QStringLiteral("#9fd4ff")).toString();
     crosshairStyle_    = std::clamp(s.value(kXhairSty, 0).toInt(), 0, 3);
+    panelBgColor_      = s.value(kPanelBg, QStringLiteral("#101820")).toString();
     zeroBeatMarkers_  = s.value(kZeroBeat, false).toBool();
     dspPanelsGrouped_     = s.value(kDspGrouped, false).toBool();
     optionsPanelsGrouped_ = s.value(kOptGrouped, false).toBool();
@@ -1305,6 +1307,14 @@ void Prefs::setCrosshairStyle(int v) {
         crosshairStyle_ = v;
         QSettings().setValue(kXhairSty, v);
         emit crosshairStyleChanged();
+    }
+}
+
+void Prefs::setPanelBgColor(const QString &hex) {
+    if (hex != panelBgColor_ && !hex.isEmpty()) {
+        panelBgColor_ = hex;
+        QSettings().setValue(kPanelBg, hex);
+        emit panelBgColorChanged();
     }
 }
 

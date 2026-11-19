@@ -45,6 +45,7 @@ namespace lyra::ui {
 
 class ProfileUi;
 class CwMacroModel;
+class QsoTracker;
 class EqModel;
 class SpeechModel;
 class CombinatorModel;
@@ -523,6 +524,7 @@ private:
     EqModel                    *eqModel_ = nullptr;   // #50 TX parametric EQ (EqPanel.qml)
     EqModel                    *rxEqModel_ = nullptr; // #59 RX parametric EQ (RxEqPanel.qml)
     CwMacroModel               *cwMacros_ = nullptr;  // #176 CW macro bank (CwConsolePanel.qml + F-keys)
+    QsoTracker                 *qsoTracker_ = nullptr; // RX QSO state tracker (QsoTrackerPanel.qml)
     lyra::tx::ClipBank         *clipBank_ = nullptr;  // #89 voice-keyer clip bank (Clips ctx prop)
     lyra::tx::VoiceKeyer       *voiceKeyer_ = nullptr;// #89 voice keyer controller (VoiceKeyerPanel.qml + F-keys)
     lyra::tx::PracticeLoop     *practice_ = nullptr;  // eSSB practice loop ("Practice" ctx prop, EssbCoachPanel.qml)

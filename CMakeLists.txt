@@ -540,6 +540,8 @@ qt_add_executable(lyra
     src/WaterfallIdController.cpp
     src/CwMacroModel.h
     src/CwMacroModel.cpp
+    src/QsoTracker.h
+    src/QsoTracker.cpp
     src/palettes.h
     src/palettes.cpp
     src/bands.h
@@ -673,6 +675,7 @@ qt_add_qml_module(lyra
         src/qml/SpeechPanel.qml
         src/qml/CwConsolePanel.qml
         src/qml/CwDecoderPanel.qml
+        src/qml/QsoTrackerPanel.qml
         src/qml/EssbCoachPanel.qml
         src/qml/CalibrationPanel.qml
         src/qml/VoiceKeyerPanel.qml

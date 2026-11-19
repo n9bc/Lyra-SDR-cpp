@@ -18,9 +18,10 @@ import "FilterPresets.js" as FilterPresets
 
 Rectangle {
     id: root
-    implicitHeight: 64
-    implicitWidth: 460
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitHeight: compact ? 54 : 64
+    implicitWidth:  compact ? 380 : 460
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
@@ -97,11 +98,11 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
+        anchors.leftMargin: root.compact ? 8 : 12
+        anchors.rightMargin: root.compact ? 8 : 12
         columns: 9
-        columnSpacing: 8
-        rowSpacing: 4
+        columnSpacing: root.compact ? 5 : 8
+        rowSpacing: root.compact ? 2 : 4
 
         Label {
             Layout.row: 0; Layout.column: 0

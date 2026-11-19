@@ -19,9 +19,10 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    implicitWidth: 300
-    implicitHeight: 200
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitWidth:  compact ? 240 : 300
+    implicitHeight: compact ? 170 : 200
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor — see AudioPanel.  The meter face is a Loader, so there is no

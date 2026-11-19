@@ -55,9 +55,16 @@ SolarPanel::SolarPanel(SolarService *svc, NcdxfFollow *follow,
     setObjectName(QStringLiteral("solarPanel"));
     setAttribute(Qt::WA_StyledBackground, true);
     setAttribute(Qt::WA_AlwaysShowToolTips, true);
+#ifdef Q_OS_MACOS
+    static constexpr int kChipW = 38, kChipH = 20, kSpacing = 6;
+    static constexpr int kMarginH = 6, kMarginV = 4;
+#else
+    static constexpr int kChipW = 44, kChipH = 22, kSpacing = 10;
+    static constexpr int kMarginH = 10, kMarginV = 6;
+#endif
     auto *row = new QHBoxLayout(this);
-    row->setContentsMargins(10, 6, 10, 6);
-    row->setSpacing(10);
+    row->setContentsMargins(kMarginH, kMarginV, kMarginH, kMarginV);
+    row->setSpacing(kSpacing);
 
     sfiBox_ = makeValueBox(tr("SFI"), &sfiVal_);
     sfiBox_->installEventFilter(this);
@@ -74,7 +81,7 @@ SolarPanel::SolarPanel(SolarService *svc, NcdxfFollow *follow,
     for (const QString &b : SolarService::bands()) {
         auto *cell = new QToolButton(this);
         cell->setText(b);
-        cell->setFixedSize(44, 22);   // identical chip size to the Band panel
+        cell->setFixedSize(kChipW, kChipH);
         cell->setCursor(Qt::PointingHandCursor);
         cell->setFocusPolicy(Qt::NoFocus);
         cell->setAutoRaise(true);

@@ -18,7 +18,7 @@ Rectangle {
     id: root
     implicitHeight: 44
     implicitWidth: 360
-    color: "#101820"
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     readonly property color cAccent: "#00e5ff"

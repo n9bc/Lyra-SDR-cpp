@@ -26,9 +26,10 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    implicitHeight: 64
-    implicitWidth: 720
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitHeight: compact ? 54 : 64
+    implicitWidth:  compact ? 620 : 720
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
@@ -97,11 +98,11 @@ Rectangle {
     RowLayout {
         id: body
         anchors.fill: parent
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.topMargin: 8
-        anchors.bottomMargin: 8
-        spacing: 12
+        anchors.leftMargin: root.compact ? 8 : 12
+        anchors.rightMargin: root.compact ? 8 : 12
+        anchors.topMargin: root.compact ? 5 : 8
+        anchors.bottomMargin: root.compact ? 5 : 8
+        spacing: root.compact ? 8 : 12
 
         Label {
             text: qsTr("TX")
@@ -119,7 +120,7 @@ Rectangle {
         Rectangle {
             id: p2StateChip
             visible: P2Bridge.running
-            Layout.preferredWidth: 92
+            Layout.preferredWidth: root.compact ? 74 : 92
             Layout.preferredHeight: 26
             radius: 4
             color: P2Bridge.txFaultLatched ? root.cMox
@@ -172,7 +173,7 @@ Rectangle {
         }
         LyraSlider {
             id: driveSlider
-            Layout.preferredWidth: 90    // shortened to reclaim panel width for the CAP chip + button cluster
+            Layout.preferredWidth: root.compact ? 72 : 90
             from: 0; to: 100; stepSize: 1; snapMode: Slider.SnapAlways
             value: root.rawToPct(Stream.txDriveLevel)
             onMoved: Stream.setTxDriveLevel(root.pctToRaw(value))
@@ -239,7 +240,7 @@ Rectangle {
         }
         LyraSlider {
             id: micGainSlider
-            Layout.preferredWidth: 90    // matches driveSlider — front-panel sliders kept short
+            Layout.preferredWidth: root.compact ? 72 : 90
             // Range matches the verified reference's Default TX profile
             // (Max +40, Min -90). On the local radio this is tx/micGainDb.
             // While attached as the desk it is the laptop mic into MIC1

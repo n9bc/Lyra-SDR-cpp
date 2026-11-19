@@ -17,8 +17,9 @@ import LyraUI
 
 Item {
     id: root
-    implicitWidth: 600
-    implicitHeight: 360
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitWidth:  compact ? 500 : 600
+    implicitHeight: compact ? 300 : 360
 
     // Honest floor — see AudioPanel.  The implicit size above is what the
     // panadapter PREFERS; this is the smallest it can be and still be usable:

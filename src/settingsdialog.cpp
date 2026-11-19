@@ -11095,6 +11095,39 @@ QWidget *SettingsDialog::buildVisualsTab() {
         form->addRow(QString(), note);
     }
 
+    // --- Panel background colour ---
+    {
+        auto *pbBox = new QWidget(page);
+        auto *pbh = new QHBoxLayout(pbBox);
+        pbh->setContentsMargins(0, 0, 0, 0);
+        auto *pbSwatch = new QPushButton(pbBox);
+        pbSwatch->setFixedSize(28, 20);
+        pbSwatch->setToolTip(tr("Panel background colour — applies to all docks"));
+        auto pbSet = [pbSwatch](const QString &hex) {
+            pbSwatch->setStyleSheet(QStringLiteral(
+                "QPushButton{background:%1;border:1px solid #2a3a4a;"
+                "border-radius:3px;}").arg(hex));
+        };
+        pbSet(prefs_->panelBgColor());
+        connect(pbSwatch, &QPushButton::clicked, pbBox, [this, pbBox]() {
+            const QColor c = QColorDialog::getColor(
+                QColor(prefs_->panelBgColor()), pbBox,
+                tr("Panel background colour"));
+            if (c.isValid()) prefs_->setPanelBgColor(c.name());
+        });
+        connect(prefs_, &Prefs::panelBgColorChanged, pbBox,
+                [this, pbSet]() { pbSet(prefs_->panelBgColor()); });
+        pbh->addWidget(pbSwatch);
+        auto *pbReset = new QPushButton(tr("Reset"), pbBox);
+        pbReset->setFixedWidth(50);
+        pbReset->setToolTip(tr("Restore the default panel background"));
+        connect(pbReset, &QPushButton::clicked, pbBox,
+                [this]() { prefs_->setPanelBgColor(QStringLiteral("#101820")); });
+        pbh->addWidget(pbReset);
+        pbh->addStretch(1);
+        form->addRow(tr("Panel background"), pbBox);
+    }
+
     // --- Graphics backend (advanced; restart to apply) ---
     // The Qt RHI backend is fixed at startup, so this writes a QSettings
     // key (read in main.cpp before the app launches) rather than applying

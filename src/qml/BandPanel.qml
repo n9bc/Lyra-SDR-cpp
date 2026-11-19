@@ -20,9 +20,10 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    implicitHeight: col.implicitHeight + 16   // grows/shrinks with the CB row
-    implicitWidth: 720
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitHeight: col.implicitHeight + (compact ? 10 : 16)
+    implicitWidth:  compact ? 620 : 720
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
@@ -132,8 +133,8 @@ Rectangle {
             text: cb.helpText
             hovered: cb.hovered && cb.helpText.length > 0
         }
-        Layout.preferredWidth: 44
-        Layout.preferredHeight: 22
+        Layout.preferredWidth: root.compact ? 38 : 44
+        Layout.preferredHeight: root.compact ? 20 : 22
         padding: 0
         focusPolicy: Qt.NoFocus
         ToolTip.visible: false
@@ -178,7 +179,7 @@ Rectangle {
         property string tip: ""
         color: "#8fa6ba"
         font.bold: true
-        Layout.preferredWidth: 34
+        Layout.preferredWidth: root.compact ? 28 : 34
         Layout.alignment: Qt.AlignVCenter
         HoverHandler { id: rowTipHov }
         LyraHoverHelp {
@@ -191,8 +192,8 @@ Rectangle {
     ColumnLayout {
         id: col
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 4
+        anchors.margins: root.compact ? 5 : 8
+        spacing: root.compact ? 2 : 4
 
         // ── Row 1: amateur bands ──────────────────────────────────────
         RowLayout {

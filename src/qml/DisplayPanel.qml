@@ -24,7 +24,7 @@ Rectangle {
     id: root
     implicitHeight: 100
     implicitWidth: 620
-    color: "#101820"
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Panadapter zoom presets (old-Lyra ZOOM_LEVELS).  Mirrors old Lyra's

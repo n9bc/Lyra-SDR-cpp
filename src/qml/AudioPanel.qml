@@ -25,9 +25,10 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    implicitHeight: 118
-    implicitWidth: 860
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitHeight: compact ? 100 : 118
+    implicitWidth:  compact ? 720 : 860
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor, measured from the content — NOT the same thing as the
@@ -101,12 +102,12 @@ Rectangle {
     ColumnLayout {
         id: body
         anchors.fill: parent
-        anchors.margins: 8
-        spacing: 5
+        anchors.margins: root.compact ? 5 : 8
+        spacing: root.compact ? 3 : 5
 
         // ── Row 1 — LEVELS ──────────────────────────────────────────
         RowLayout {
-            spacing: 8
+            spacing: root.compact ? 5 : 8
             Layout.fillWidth: true
 
             Label {
@@ -128,7 +129,7 @@ Rectangle {
                 // overload dot it replaces, which pushed the Out button off
                 // the right edge of row 1.  Trimmed here and on Vol rather
                 // than shrinking the readouts.
-                Layout.preferredWidth: 90
+                Layout.preferredWidth: root.compact ? 70 : 90
                 from: FrontEnd.minimum; to: FrontEnd.maximum
                 stepSize: 1; snapMode: Slider.SnapAlways
                 value: FrontEnd.value
@@ -260,7 +261,7 @@ Rectangle {
                 id: afSlider
                 helpTitle: qsTr("AF")
                 helpText: qsTr("AF makeup gain (0…+40 dB) — pre-Volume output trim. Set a comfortable level here, then ride Vol on top.")
-                Layout.preferredWidth: 76
+                Layout.preferredWidth: root.compact ? 60 : 76
                 from: 0; to: 40; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.afGainDb
                 onMoved: WdspEngine.setAfGainDb(value)
@@ -286,7 +287,7 @@ Rectangle {
                 helpTitle: qsTr("Vol")
                 helpText: qsTr("RX1 volume. MUTE next to it silences without moving this slider.")
                 // Shorten when Vol2 is on the row so MUTE/Bal still fit.
-                Layout.preferredWidth: 70
+                Layout.preferredWidth: root.compact ? 56 : 70
                 from: 0.0; to: 1.0
                 value: WdspEngine.volume
                 onMoved: WdspEngine.setVolume(value)
@@ -331,7 +332,7 @@ Rectangle {
             LyraSlider {
                 helpTitle: qsTr("Vol2")
                 helpText: qsTr("RX2 volume. MUTE2 silences without moving this slider.")
-                Layout.preferredWidth: 70
+                Layout.preferredWidth: root.compact ? 56 : 70
                 from: 0.0; to: 1.0
                 value: WdspEngine.volumeRx2
                 onMoved: WdspEngine.setVolumeRx2(value)
@@ -381,7 +382,7 @@ Rectangle {
                 helpText: root.subOn
                     ? qsTr("Pan RX1 (left) vs RX2 (right). Centre = both equal; snaps to centre.")
                     : qsTr("Stereo balance — pan left/right. Centre = both equal; snaps to centre near the middle.")
-                Layout.preferredWidth: 76
+                Layout.preferredWidth: root.compact ? 60 : 76
                 from: -1.0; to: 1.0
                 value: WdspEngine.balance
                 // Snap to dead-centre near 0 so it's easy to recentre.
@@ -423,7 +424,7 @@ Rectangle {
                 id: monSlider
                 helpTitle: qsTr("MON TX")
                 helpText: qsTr("Hear your processed TX on the jack. Slider sets level.")
-                Layout.preferredWidth: 72
+                Layout.preferredWidth: root.compact ? 56 : 72
                 from: 0.0; to: 1.0
                 enabled: WdspEngine.monEnabled
                 value: WdspEngine.monVolume
@@ -618,7 +619,7 @@ Rectangle {
                 color: WdspEngine.notches.length > 0 ? root.cText : root.cDim
                 opacity: WdspEngine.notches.length > 0 ? 0.9 : 0.6
                 font.family: "Consolas"; font.pixelSize: 10
-                Layout.preferredWidth: 80
+                Layout.preferredWidth: root.compact ? 64 : 80
             }
 
             Item { width: 12 }
@@ -782,7 +783,7 @@ Rectangle {
                 visible: WdspEngine.squelchEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.squelchThreshold * 100)
-                Layout.preferredWidth: 96
+                Layout.preferredWidth: root.compact ? 76 : 96
                 onMoved: WdspEngine.setSquelchThreshold(value / 100.0)
             }
             Label { visible: WdspEngine.squelchEnabled
@@ -816,7 +817,7 @@ Rectangle {
                     id: cwMonSlider
                     helpTitle: qsTr("CW MON")
                     helpText: qsTr("CW sidetone level (0–127) — how loud you hear your own CW while keying. Hardware sidetone; separate from MON TX.")
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: root.compact ? 64 : 80
                     from: 0; to: 127; stepSize: 1
                     value: Stream.cwSidetoneLevel
                     onMoved: Stream.cwSidetoneLevel = Math.round(value)
@@ -856,7 +857,7 @@ Rectangle {
                 visible: !WdspEngine.nnrEnabled
                 from: 1; to: 4; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.nrMode
-                Layout.preferredWidth: 96
+                Layout.preferredWidth: root.compact ? 76 : 96
                 onMoved: WdspEngine.setNrMode(Math.round(value))
             }
             Label { visible: !WdspEngine.nnrEnabled
@@ -888,7 +889,7 @@ Rectangle {
                 model: [qsTr("Standard"), qsTr("Premium")]
                 currentIndex: WdspEngine.nnrModel
                 onActivated: WdspEngine.setNnrModel(currentIndex)
-                Layout.preferredWidth: 110
+                Layout.preferredWidth: root.compact ? 86 : 110
                 font.pixelSize: 11
             }
 
@@ -909,7 +910,7 @@ Rectangle {
                 visible: WdspEngine.nnrEnabled
                 from: -10; to: -50; stepSize: 1; snapMode: Slider.SnapAlways
                 value: WdspEngine.nnrMaskFloorDb
-                Layout.preferredWidth: 96
+                Layout.preferredWidth: root.compact ? 76 : 96
                 onMoved: WdspEngine.setNnrMaskFloorDb(value)
             }
             Label { visible: WdspEngine.nnrEnabled
@@ -971,7 +972,7 @@ Rectangle {
                 model: ["OSMS", "MCRA"]
                 currentIndex: WdspEngine.npeMethod
                 onActivated: WdspEngine.setNpeMethod(currentIndex)
-                Layout.preferredWidth: 86
+                Layout.preferredWidth: root.compact ? 68 : 86
                 font.pixelSize: 11
             }
 
@@ -994,7 +995,7 @@ Rectangle {
                 visible: WdspEngine.lmsEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.lmsStrength * 100)
-                Layout.preferredWidth: 104
+                Layout.preferredWidth: root.compact ? 82 : 104
                 onMoved: WdspEngine.setLmsStrength(value / 100.0)
             }
             Label { visible: WdspEngine.lmsEnabled
@@ -1021,7 +1022,7 @@ Rectangle {
                 visible: WdspEngine.nbEnabled
                 from: 0; to: 100; stepSize: 1
                 value: Math.round(WdspEngine.nbStrength * 100)
-                Layout.preferredWidth: 104
+                Layout.preferredWidth: root.compact ? 82 : 104
                 onMoved: WdspEngine.setNbStrength(value / 100.0)
             }
             Label { visible: WdspEngine.nbEnabled
@@ -1049,7 +1050,7 @@ Rectangle {
                 visible: WdspEngine.apfEnabled
                 from: 3; to: 18; stepSize: 3; snapMode: Slider.SnapAlways
                 value: WdspEngine.apfGainDb
-                Layout.preferredWidth: 96
+                Layout.preferredWidth: root.compact ? 76 : 96
                 onMoved: WdspEngine.setApfGainDb(value)
             }
             Label { visible: WdspEngine.apfEnabled
@@ -1076,7 +1077,7 @@ Rectangle {
                 visible: WdspEngine.binEnabled
                 from: 0; to: 100; stepSize: 5
                 value: Math.round(WdspEngine.binDepth * 100)
-                Layout.preferredWidth: 96
+                Layout.preferredWidth: root.compact ? 76 : 96
                 onMoved: WdspEngine.setBinDepth(value / 100.0)
             }
             Label { visible: WdspEngine.binEnabled

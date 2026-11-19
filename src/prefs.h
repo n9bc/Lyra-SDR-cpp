@@ -218,6 +218,8 @@ class Prefs : public QObject {
                WRITE setCrosshairColor NOTIFY crosshairColorChanged)
     Q_PROPERTY(int crosshairStyle READ crosshairStyle
                WRITE setCrosshairStyle NOTIFY crosshairStyleChanged)
+    Q_PROPERTY(QString panelBgColor READ panelBgColor
+               WRITE setPanelBgColor NOTIFY panelBgColorChanged)
     // Zero-beat tuning aid: a small ± needle under the freq readout (CW / AM /
     // SAM / FM).  Off by default; RX-only display.
     Q_PROPERTY(bool zeroBeatMarkers READ zeroBeatMarkers WRITE setZeroBeatMarkers
@@ -655,9 +657,11 @@ public:
     bool panafallCrosshair() const { return panafallCrosshair_; }
     void setPanafallCrosshair(bool v);
     QString crosshairColor() const { return crosshairColor_; }
+    QString panelBgColor() const { return panelBgColor_; }
     void    setCrosshairColor(const QString &hex);
     int  crosshairStyle() const { return crosshairStyle_; }
     void setCrosshairStyle(int v);
+    void setPanelBgColor(const QString &hex);
     bool zeroBeatMarkers() const { return zeroBeatMarkers_; }
     void setZeroBeatMarkers(bool v);
     bool dspPanelsGrouped() const { return dspPanelsGrouped_; }
@@ -860,6 +864,7 @@ signals:
     void panafallCrosshairChanged();
     void crosshairColorChanged();
     void crosshairStyleChanged();
+    void panelBgColorChanged();
     void zeroBeatMarkersChanged();
     void dspPanelsGroupedChanged();
     void optionsPanelsGroupedChanged();
@@ -995,6 +1000,7 @@ private:
     bool    panafallCrosshair_ = false;
     QString crosshairColor_ = QStringLiteral("#9fd4ff");
     int     crosshairStyle_ = 0;
+    QString panelBgColor_   = QStringLiteral("#101820");
     bool    zeroBeatMarkers_ = false;
     int     processPriority_ = 0;   // 0 Normal / 1 Above Normal / 2 High
     bool    hidVfoWheelEnabled_ = false;

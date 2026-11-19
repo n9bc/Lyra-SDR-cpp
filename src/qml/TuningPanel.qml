@@ -33,9 +33,10 @@ import LyraUI
 
 Rectangle {
     id: root
-    implicitHeight: 200
-    implicitWidth: 680
-    color: "#101820"
+    readonly property bool compact: Qt.platform.os === "osx"
+    implicitHeight: compact ? 170 : 200
+    implicitWidth:  compact ? 560 : 680
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
@@ -349,11 +350,11 @@ Rectangle {
     ColumnLayout {
         id: body
         anchors.fill: parent
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.topMargin: 6
-        anchors.bottomMargin: 6
-        spacing: 8
+        anchors.leftMargin: root.compact ? 8 : 12
+        anchors.rightMargin: root.compact ? 8 : 12
+        anchors.topMargin: root.compact ? 4 : 6
+        anchors.bottomMargin: root.compact ? 4 : 6
+        spacing: root.compact ? 5 : 8
 
         // ── VFO row: [VFO-A cluster + its Step/Mode]  [big logo]  [VFO-B] ──
         // Per-VFO Step+Mode sit DIRECTLY under each VFO (old-Lyra idiom);

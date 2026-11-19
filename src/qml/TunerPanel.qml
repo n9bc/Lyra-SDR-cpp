@@ -23,7 +23,7 @@ Rectangle {
     // 120 fits the collapsed basics (header, frequency line, tiles) without a
     // scrollbar; it must stay small, as it stacks with its column neighbours.
     readonly property int lyraMinHeight: 120
-    color: "#101820"
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     readonly property color cAccent: "#00e5ff"

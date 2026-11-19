@@ -10,7 +10,7 @@ Rectangle {
     id: root
     implicitHeight: 44
     implicitWidth: 900
-    color: "#101820"
+    color: Prefs.panelBgColor
     border.color: "#2a4a5a"
 
     readonly property int lyraMinWidth:  body.implicitWidth + 24

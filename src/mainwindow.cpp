@@ -50,6 +50,7 @@
 #include "wdsp_engine.h"
 #include "prefs.h"
 #include "CwMacroModel.h"
+#include "QsoTracker.h"
 #include "tx/ClipBank.h"
 #include "tx/ClipRecorder.h"         // #89 C1 — recorder() mic-record tap feed
 #include "tx/ClipRecorderPlayer.h"   // #89 B1 — player() seams (KeyFn/BlockedFn/fillBlock)
@@ -304,8 +305,8 @@ public:
 // cyan highlight, or ⧉); while panels are locked a floating one only moves.
 constexpr const char *kChipSummonedPanels[] = {
     "txspeech", "txeq", "txcombinator", "txplate", "rxeq",
-    "cwconsole", "cwdecoder", "essbcoach", "voicekeyer", "tuner", "freqcal",
-    "recorder", "ps", "ampview", "diversity", "qrv",
+    "cwconsole", "cwdecoder", "qsotracker", "essbcoach", "voicekeyer", "tuner",
+    "freqcal", "recorder", "ps", "ampview", "diversity", "qrv",
 };
 
 inline bool isChipSummonedPanel(const QString &objectName) {
@@ -679,7 +680,34 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
                        + QCoreApplication::applicationName()
                        + QStringLiteral("]"));
     setObjectName(QStringLiteral("LyraMainWindow"));
+
+#ifdef Q_OS_MACOS
+    // ── macOS: screen-aware initial size ─────────────────────────────────
+    // On macOS the available geometry is smaller than a typical Windows
+    // desktop (the menu bar, Dock and notch eat real estate — a 14" MacBook
+    // Pro has ~1512×982 effective points).  Use availableGeometry (which
+    // excludes those system-reserved areas) and take 92 % of it, capped at
+    // 1600×900 (the factory layout's design ceiling).  The result is in
+    // logical points — Qt handles Retina scaling (devicePixelRatio)
+    // internally, so this gives the same visual proportions on any
+    // macOS screen regardless of its scale factor.
+    {
+        const QScreen *scr = QGuiApplication::primaryScreen();
+        const QRect avail = scr ? scr->availableGeometry()
+                                : QRect(0, 0, 1600, 900);
+        const int w = qMin(static_cast<int>(avail.width()  * 0.92), 1600);
+        const int h = qMin(static_cast<int>(avail.height() * 0.92),  900);
+        resize(qMax(w, 1024), qMax(h, 700));
+    }
+    // Absolute floor for macOS: below this the factory layout's panel stack
+    // cannot fit without clipping.
+    setMinimumSize(1024, 700);
+#else
+    // Windows: the existing 1100×760 default.  Most operators maximise on
+    // launch (restoreLayout sets WindowMaximized for new setups), so this
+    // is just the initial size for the very first frame.
     resize(1100, 760);
+#endif
 
     // Global tooltip gate (Settings → Visuals → Show tooltips).  Swallows
     // QWidget tooltip events app-wide when disabled; QML ToolTips honour
@@ -985,6 +1013,11 @@ MainWindow::MainWindow(QObject *discovery, QObject *stream,
     // macros + the "current contact" row + token expansion + send-via-keyer.
     cwMacros_ = new CwMacroModel(
         prefs_, qobject_cast<lyra::ipc::HL2Stream *>(stream_), this);
+
+    // RX QSO tracker (drives QsoTrackerPanel.qml, "Qso" context property).  A
+    // pure consumer of the WdspEngine decoded-text signals — wired from QML —
+    // so it never touches the decode pipeline or the audio thread.
+    qsoTracker_ = new QsoTracker(this);
 
     // #89 Voice keyer (Build 1) — the clip bank (Clips) + the panel controller
     // (VoiceKeyer) behind VoiceKeyerPanel.qml + the voice-mode F1-F12 keys.
@@ -2788,6 +2821,8 @@ QQuickWidget *MainWindow::makeQuick(const QString &qmlFile) {
     qw->rootContext()->setContextProperty(
         QStringLiteral("CwMacros"), cwMacros_);
     qw->rootContext()->setContextProperty(
+        QStringLiteral("Qso"), qsoTracker_);
+    qw->rootContext()->setContextProperty(
         QStringLiteral("Clips"), clipBank_);
     qw->rootContext()->setContextProperty(
         QStringLiteral("VoiceKeyer"), voiceKeyer_);
@@ -3394,6 +3429,19 @@ void MainWindow::buildDocks() {
         new FloatingDockMemory(d, QStringLiteral("ui/cwDecoderDock"),
                                &layoutRestoring_, d);
     }
+    // QSO Tracker — RX QSO state + current contact row, filled from the decoded
+    // copy.  Own floating dock + "QSO" chip, hidden by default; consumes the
+    // same decoded-text signals as the decoder, so it adds nothing to the DSP.
+    addQuickDock(QStringLiteral("qsotracker"), tr("QSO Tracker"),
+                 QStringLiteral("QsoTrackerPanel.qml"),
+                 QStringLiteral("qsotracker"), Qt::BottomDockWidgetArea,
+                 /*resizable=*/true);
+    if (QDockWidget *d = docks_.value(QStringLiteral("qsotracker"))) {
+        d->setFloating(true);
+        d->hide();
+        new FloatingDockMemory(d, QStringLiteral("ui/qsoTrackerDock"),
+                               &layoutRestoring_, d);
+    }
     // Audio Visualizer — post-RX-EQ audio (or TX voice) as 25-bar / FFT line /
     // scope / radial.  Own floating dock + "Visualizer" chip, hidden by
     // default.  Hiding a QDockWidget does NOT hide the QML items inside its
@@ -3616,6 +3664,15 @@ void MainWindow::buildDocks() {
     addWidgetDock(QStringLiteral("propagation"), tr("Solar / Propagation"),
                   solarPanel,
                   QStringLiteral("propagation"), Qt::BottomDockWidgetArea);
+
+    auto applySolarBg = [solarPanel, this]() {
+        const QString bg = prefs_->panelBgColor();
+        solarPanel->setStyleSheet(
+            QStringLiteral("QWidget#solarPanel{background:%1;"
+                           "border:1px solid #2a4a5a;}").arg(bg));
+    };
+    connect(prefs_, &Prefs::panelBgColorChanged, solarPanel, applySolarBg);
+    applySolarBg();
 }
 
 // ── Optional grouped-panel rack (Settings → Visuals → Panel layout) ──────────
@@ -5040,6 +5097,17 @@ void MainWindow::buildToolbar() {
                 btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
             }
         }
+        // QSO Tracker launcher — floating RX QSO-state / contact panel.
+        if (QDockWidget *d = docks_.value(QStringLiteral("qsotracker"))) {
+            QAction *act = d->toggleViewAction();
+            act->setText(tr("QSO"));
+            tb->addAction(act);
+            if (auto *btn = qobject_cast<QToolButton *>(
+                    tb->widgetForAction(act))) {
+                btn->setObjectName(QStringLiteral("txDspChip"));
+                btn->setStyleSheet(QString::fromLatin1(kTxDspChipQss));
+            }
+        }
         // eSSB Coach launcher — floating RX1 audio coach panel.
         if (QDockWidget *d = docks_.value(QStringLiteral("essbcoach"))) {
             QAction *act = d->toggleViewAction();
@@ -5068,6 +5136,7 @@ void MainWindow::buildToolbar() {
                                     QStringList{ QStringLiteral("tuner"),
                                                  QStringLiteral("cwconsole"),
                                                  QStringLiteral("cwdecoder"),
+                                                 QStringLiteral("qsotracker"),
                                                  QStringLiteral("essbcoach"),
                                                  QStringLiteral("voicekeyer") });
             optionsRack_ = orr.first; optionsRackChip_ = orr.second;
@@ -6900,11 +6969,25 @@ void MainWindow::applyDefaultLayout() {
     // eat a few pixels, and a panel that is one combo short of usable is no
     // better than one that's half missing.  Tuning takes the slack: it has the
     // most give (its VFO-B slot only claims space when SPLIT is on).
+#ifdef Q_OS_MACOS
+    // macOS variant: on a 14" MacBook Pro the available geometry is ~1512×982
+    // effective points.  The Windows ratios (800+220+580 = 1600 wide) produce
+    // a Filters column that clips below ~1540px.  These ratios give every
+    // panel its minimum usable width at 1512px while keeping the same visual
+    // balance.  The vertical column compresses control rows so the panadapter
+    // (the panel the operator stares at) gets ~55 % of the window height.
+    if (tun && met && flt)
+        resizeDocks({tun, met, flt}, {520, 200, 480}, Qt::Horizontal);
+    if (pan && tun && aud && bnd && tx)
+        resizeDocks({pan, tun, aud, bnd, tx}, {380, 180, 100, 90, 60},
+                    Qt::Vertical);
+#else
     if (tun && met && flt)
         resizeDocks({tun, met, flt}, {800, 220, 580}, Qt::Horizontal);
     if (pan && tun && aud && bnd && tx)
         resizeDocks({pan, tun, aud, bnd, tx}, {300, 224, 122, 112, 64},
                     Qt::Vertical);
+#endif
 
     // Factory split (invalid QVariant → the QML restores its 60/40 default,
     // proportional rather than the absolute pixel height a snapshot would bake
