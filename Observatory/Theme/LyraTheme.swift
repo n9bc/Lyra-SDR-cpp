@@ -8,10 +8,9 @@ enum LyraTheme {
     static let cyan = Color(hex: "#00e5ff")
     static let amber = Color(hex: "#ff9f43")
     static let violet = Color(hex: "#a78bfa")
-    // TODO: confirm text tones against the spec; neutral cool greys for now.
-    static let textPrimary = Color(hex: "#e6e9f0")
-    static let textMuted = Color(hex: "#8a92a6")
-    static let textDim = Color(hex: "#4a5266")
+    static let textPrimary = Color(hex: "#c8d6e5")
+    static let textMuted = Color(hex: "#3a4a5a")
+    static let textDim = Color(hex: "#2a3a4a")
 }
 
 extension Color {
