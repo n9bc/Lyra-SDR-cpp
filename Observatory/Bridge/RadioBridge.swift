@@ -13,7 +13,11 @@ final class RadioBridge {
 
     static func mock() -> RadioBridge { RadioBridge() }
 
-    func setFrequency(_ hz: UInt32) { rx1FreqHz = hz }
+    /// Ceiling for tunable frequency; keeps UInt32.max (a common sentinel) out of the
+    /// state downstream consumers read. Real band-edge limits belong to the backend.
+    static let maxFrequencyHz: UInt32 = 500_000_000
+
+    func setFrequency(_ hz: UInt32) { rx1FreqHz = min(hz, Self.maxFrequencyHz) }
     func toggleMox() { moxActive.toggle() }
     func start() { isRunning = true }
     func stop() { isRunning = false }

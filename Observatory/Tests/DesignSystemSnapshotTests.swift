@@ -23,11 +23,20 @@ final class DesignSystemSnapshotTests: XCTestCase {
         XCTAssertEqual(BandLookup.bandName(for: 1_000_000), "GEN")
     }
 
-    func testBandEdgeFrequencyClamping() {
+    func testFrequencyBoundarySafety() {
         let radio = RadioBridge.mock()
+        radio.setFrequency(0)
+        XCTAssertEqual(radio.rx1FreqHz, 0)
+        XCTAssertEqual(BandLookup.bandName(for: radio.rx1FreqHz), "GEN")
+
+        radio.setFrequency(UInt32.max)
+        XCTAssertEqual(radio.rx1FreqHz, RadioBridge.maxFrequencyHz) // clamped, not the sentinel
+        XCTAssertEqual(BandLookup.bandName(for: radio.rx1FreqHz), "GEN")
+
         radio.setFrequency(14_000_000)
-        radio.setFrequency(13_999_999)
-        XCTAssertFalse(radio.rx1FreqHz == UInt32.max) // must not wrap
-        XCTAssertEqual(BandLookup.bandName(for: radio.rx1FreqHz), "GEN") // just below 20m edge
+        XCTAssertEqual(BandLookup.bandName(for: radio.rx1FreqHz), "20")
+        radio.setFrequency(13_999_999) // one Hz below the 20m edge
+        XCTAssertEqual(radio.rx1FreqHz, 13_999_999)
+        XCTAssertEqual(BandLookup.bandName(for: radio.rx1FreqHz), "GEN")
     }
 }
