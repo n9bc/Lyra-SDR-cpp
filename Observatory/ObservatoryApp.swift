@@ -6,8 +6,19 @@ struct ObservatoryApp: App {
     @State private var dsp = DspBridge.mock()
     @State private var meter = MeterBridge.mock()
     @State private var audio = AudioBridge.mock()
-    @State private var registry = PanelRegistry()
-    // TODO(Task 6): register P0 panels with `registry`.
+    @State private var registry: PanelRegistry
+
+    init() {
+        // @State storage cannot be read in init, so build and populate the registry here.
+        let registry = PanelRegistry()
+        registry.register(SpectrumPanel())
+        registry.register(VfoTuningPanel())
+        registry.register(AudioDspPanel())
+        registry.register(BandSelectorPanel())
+        registry.register(FiltersPanel())
+        registry.register(MetersPanel())
+        _registry = State(initialValue: registry)
+    }
 
     var body: some Scene {
         WindowGroup {
