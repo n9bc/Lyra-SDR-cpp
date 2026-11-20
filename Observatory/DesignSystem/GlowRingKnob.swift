@@ -12,19 +12,21 @@ struct GlowRingKnob: View {
     @State private var dragStartValue: Double?
 
     private let sweep = 0.75  // 270° of the circle
-    private let size: CGFloat = 72
+    private let size: CGFloat
 
     init(
         value: Binding<Double>,
         range: ClosedRange<Double>,
         label: String,
         accentColor: Color,
+        size: CGFloat = 72,
         format: @escaping (Double) -> String
     ) {
         self._value = value
         self.range = range
         self.label = label
         self.accentColor = accentColor
+        self.size = size
         self.format = format
     }
 

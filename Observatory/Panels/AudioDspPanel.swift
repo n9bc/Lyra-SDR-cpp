@@ -25,11 +25,9 @@ private struct AudioDspPanelContent: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 24) {
                 GlowRingKnob(value: $audio.afGain, range: 0...100, label: "AF",
-                             accentColor: LyraTheme.cyan) { String(format: "%.0f", $0) }
-                    .scaleEffect(1.2).frame(width: 86, height: 100)
+                             accentColor: LyraTheme.cyan, size: 88) { String(format: "%.0f", $0) }
                 GlowRingKnob(value: $audio.rfGain, range: -40...20, label: "RF",
-                             accentColor: LyraTheme.violet) { String(format: "%.0f", $0) }
-                    .scaleEffect(1.2).frame(width: 86, height: 100)
+                             accentColor: LyraTheme.violet, size: 88) { String(format: "%.0f", $0) }
             }
 
             VStack(alignment: .leading, spacing: 4) {

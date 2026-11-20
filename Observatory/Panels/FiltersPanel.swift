@@ -15,7 +15,14 @@ private struct FiltersPanelContent: View {
 
     @Environment(DspBridge.self) private var dsp
 
-    private static let maxEdgeHz = 4000.0
+    /// Slider/visualization upper limit; wide enough for the mode's largest preset.
+    private var maxEdgeHz: Double {
+        switch dsp.mode {
+        case "AM", "SAM": return 10_000
+        case "FM", "FMN": return 12_000
+        default: return 4_000
+        }
+    }
 
     /// Preset bandwidths in Hz for the current mode.
     private var presets: [(label: String, hz: Int)] {
@@ -48,8 +55,11 @@ private struct FiltersPanelContent: View {
     }
 
     private func apply(bandwidth hz: Int) {
-        dsp.setBandwidth(hz)
-        dsp.passbandHighHz = min(dsp.passbandLowHz + Double(hz), Self.maxEdgeHz)
+        // Presets set both edges (low = 0) so edges and bandwidth always agree.
+        let high = min(Double(hz), maxEdgeHz)
+        dsp.passbandLowHz = 0
+        dsp.passbandHighHz = high
+        dsp.setBandwidth(Int(high))
     }
 
     private func updateBandwidth() {
@@ -59,8 +69,8 @@ private struct FiltersPanelContent: View {
 
     private var passband: some View {
         GeometryReader { geo in
-            let lo = max(0, min(dsp.passbandLowHz, Self.maxEdgeHz)) / Self.maxEdgeHz
-            let hi = max(0, min(dsp.passbandHighHz, Self.maxEdgeHz)) / Self.maxEdgeHz
+            let lo = max(0, min(dsp.passbandLowHz, maxEdgeHz)) / maxEdgeHz
+            let hi = max(0, min(dsp.passbandHighHz, maxEdgeHz)) / maxEdgeHz
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 4).fill(LyraTheme.surface)
                 RoundedRectangle(cornerRadius: 4)
@@ -78,7 +88,7 @@ private struct FiltersPanelContent: View {
         HStack {
             Text(label).font(.system(size: 9, weight: .medium)).tracking(1)
                 .foregroundStyle(LyraTheme.textMuted).frame(width: 32, alignment: .leading)
-            Slider(value: value, in: 0...Self.maxEdgeHz)
+            Slider(value: value, in: 0...maxEdgeHz)
             Text("\(Int(value.wrappedValue))")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(LyraTheme.textPrimary).frame(width: 36, alignment: .trailing)
