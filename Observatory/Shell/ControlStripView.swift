@@ -5,8 +5,19 @@ struct ControlStripView: View {
     @Environment(DspBridge.self) private var dsp
     @Environment(AudioBridge.self) private var audio
 
-    private static let widths: [(label: String, hz: Int)] =
-        [("200", 200), ("500", 500), ("2.7k", 2700), ("3.0k", 3000), ("3.3k", 3300)]
+    /// Filter-width pills for the current mode.
+    private var widths: [(label: String, hz: Int)] {
+        switch dsp.mode {
+        case "CW", "CWL", "CWU":
+            return [("200", 200), ("300", 300), ("500", 500), ("800", 800), ("1k", 1000)]
+        case "AM", "SAM":
+            return [("4k", 4000), ("6k", 6000), ("8k", 8000), ("10k", 10000)]
+        case "FM", "FMN":
+            return [("8k", 8000), ("12k", 12000), ("16k", 16000)]
+        default:
+            return [("1.8k", 1800), ("2.4k", 2400), ("2.7k", 2700), ("3.0k", 3000), ("3.3k", 3300)]
+        }
+    }
 
     var body: some View {
         @Bindable var dsp = dsp
@@ -27,7 +38,7 @@ struct ControlStripView: View {
                     IlluminatedToggle(label: "AGC", isOn: agcBinding, accentColor: LyraTheme.amber)
                 }
                 HStack(spacing: 6) {
-                    ForEach(Self.widths, id: \.hz) { width in
+                    ForEach(widths, id: \.hz) { width in
                         BandChip(label: width.label, isActive: dsp.bandwidth == width.hz) {
                             dsp.setBandwidth(width.hz)
                         }

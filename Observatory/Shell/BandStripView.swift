@@ -4,34 +4,27 @@ import SwiftUI
 struct BandStripView: View {
     @Environment(RadioBridge.self) private var radio
 
-    /// Band name, inclusive range in Hz, default tune frequency in Hz.
-    private struct Band {
-        let name: String
-        let range: ClosedRange<UInt32>
-        let defaultHz: UInt32
-    }
+    private static var bands: [BandLookup.Band] { BandLookup.bands }
+    private static let general = BandLookup.general
 
-    private static let bands: [Band] = [
-        Band(name: "160", range: 1_800_000...2_000_000, defaultHz: 1_840_000),
-        Band(name: "80", range: 3_500_000...4_000_000, defaultHz: 3_573_000),
-        Band(name: "60", range: 5_300_000...5_410_000, defaultHz: 5_357_000),
-        Band(name: "40", range: 7_000_000...7_300_000, defaultHz: 7_074_000),
-        Band(name: "20", range: 14_000_000...14_350_000, defaultHz: 14_074_000),
-        Band(name: "17", range: 18_068_000...18_168_000, defaultHz: 18_100_000),
-        Band(name: "15", range: 21_000_000...21_450_000, defaultHz: 21_074_000),
-        Band(name: "12", range: 24_890_000...24_990_000, defaultHz: 24_915_000),
-        Band(name: "10", range: 28_000_000...29_700_000, defaultHz: 28_074_000),
-        Band(name: "6", range: 50_000_000...54_000_000, defaultHz: 50_313_000),
-        Band(name: "2", range: 144_000_000...148_000_000, defaultHz: 144_174_000),
-    ]
-    private static let general = "GEN"
-
-    static func bandName(for hz: UInt32) -> String {
-        bands.first { $0.range.contains(hz) }?.name ?? general
+    /// Tunes to the adjacent band's default frequency; off-band starts from the nearest edge.
+    private func stepBand(_ delta: Int) {
+        let hz = radio.rx1FreqHz
+        let bands = BandLookup.bands
+        let target: Int
+        if let i = BandLookup.bandIndex(for: hz) {
+            target = i + delta
+        } else if delta > 0 {
+            target = bands.firstIndex { $0.range.lowerBound > hz } ?? bands.count
+        } else {
+            target = bands.lastIndex { $0.range.upperBound < hz } ?? -1
+        }
+        guard bands.indices.contains(target) else { return }
+        radio.setFrequency(bands[target].defaultHz)
     }
 
     var body: some View {
-        let active = Self.bandName(for: radio.rx1FreqHz)
+        let active = BandLookup.bandName(for: radio.rx1FreqHz)
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(Self.bands, id: \.name) { band in
@@ -43,7 +36,26 @@ struct BandStripView: View {
                 BandChip(label: Self.general, isActive: active == Self.general) {}
             }
             .padding(.horizontal, 16)
+            .background { shortcuts }
         }
         .padding(.vertical, 6)
+        // Number keys 1-9 pick bands only while the strip has keyboard focus.
+        .focusable()
+        .onKeyPress(characters: .decimalDigits) { press in
+            guard let n = Int(press.characters), (1...Self.bands.count).contains(n) else { return .ignored }
+            radio.setFrequency(Self.bands[n - 1].defaultHz)
+            return .handled
+        }
+    }
+
+    /// Invisible buttons that carry the band up/down shortcuts.
+    private var shortcuts: some View {
+        Group {
+            Button("Band Down") { stepBand(-1) }.keyboardShortcut("[", modifiers: .command)
+            Button("Band Up") { stepBand(1) }.keyboardShortcut("]", modifiers: .command)
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
     }
 }

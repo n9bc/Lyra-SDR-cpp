@@ -16,7 +16,21 @@ final class DspBridge {
 
     static func mock() -> DspBridge { DspBridge() }
 
-    func setMode(_ mode: String) { self.mode = mode }
+    /// Default filter bandwidth (Hz) for a mode.
+    static func defaultBandwidth(for mode: String) -> Int {
+        switch mode {
+        case "CW", "CWL", "CWU": return 500
+        case "AM", "SAM": return 6000
+        case "FM", "FMN": return 12000
+        default: return 2700 // USB, LSB, and other SSB-like modes
+        }
+    }
+
+    /// Changes mode and resets bandwidth to that mode's default.
+    func setMode(_ mode: String) {
+        self.mode = mode
+        bandwidth = Self.defaultBandwidth(for: mode)
+    }
     func setBandwidth(_ hz: Int) { bandwidth = hz }
     func toggleNR() { nrEnabled.toggle() }
     func toggleNB() { nbEnabled.toggle() }
