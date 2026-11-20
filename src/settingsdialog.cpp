@@ -329,11 +329,16 @@ SettingsDialog::SettingsDialog(Prefs *prefs, lyra::ipc::HL2Stream *stream,
     // larger than the display on a small laptop (the scroll areas still cover
     // any overflow if a tab is taller than even this).
     {
+#ifdef Q_OS_MACOS
+        QSize want(1100, 800);
+#else
         QSize want(1240, 900);
+#endif
         if (QScreen *sc = screen()) {
-            const QSize avail = sc->availableGeometry().size() * 0.95;
+            const QSize avail = sc->availableGeometry().size() * 0.92;
             want = QSize(qMin(want.width(),  avail.width()),
                          qMin(want.height(), avail.height()));
+            setMaximumSize(sc->availableGeometry().size());
         }
         resize(want);
     }
