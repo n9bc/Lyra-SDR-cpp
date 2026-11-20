@@ -159,6 +159,21 @@ final class PanelRegistryTests: XCTestCase {
         XCTAssertEqual(second.selectedPanelID, "a")
     }
 
+    func testPanelAddedAfterSavedLayoutUsesDefaultVisible() {
+        let first = makeRegistry()
+        first.register(StubPanel(id: "a", category: .receive))
+        first.toggleVisibility("a")
+        first.saveCurrentLayout()
+
+        let second = makeRegistry()
+        second.register(StubPanel(id: "a", category: .receive))
+        second.register(StubPanel(id: "new", category: .receive))
+        second.register(StubPanel(id: "newHidden", category: .receive, defaultVisible: false))
+        XCTAssertFalse(second.isVisible("a"))
+        XCTAssertTrue(second.isVisible("new"))
+        XCTAssertFalse(second.isVisible("newHidden"))
+    }
+
     func testWillTerminateSavesCurrentLayout() {
         let first = makeRegistry()
         first.register(StubPanel(id: "a", category: .receive))

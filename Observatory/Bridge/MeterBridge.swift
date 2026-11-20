@@ -5,11 +5,13 @@ import Observation
 @Observable
 final class MeterBridge {
     var sMeterDb: Double = -79.0
-    var sMeterLevel: Double = 0.0
     var txPowerW: Double = 0.8
     var swr: Double = 1.0
     var noiseFloorDbm: Double = -120.0
     var rxSnrDb: Double = 24.0
+
+    /// S-meter fill 0...1 from dBm: S0 = -127 dBm to S9+60 = -13 dBm (114 dB span).
+    var sMeterLevel: Double { min(max((sMeterDb + 127) / 114, 0), 1) }
 
     /// S-unit text: S0 = -127 dBm, 6 dB per S-unit, S9 = -73 dBm,
     /// then "S9+10", "S9+20", ... in 10 dB steps. NaN / below S0 -> "S0".

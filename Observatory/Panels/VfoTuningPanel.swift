@@ -30,7 +30,7 @@ private struct VfoTuningPanelContent: View {
                     .buttonStyle(.plain)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .glassButton()
-                Button("A→B") { radio.vfoBHz = radio.rx1FreqHz }
+                Button("A→B") { radio.setVfoBFrequency(radio.rx1FreqHz) }
                     .buttonStyle(.plain)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .glassButton()
@@ -45,7 +45,7 @@ private struct VfoTuningPanelContent: View {
     private func swapVfos() {
         let a = radio.rx1FreqHz
         radio.setFrequency(radio.vfoBHz)
-        radio.vfoBHz = a
+        radio.setVfoBFrequency(a)
     }
 
     private func vfoRow(_ name: String, hz: UInt32) -> some View {

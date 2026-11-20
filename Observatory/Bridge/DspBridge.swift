@@ -3,7 +3,10 @@ import Observation
 /// DSP settings bridge. P0: mock data only (no C++ linkage yet).
 @Observable
 final class DspBridge {
-    var mode: String = "USB"
+    /// Changing the mode (via `setMode` or directly) resets bandwidth to the mode default.
+    var mode: String = "USB" {
+        didSet { bandwidth = Self.defaultBandwidth(for: mode) }
+    }
     var bandwidth: Int = 3000
     var nrEnabled: Bool = true
     var nbEnabled: Bool = true
@@ -29,7 +32,6 @@ final class DspBridge {
     /// Changes mode and resets bandwidth to that mode's default.
     func setMode(_ mode: String) {
         self.mode = mode
-        bandwidth = Self.defaultBandwidth(for: mode)
     }
     func setBandwidth(_ hz: Int) { bandwidth = hz }
     func toggleNR() { nrEnabled.toggle() }

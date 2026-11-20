@@ -18,6 +18,7 @@ final class RadioBridge {
     static let maxFrequencyHz: UInt32 = 500_000_000
 
     func setFrequency(_ hz: UInt32) { rx1FreqHz = min(hz, Self.maxFrequencyHz) }
+    func setVfoBFrequency(_ hz: UInt32) { vfoBHz = min(hz, Self.maxFrequencyHz) }
     func toggleMox() { moxActive.toggle() }
     func start() { isRunning = true }
     func stop() { isRunning = false }

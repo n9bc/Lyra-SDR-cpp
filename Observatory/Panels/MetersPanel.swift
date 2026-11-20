@@ -26,15 +26,15 @@ private struct MetersPanelContent: View {
         case "SWR": return (min(max(meter.swr - 1, 0) / 2, 1), String(format: "%.1f:1", meter.swr))
         case "PA Current": return (0, "— A")
         case "Temp": return (0, "— °C")
-        default: return (min(max((meter.sMeterDb + 127) / 127, 0), 1), meter.sMeterText)
+        default: return (meter.sMeterLevel, meter.sMeterText)
         }
     }
 
     var body: some View {
         VStack(spacing: 10) {
             VUNeedleArc(level: reading.level, peak: reading.level, dangerZone: 0.8,
-                        label: source, valueText: reading.text, accentColor: LyraTheme.cyan)
-                .scaleEffect(1.5).frame(width: 180, height: 130)
+                        label: source, valueText: reading.text, accentColor: LyraTheme.cyan,
+                        width: 180, height: 99)
 
             Picker("Source", selection: $source) {
                 ForEach(Self.sources, id: \.self) { Text($0).tag($0) }

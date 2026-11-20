@@ -9,6 +9,8 @@ struct VUNeedleArc: View {
     let label: String
     let valueText: String
     let accentColor: Color
+    var width: CGFloat = 120
+    var height: CGFloat = 66
 
     /// Needle/pip position that SwiftUI can interpolate between frames.
     private struct Positions: Equatable {
@@ -21,7 +23,7 @@ struct VUNeedleArc: View {
             VUCanvas(
                 level: level, peak: peak, dangerZone: dangerZone, accentColor: accentColor
             )
-            .frame(width: 120, height: 66)
+            .frame(width: width, height: height)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: Positions(level: level, peak: peak))
 
             Text(valueText)

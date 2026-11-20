@@ -7,6 +7,9 @@ struct PanelLayout: Codable, Equatable {
     var name: String
     var visiblePanelIDs: Set<String>
     var selectedPanelID: String?
+    /// Every panel registered when the layout was captured, so a hidden panel can be told
+    /// apart from one added later. nil for layouts saved before this field existed.
+    var knownPanelIDs: Set<String>?
 }
 
 enum PanelLayoutError: Error, Equatable {
@@ -63,6 +66,10 @@ final class PanelRegistry {
             if selectedPanelID == nil, pending.selectedPanelID == panel.id {
                 selectedPanelID = panel.id
             }
+            // Panels added since the layout was saved have no stored state: use their default.
+            if let known = pending.knownPanelIDs, !known.contains(panel.id), panel.defaultVisible {
+                visiblePanelIDs.insert(panel.id)
+            }
         } else if panel.defaultVisible {
             visiblePanelIDs.insert(panel.id)
         }
@@ -90,7 +97,8 @@ final class PanelRegistry {
     }
 
     var currentLayout: PanelLayout {
-        PanelLayout(name: "current", visiblePanelIDs: visiblePanelIDs, selectedPanelID: selectedPanelID)
+        PanelLayout(name: "current", visiblePanelIDs: visiblePanelIDs, selectedPanelID: selectedPanelID,
+                    knownPanelIDs: Set(panels.map(\.id)))
     }
 
     var savedLayoutNames: [String] { loadSlots().keys.sorted() }

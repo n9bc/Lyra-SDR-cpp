@@ -7,10 +7,8 @@ struct VUMeterStripView: View {
     private static let ratedPowerW = 100.0
 
     var body: some View {
-        // The bridge's sMeterLevel is a stored mock value (0.0); derive from dBm (S0 -127 ... S9+60 -13).
-        let sLevel = min(max((meter.sMeterDb + 127) / 114, 0), 1)
         HStack(spacing: 24) {
-            column("S-METER", level: sLevel, text: meter.sMeterText,
+            column("S-METER", level: meter.sMeterLevel, text: meter.sMeterText,
                    secondary: String(format: "%.0f dBm", meter.sMeterDb),
                    colors: [LyraTheme.cyan.opacity(0.4), LyraTheme.cyan])
             column("TX POWER", level: meter.txPowerW / Self.ratedPowerW,
