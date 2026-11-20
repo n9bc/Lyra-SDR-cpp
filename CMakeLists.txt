@@ -1044,6 +1044,7 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_GUI_IDENTIFIER     "com.n8sdr1.lyra"
         MACOSX_BUNDLE_COPYRIGHT          "GPL v3+"
+        MACOSX_BUNDLE_ICON_FILE          "lyra.icns"
         # The HL2 is reached over the LAN; declaring this keeps the
         # local-network permission prompt attributable to Lyra.
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MacOSXBundleInfo.plist.in"
@@ -1062,6 +1063,12 @@ if(APPLE)
         BUILD_RPATH   "@executable_path/../Frameworks"
         INSTALL_RPATH "@executable_path/../Frameworks"
     )
+
+    # Copy the .icns into the bundle's Resources so Finder/Dock show it.
+    set(LYRA_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/logo/lyra.icns")
+    set_source_files_properties(${LYRA_ICNS} PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(lyra PRIVATE ${LYRA_ICNS})
 endif()
 
 # Install / deploy hint (used later by windeployqt to bundle Qt DLLs
