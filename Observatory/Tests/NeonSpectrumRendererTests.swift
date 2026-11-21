@@ -7,6 +7,13 @@ import Metal
         try NeonSpectrumRenderer(bridge: .mock(), context: XCTUnwrap(MetalContext.shared))
     }
 
+    func testRangeKeepsMinimumGap() {
+        let r = SpectrumBridge.constrained(floor: -15, ceiling: -20)
+        XCTAssertEqual(r.ceiling, -20); XCTAssertEqual(r.floor, -30)
+        let ok = SpectrumBridge.constrained(floor: -130, ceiling: -20)
+        XCTAssertEqual(ok.floor, -130); XCTAssertEqual(ok.ceiling, -20)
+    }
+
     func testShaderSourceCompiles() throws {
         let ctx = try XCTUnwrap(MetalContext.shared)
         let lib = try ctx.library(named: "spectrum", source: SpectrumShaders.source)

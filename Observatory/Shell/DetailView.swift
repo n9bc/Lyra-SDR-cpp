@@ -9,8 +9,7 @@ struct DetailView: View {
         VStack(spacing: 0) {
             ToolbarView()
             BandStripView()
-            Rectangle().fill(LyraTheme.background)
-                .overlay { Text("Spectrum — Metal").font(.system(size: 11)).foregroundStyle(LyraTheme.textDim) }
+            NeonSpectrumView()
                 .overlay(alignment: .topTrailing) { panelOverlay }
                 .frame(maxHeight: .infinity)
             Rectangle()

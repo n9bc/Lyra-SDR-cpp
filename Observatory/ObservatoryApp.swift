@@ -8,6 +8,7 @@ struct ObservatoryApp: App {
     @State private var dsp = DspBridge.mock()
     @State private var meter = MeterBridge.mock()
     @State private var audio = AudioBridge.mock()
+    @State private var spectrum = SpectrumBridge.mock()
     @State private var registry: PanelRegistry
 
     init() {
@@ -30,6 +31,7 @@ struct ObservatoryApp: App {
                 .environment(dsp)
                 .environment(meter)
                 .environment(audio)
+                .environment(spectrum)
                 .environment(registry)
                 .frame(minWidth: 960, minHeight: 640)
         }

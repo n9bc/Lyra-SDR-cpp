@@ -16,6 +16,7 @@ import AppKit
         let dsp = DspBridge(facade: facade)
         let meter = MeterBridge(facade: facade)
         let audio = AudioBridge(facade: facade)
+        let spectrum = SpectrumBridge(source: facade)
 
         let registry = PanelRegistry()
         registry.register(SpectrumPanel())
@@ -31,6 +32,7 @@ import AppKit
             .environment(dsp)
             .environment(meter)
             .environment(audio)
+            .environment(spectrum)
             .environment(registry)
             .frame(minWidth: 960, minHeight: 640)
 

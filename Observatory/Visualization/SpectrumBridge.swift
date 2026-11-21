@@ -13,5 +13,11 @@ final class SpectrumBridge {
 
     init(source: any SpectrumSource) { self.source = source }
 
+    /// Keeps the ceiling as given and pushes the floor down to preserve `minGap` dB.
+    nonisolated static func constrained(floor: Double, ceiling: Double,
+                                        minGap: Double = 10) -> (floor: Double, ceiling: Double) {
+        ceiling - floor < minGap ? (ceiling - minGap, ceiling) : (floor, ceiling)
+    }
+
     static func mock() -> SpectrumBridge { SpectrumBridge(source: SyntheticSpectrumSource()) }
 }

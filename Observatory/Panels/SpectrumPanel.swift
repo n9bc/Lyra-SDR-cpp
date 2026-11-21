@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Panadapter slot. TODO(P1): replace the placeholder with the Metal `MTKView` representable.
+/// Spectrum display-range controls (the trace itself is drawn by `NeonSpectrumView`).
 struct SpectrumPanel: LyraPanel {
     let id = "spectrum"
     let title = "Spectrum"
@@ -12,16 +12,29 @@ struct SpectrumPanel: LyraPanel {
 }
 
 private struct SpectrumPanelContent: View {
+    @Environment(SpectrumBridge.self) private var spectrum
+
     var body: some View {
-        Rectangle()
-            .fill(LinearGradient(colors: [LyraTheme.background, LyraTheme.surface],
-                                 startPoint: .top, endPoint: .bottom))
-            .overlay {
-                Text("Metal Panadapter — P1 Integration")
-                    .font(.system(size: 11))
-                    .foregroundStyle(LyraTheme.textMuted)
+        @Bindable var spectrum = spectrum
+        let floor = Binding<Double>(
+            get: { spectrum.dbFloor },
+            set: { v in
+                let r = SpectrumBridge.constrained(floor: v, ceiling: spectrum.dbCeiling)
+                spectrum.dbFloor = r.floor; spectrum.dbCeiling = r.ceiling
+            })
+        let ceiling = Binding<Double>(
+            get: { spectrum.dbCeiling },
+            set: { v in
+                let r = SpectrumBridge.constrained(floor: spectrum.dbFloor, ceiling: v)
+                spectrum.dbFloor = r.floor; spectrum.dbCeiling = r.ceiling
+            })
+        VStack(alignment: .leading, spacing: 10) {
+            LyraSlider("Floor", value: floor, in: -160...(-40), step: 1, unit: "dB")
+            LyraSlider("Ceiling", value: ceiling, in: -100...0, step: 1, unit: "dB")
+            LyraButton("Reset") {
+                spectrum.dbFloor = -130
+                spectrum.dbCeiling = -20
             }
-            .frame(minHeight: 120)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
     }
 }
