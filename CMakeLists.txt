@@ -883,6 +883,8 @@ if(APPLE)
         file(GLOB OBSERVATORY_SWIFT_DESIGN   Observatory/DesignSystem/*.swift)
         file(GLOB OBSERVATORY_SWIFT_THEME    Observatory/Theme/*.swift)
         file(GLOB OBSERVATORY_SWIFT_CONTROLS Observatory/Controls/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_VISUALIZATION Observatory/Visualization/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_METAL    Observatory/Visualization/Metal/*.swift)
         set(OBSERVATORY_SWIFT_SOURCES
             ${OBSERVATORY_SWIFT_BRIDGE}
             ${OBSERVATORY_SWIFT_SHELL}
@@ -890,6 +892,8 @@ if(APPLE)
             ${OBSERVATORY_SWIFT_DESIGN}
             ${OBSERVATORY_SWIFT_THEME}
             ${OBSERVATORY_SWIFT_CONTROLS}
+            ${OBSERVATORY_SWIFT_VISUALIZATION}
+            ${OBSERVATORY_SWIFT_METAL}
             Observatory/ContentView.swift
             Observatory/ObservatoryApp.swift
             src/bridge/ObservatoryHost.swift
@@ -928,6 +932,8 @@ if(APPLE)
         target_link_libraries(lyra PRIVATE
             ${CMAKE_BINARY_DIR}/libObservatory.a
             "-framework SwiftUI"
+            "-framework Metal"
+            "-framework MetalKit"
             "-L${OBSERVATORY_SDK_PATH}/usr/lib/swift"
             "-lswiftObservation"
             "-L/usr/lib/swift"
