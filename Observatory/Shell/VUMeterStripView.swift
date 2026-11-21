@@ -9,7 +9,7 @@ struct VUMeterStripView: View {
     var body: some View {
         HStack(spacing: 24) {
             column("S-METER", level: meter.sMeterLevel, text: meter.sMeterText,
-                   secondary: String(format: "%.0f dBm", meter.sMeterDb),
+                   secondary: meter.dbmText,
                    colors: [LyraTheme.cyan.opacity(0.4), LyraTheme.cyan])
             column("TX POWER", level: meter.txPowerW / Self.ratedPowerW,
                    text: String(format: "%.1f W", meter.txPowerW), secondary: nil,

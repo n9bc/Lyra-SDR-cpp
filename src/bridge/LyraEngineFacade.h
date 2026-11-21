@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 typedef void (^LyraRadioCallback)(LyraEngineFacade *facade);
 typedef void (^LyraDspCallback)(LyraEngineFacade *facade);
+typedef void (^LyraAudioCallback)(LyraEngineFacade *facade);
 typedef void (^LyraMeterCallback)(LyraEngineFacade *facade);
 
 @interface LyraEngineFacade : NSObject
@@ -118,6 +119,7 @@ typedef void (^LyraMeterCallback)(LyraEngineFacade *facade);
 
 - (void)setRadioCallback:(nullable LyraRadioCallback)callback;
 - (void)setDspCallback:(nullable LyraDspCallback)callback;
+- (void)setAudioCallback:(nullable LyraAudioCallback)callback;
 - (void)setMeterCallback:(nullable LyraMeterCallback)callback;
 
 #pragma mark Teardown

@@ -26,6 +26,7 @@ using lyra::ui::MeterModel;
 
     LyraRadioCallback _radioCallback;
     LyraDspCallback _dspCallback;
+    LyraAudioCallback _audioCallback;
     LyraMeterCallback _meterCallback;
 }
 // The readonly properties declared in the header are synthesized as _<name>
@@ -175,10 +176,10 @@ using lyra::ui::MeterModel;
     LYRA_CONNECT(_dsp, &WdspEngine::anfChanged, ([s readDsp]), _dspCallback);
     LYRA_CONNECT(_dsp, &WdspEngine::agcModeChanged, ([s readDsp]), _dspCallback);
     LYRA_CONNECT(_dsp, &WdspEngine::squelchChanged, ([s readDsp]), _dspCallback);
-    LYRA_CONNECT(_dsp, &WdspEngine::volumeChanged, ([s readAudio]), _dspCallback);
-    LYRA_CONNECT(_dsp, &WdspEngine::mutedChanged, ([s readAudio]), _dspCallback);
-    LYRA_CONNECT(_dsp, &WdspEngine::afGainChanged, ([s readAudio]), _dspCallback);
-    LYRA_CONNECT(_dsp, &WdspEngine::balanceChanged, ([s readAudio]), _dspCallback);
+    LYRA_CONNECT(_dsp, &WdspEngine::volumeChanged, ([s readAudio]), _audioCallback);
+    LYRA_CONNECT(_dsp, &WdspEngine::mutedChanged, ([s readAudio]), _audioCallback);
+    LYRA_CONNECT(_dsp, &WdspEngine::afGainChanged, ([s readAudio]), _audioCallback);
+    LYRA_CONNECT(_dsp, &WdspEngine::balanceChanged, ([s readAudio]), _audioCallback);
 
     LYRA_CONNECT(_meter, &MeterModel::updated, ([s readMeter]), _meterCallback);
 
@@ -256,6 +257,7 @@ using lyra::ui::MeterModel;
 
 - (void)setRadioCallback:(LyraRadioCallback)callback { _radioCallback = [callback copy]; }
 - (void)setDspCallback:(LyraDspCallback)callback { _dspCallback = [callback copy]; }
+- (void)setAudioCallback:(LyraAudioCallback)callback { _audioCallback = [callback copy]; }
 - (void)setMeterCallback:(LyraMeterCallback)callback { _meterCallback = [callback copy]; }
 
 #pragma mark Teardown
@@ -267,6 +269,7 @@ using lyra::ui::MeterModel;
     _connections.clear();
     _radioCallback = nil;
     _dspCallback = nil;
+    _audioCallback = nil;
     _meterCallback = nil;
     _stream = nullptr;
     _dsp = nullptr;

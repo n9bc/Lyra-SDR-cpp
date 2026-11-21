@@ -234,3 +234,68 @@ final class DspBridgeTests: XCTestCase {
         XCTAssertEqual(bridge.bandwidth, 400)
     }
 }
+
+@MainActor
+private final class FakeMeterFacade: MeterFacade {
+    var meterLevel = 0.6, meterPeak = 0.7, meterNormAtS9 = 0.5
+    var meterText = "S9+20", meterDbmText = "-53 dBm"
+    var liveSwr = 1.4, noiseFloorDbm = -118.0, rxSnrDb = 30.0
+    var callback: (@MainActor () -> Void)?
+    func observeMeter(_ onChange: @escaping @MainActor () -> Void) { callback = onChange }
+}
+
+@MainActor
+private final class FakeAudioFacade: AudioFacade {
+    var volume = 0.3, muted = false, afGainDb = 10.0, balance = -0.2
+    var callback: (@MainActor () -> Void)?
+    func setVolume(_ v: Double) { volume = v; callback?() }
+    func setMuted(_ on: Bool) { muted = on; callback?() }
+    func setAfGainDb(_ db: Double) { afGainDb = db; callback?() }
+    func observeAudio(_ onChange: @escaping @MainActor () -> Void) { callback = onChange }
+}
+
+@MainActor
+final class MeterAudioFacadeTests: XCTestCase {
+    func testMockDerivesFromDb() {
+        let m = MeterBridge.mock()
+        m.sMeterDb = -53.0
+        XCTAssertEqual(m.sMeterText, "S9+20")
+        XCTAssertEqual(m.dbmText, "-53 dBm")
+        m.sMeterDb = 100
+        XCTAssertEqual(m.sMeterLevel, 1.0)
+        m.sMeterDb = -200
+        XCTAssertEqual(m.sMeterLevel, 0.0)
+    }
+
+    func testMeterMirrorsFacadeAndUpdates() {
+        let f = FakeMeterFacade()
+        let m = MeterBridge(facade: f)
+        XCTAssertEqual(m.sMeterLevel, 0.6)
+        XCTAssertEqual(m.sMeterText, "S9+20")
+        XCTAssertEqual(m.dbmText, "-53 dBm")
+        XCTAssertEqual(m.normAtS9, 0.5)
+        XCTAssertEqual(m.swr, 1.4)
+        f.meterLevel = 0.2; f.meterText = "S3"; f.rxSnrDb = 5
+        f.callback?()
+        XCTAssertEqual(m.sMeterLevel, 0.2)
+        XCTAssertEqual(m.sMeterText, "S3")
+        XCTAssertEqual(m.rxSnrDb, 5)
+    }
+
+    func testAudioMirrorsFacadeAndForwardsActions() {
+        let f = FakeAudioFacade()
+        let a = AudioBridge(facade: f)
+        XCTAssertEqual(a.volume, 0.3)
+        XCTAssertEqual(a.afGain, 10.0)
+        a.toggleMute()
+        XCTAssertTrue(f.muted)
+        XCTAssertTrue(a.muted)
+        a.setVolume(0.9)
+        XCTAssertEqual(f.volume, 0.9)
+        XCTAssertEqual(a.volume, 0.9)
+        a.setAfGain(25)
+        XCTAssertEqual(f.afGainDb, 25)
+        a.afGain = 30  // knob binding path
+        XCTAssertEqual(f.afGainDb, 30)
+    }
+}
