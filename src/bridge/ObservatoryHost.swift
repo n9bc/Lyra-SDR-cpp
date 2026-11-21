@@ -24,6 +24,7 @@ import AppKit
         registry.register(BandSelectorPanel())
         registry.register(FiltersPanel())
         registry.register(MetersPanel())
+        registry.register(ControlGalleryPanel())
 
         let content = ContentView()
             .environment(radio)

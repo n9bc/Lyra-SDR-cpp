@@ -882,12 +882,14 @@ if(APPLE)
         file(GLOB OBSERVATORY_SWIFT_PANELS   Observatory/Panels/*.swift)
         file(GLOB OBSERVATORY_SWIFT_DESIGN   Observatory/DesignSystem/*.swift)
         file(GLOB OBSERVATORY_SWIFT_THEME    Observatory/Theme/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_CONTROLS Observatory/Controls/*.swift)
         set(OBSERVATORY_SWIFT_SOURCES
             ${OBSERVATORY_SWIFT_BRIDGE}
             ${OBSERVATORY_SWIFT_SHELL}
             ${OBSERVATORY_SWIFT_PANELS}
             ${OBSERVATORY_SWIFT_DESIGN}
             ${OBSERVATORY_SWIFT_THEME}
+            ${OBSERVATORY_SWIFT_CONTROLS}
             Observatory/ContentView.swift
             Observatory/ObservatoryApp.swift
             src/bridge/ObservatoryHost.swift

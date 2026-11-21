@@ -19,6 +19,7 @@ struct ObservatoryApp: App {
         registry.register(BandSelectorPanel())
         registry.register(FiltersPanel())
         registry.register(MetersPanel())
+        registry.register(ControlGalleryPanel())
         _registry = State(initialValue: registry)
     }
 

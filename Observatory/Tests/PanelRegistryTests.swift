@@ -185,6 +185,13 @@ final class PanelRegistryTests: XCTestCase {
         XCTAssertFalse(second.isVisible("a"))
     }
 
+    func testControlGalleryPanelRegistersInToolsCategory() {
+        let registry = makeRegistry()
+        registry.register(ControlGalleryPanel())
+        XCTAssertTrue(registry.panelsForCategory(.tools).map(\.id).contains("controls"))
+        XCTAssertFalse(registry.isVisible("controls"))
+    }
+
     func testPanelCategoryCodableRoundTrip() throws {
         let data = try JSONEncoder().encode(PanelCategory.allCases)
         XCTAssertEqual(try JSONDecoder().decode([PanelCategory].self, from: data), PanelCategory.allCases)
