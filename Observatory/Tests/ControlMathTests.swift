@@ -50,3 +50,13 @@ extension ControlMathTests {
         XCTAssertEqual(ControlMath.nudged(5, in: 0...100, step: nil, up: false, coarse: true), 0)
     }
 }
+
+extension ControlMathTests {
+    func testSegmentedIndexClampsWithoutWrap() {
+        typealias S = LyraSegmentedControl<String>
+        XCTAssertEqual(S.index(from: 0, delta: -1, count: 4), 0)
+        XCTAssertEqual(S.index(from: 3, delta: 1, count: 4), 3)
+        XCTAssertEqual(S.index(from: 1, delta: 1, count: 4), 2)
+        XCTAssertEqual(S.index(from: 0, delta: 1, count: 0), 0)
+    }
+}
