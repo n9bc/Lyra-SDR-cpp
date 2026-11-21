@@ -28,41 +28,10 @@ using lyra::ui::MeterModel;
     LyraDspCallback _dspCallback;
     LyraMeterCallback _meterCallback;
 }
-
-@property (nonatomic, readwrite) BOOL isRunning;
-@property (nonatomic, readwrite) uint32_t rx1FreqHz;
-@property (nonatomic, readwrite) BOOL moxActive;
-@property (nonatomic, readwrite) BOOL splitEnabled;
-@property (nonatomic, readwrite) uint32_t vfoBHz;
-@property (nonatomic, readwrite) BOOL txDisplayActive;
-@property (nonatomic, readwrite) double hl2TempC;
-@property (nonatomic, readwrite) double hl2SupplyV;
-@property (nonatomic, readwrite) double fwdPowerW;
-@property (nonatomic, readwrite) double revPowerW;
-
-@property (nonatomic, readwrite, copy) NSString *mode;
-@property (nonatomic, readwrite) int bandwidth;
-@property (nonatomic, readwrite) BOOL nrEnabled;
-@property (nonatomic, readwrite) BOOL nbEnabled;
-@property (nonatomic, readwrite) BOOL anfEnabled;
-@property (nonatomic, readwrite, copy) NSString *agcMode;
-@property (nonatomic, readwrite) BOOL squelchEnabled;
-@property (nonatomic, readwrite) double passbandLowHz;
-@property (nonatomic, readwrite) double passbandHighHz;
-
-@property (nonatomic, readwrite) double volume;
-@property (nonatomic, readwrite) BOOL muted;
-@property (nonatomic, readwrite) double afGainDb;
-@property (nonatomic, readwrite) double balance;
-
-@property (nonatomic, readwrite) double meterLevel;
-@property (nonatomic, readwrite) double meterPeak;
-@property (nonatomic, readwrite) double meterNormAtS9;
-@property (nonatomic, readwrite, copy) NSString *meterDbmText;
-@property (nonatomic, readwrite, copy) NSString *meterText;
-@property (nonatomic, readwrite) double liveSwr;
-@property (nonatomic, readwrite) double noiseFloorDbm;
-@property (nonatomic, readwrite) double rxSnrDb;
+// The readonly properties declared in the header are synthesized as _<name>
+// ivars.  They are deliberately NOT redeclared readwrite: several share a
+// selector with an action method (-setMode:, -setVolume:, ...) that writes
+// to the engine, so the read helpers below assign the ivars directly.
 @end
 
 @implementation LyraEngineFacade
@@ -107,57 +76,57 @@ using lyra::ui::MeterModel;
 - (void)readStream
 {
     if (!_stream) return;
-    self.isRunning = _stream->isRunning();
-    self.rx1FreqHz = _stream->rx1FreqHz();
-    self.moxActive = _stream->moxActive();
-    self.splitEnabled = _stream->splitEnabled();
-    self.vfoBHz = _stream->vfoBHz();
-    self.txDisplayActive = _stream->txDisplayActive();
+    _isRunning = _stream->isRunning();
+    _rx1FreqHz = _stream->rx1FreqHz();
+    _moxActive = _stream->moxActive();
+    _splitEnabled = _stream->splitEnabled();
+    _vfoBHz = _stream->vfoBHz();
+    _txDisplayActive = _stream->txDisplayActive();
 }
 
 - (void)readStats
 {
     if (!_stream) return;
-    self.hl2TempC = _stream->hl2TempC();
-    self.hl2SupplyV = _stream->hl2SupplyV();
-    self.fwdPowerW = _stream->fwdPowerW();
-    self.revPowerW = _stream->revPowerW();
+    _hl2TempC = _stream->hl2TempC();
+    _hl2SupplyV = _stream->hl2SupplyV();
+    _fwdPowerW = _stream->fwdPowerW();
+    _revPowerW = _stream->revPowerW();
 }
 
 - (void)readDsp
 {
     if (!_dsp) return;
-    self.mode = _dsp->mode().toNSString();
-    self.bandwidth = _dsp->bandwidth();
-    self.nrEnabled = _dsp->nrEnabled();
-    self.nbEnabled = _dsp->nbEnabled();
-    self.anfEnabled = _dsp->anfEnabled();
-    self.agcMode = _dsp->agcMode().toNSString();
-    self.squelchEnabled = _dsp->squelchEnabled();
-    self.passbandLowHz = _dsp->passbandLowHz();
-    self.passbandHighHz = _dsp->passbandHighHz();
+    _mode = _dsp->mode().toNSString();
+    _bandwidth = _dsp->bandwidth();
+    _nrEnabled = _dsp->nrEnabled();
+    _nbEnabled = _dsp->nbEnabled();
+    _anfEnabled = _dsp->anfEnabled();
+    _agcMode = _dsp->agcMode().toNSString();
+    _squelchEnabled = _dsp->squelchEnabled();
+    _passbandLowHz = _dsp->passbandLowHz();
+    _passbandHighHz = _dsp->passbandHighHz();
 }
 
 - (void)readAudio
 {
     if (!_dsp) return;
-    self.volume = _dsp->volume();
-    self.muted = _dsp->muted();
-    self.afGainDb = _dsp->afGainDb();
-    self.balance = _dsp->balance();
+    _volume = _dsp->volume();
+    _muted = _dsp->muted();
+    _afGainDb = _dsp->afGainDb();
+    _balance = _dsp->balance();
 }
 
 - (void)readMeter
 {
     if (!_meter) return;
-    self.meterLevel = _meter->level();
-    self.meterPeak = _meter->peak();
-    self.meterNormAtS9 = _meter->normAtS9();
-    self.meterText = _meter->text().toNSString();
-    self.meterDbmText = _meter->dbmText().toNSString();
-    self.liveSwr = _meter->liveSwr();
-    self.noiseFloorDbm = _meter->noiseFloorDbm();
-    self.rxSnrDb = _meter->rxSnrDb();
+    _meterLevel = _meter->level();
+    _meterPeak = _meter->peak();
+    _meterNormAtS9 = _meter->normAtS9();
+    _meterText = _meter->text().toNSString();
+    _meterDbmText = _meter->dbmText().toNSString();
+    _liveSwr = _meter->liveSwr();
+    _noiseFloorDbm = _meter->noiseFloorDbm();
+    _rxSnrDb = _meter->rxSnrDb();
 }
 
 #pragma mark Signal wiring
