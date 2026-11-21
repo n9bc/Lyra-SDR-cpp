@@ -23,7 +23,7 @@ final class DesignSystemSnapshotTests: XCTestCase {
         XCTAssertEqual(BandLookup.bandName(for: 1_000_000), "GEN")
     }
 
-    func testFrequencyBoundarySafety() {
+    @MainActor func testFrequencyBoundarySafety() {
         let radio = RadioBridge.mock()
         radio.setFrequency(0)
         XCTAssertEqual(radio.rx1FreqHz, 0)

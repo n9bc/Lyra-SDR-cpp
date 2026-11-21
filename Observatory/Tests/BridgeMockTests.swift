@@ -1,6 +1,7 @@
 import XCTest
 @testable import Observatory
 
+@MainActor
 final class BridgeMockTests: XCTestCase {
     // MARK: RadioBridge
     func testRadioBridgeMockDefaults() {
@@ -101,5 +102,66 @@ final class BridgeMockTests: XCTestCase {
         XCTAssertEqual(a.afGain, 50)
         XCTAssertEqual(a.rfGain, -6)
         XCTAssertTrue(a.muted)
+    }
+}
+
+@MainActor
+private final class FakeFacade: RadioFacade {
+    var isRunning = false, moxActive = false, splitEnabled = false, txDisplayActive = false
+    var rx1FreqHz: UInt32 = 7_074_000
+    var vfoBHz: UInt32 = 7_100_000
+    var callback: (@MainActor () -> Void)?
+    var startedIp: String?
+
+    func setRx1FreqHz(_ hz: UInt32) { rx1FreqHz = hz; callback?() }
+    func setVfoBHz(_ hz: UInt32) { vfoBHz = hz; callback?() }
+    func setMox(_ on: Bool) { moxActive = on; callback?() }
+    func setSplitEnabled(_ on: Bool) { splitEnabled = on; callback?() }
+    func start(withIp ip: String) { startedIp = ip; isRunning = true; callback?() }
+    func stop() { isRunning = false; callback?() }
+    func observeRadio(_ onChange: @escaping @MainActor () -> Void) { callback = onChange }
+}
+
+@MainActor
+final class RadioBridgeTests: XCTestCase {
+    func testMockBridgeHasDefaults() {
+        let bridge = RadioBridge.mock()
+        XCTAssertFalse(bridge.isRunning)
+        XCTAssertEqual(bridge.rx1FreqHz, 14_074_000)
+        XCTAssertFalse(bridge.moxActive)
+    }
+
+    func testFrequencyClampAtMax() {
+        let bridge = RadioBridge.mock()
+        bridge.setFrequency(600_000_000)
+        XCTAssertEqual(bridge.rx1FreqHz, RadioBridge.maxFrequencyHz)
+    }
+
+    func testFrequencyClampAtUInt32Max() {
+        let bridge = RadioBridge.mock()
+        bridge.setFrequency(UInt32.max)
+        XCTAssertEqual(bridge.rx1FreqHz, RadioBridge.maxFrequencyHz)
+    }
+
+    func testFacadeInitReadsInitialState() {
+        let bridge = RadioBridge(facade: FakeFacade())
+        XCTAssertEqual(bridge.rx1FreqHz, 7_074_000)
+        XCTAssertEqual(bridge.vfoBHz, 7_100_000)
+    }
+
+    func testFacadeActionsForwardAndCallbackUpdatesState() {
+        let fake = FakeFacade()
+        let bridge = RadioBridge(facade: fake)
+        bridge.setFrequency(UInt32.max)
+        XCTAssertEqual(fake.rx1FreqHz, RadioBridge.maxFrequencyHz)
+        XCTAssertEqual(bridge.rx1FreqHz, RadioBridge.maxFrequencyHz)
+        bridge.toggleMox()
+        XCTAssertTrue(fake.moxActive)
+        XCTAssertTrue(bridge.moxActive)
+        bridge.start()
+        XCTAssertEqual(fake.startedIp, RadioBridge.defaultRadioIp)
+        XCTAssertTrue(bridge.isRunning)
+        bridge.stop()
+        XCTAssertFalse(bridge.isRunning)
     }
 }
