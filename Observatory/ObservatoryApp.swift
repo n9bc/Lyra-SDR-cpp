@@ -1,6 +1,8 @@
 import SwiftUI
 
+#if !LYRA_BRIDGE
 @main
+#endif
 struct ObservatoryApp: App {
     @State private var radio = RadioBridge.mock()
     @State private var dsp = DspBridge.mock()

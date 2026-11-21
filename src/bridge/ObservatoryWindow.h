@@ -26,7 +26,6 @@ LyraEngineFacade * _Nonnull lyra_create_engine_facade(
     void * _Nonnull meter);
 
 /// Creates, shows and returns (retained) the Observatory NSWindow.
-/// TODO(Task 6): hosts a placeholder until the Swift module is linked in.
 NSWindow * _Nonnull lyra_show_observatory_window(
     LyraEngineFacade * _Nonnull facade);
 #else

@@ -852,16 +852,86 @@ if(APPLE)
         PROPERTIES SKIP_AUTOMOC ON COMPILE_OPTIONS -fobjc-arc
     )
 
-    # Observatory SwiftUI UI in place of the Qt MainWindow (opt-in).  Swift
-    # compilation/linking is a separate step (Task 6); for now the window is a
-    # placeholder.  ARC for the same reason as the facade.
+    # Observatory SwiftUI UI in place of the Qt MainWindow (opt-in).
+    # ARC for the same reason as the facade.
     if(LYRA_OBSERVATORY)
         target_sources(lyra PRIVATE src/bridge/ObservatoryWindow.mm)
         set_source_files_properties(
             src/bridge/ObservatoryWindow.mm
-            PROPERTIES SKIP_AUTOMOC ON COMPILE_OPTIONS -fobjc-arc
+            PROPERTIES SKIP_AUTOMOC ON
+                COMPILE_OPTIONS "-fobjc-arc"
+                INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}"
         )
         target_compile_definitions(lyra PRIVATE LYRA_OBSERVATORY=1)
+
+        # --- Swift compilation (Observatory module) --------------------------
+        # CMake's native Swift support cannot mix C++/Obj-C++ and Swift in one
+        # target, so we shell out to swiftc and link the resulting object file.
+
+        # Discover the macOS SDK for swiftc -sdk.
+        execute_process(
+            COMMAND xcrun --show-sdk-path
+            OUTPUT_VARIABLE OBSERVATORY_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+
+        # Collect every Observatory Swift source (excluding Tests and Package.swift).
+        file(GLOB OBSERVATORY_SWIFT_BRIDGE   Observatory/Bridge/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_SHELL    Observatory/Shell/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_PANELS   Observatory/Panels/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_DESIGN   Observatory/DesignSystem/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_THEME    Observatory/Theme/*.swift)
+        set(OBSERVATORY_SWIFT_SOURCES
+            ${OBSERVATORY_SWIFT_BRIDGE}
+            ${OBSERVATORY_SWIFT_SHELL}
+            ${OBSERVATORY_SWIFT_PANELS}
+            ${OBSERVATORY_SWIFT_DESIGN}
+            ${OBSERVATORY_SWIFT_THEME}
+            Observatory/ContentView.swift
+            Observatory/ObservatoryApp.swift
+            src/bridge/ObservatoryHost.swift
+        )
+
+        add_custom_command(
+            OUTPUT ${CMAKE_BINARY_DIR}/libObservatory.a
+                   ${CMAKE_BINARY_DIR}/Observatory.swiftmodule
+                   ${CMAKE_BINARY_DIR}/Observatory-Swift.h
+            COMMAND swiftc
+                ${OBSERVATORY_SWIFT_SOURCES}
+                -module-name Observatory
+                -emit-module -emit-module-path ${CMAKE_BINARY_DIR}/Observatory.swiftmodule
+                -emit-objc-header -emit-objc-header-path ${CMAKE_BINARY_DIR}/Observatory-Swift.h
+                -import-objc-header ${CMAKE_SOURCE_DIR}/src/bridge/Observatory-Bridging-Header.h
+                -target arm64-apple-macos14.0
+                -sdk ${OBSERVATORY_SDK_PATH}
+                -D LYRA_BRIDGE
+                -swift-version 6
+                -emit-library -static
+                -o ${CMAKE_BINARY_DIR}/libObservatory.a
+                -Xcc -I${CMAKE_SOURCE_DIR}/src/bridge
+            DEPENDS ${OBSERVATORY_SWIFT_SOURCES}
+                ${CMAKE_SOURCE_DIR}/src/bridge/Observatory-Bridging-Header.h
+                ${CMAKE_SOURCE_DIR}/src/bridge/LyraEngineFacade.h
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Compiling Observatory Swift module"
+        )
+        add_custom_target(observatory_swift DEPENDS ${CMAKE_BINARY_DIR}/libObservatory.a)
+        add_dependencies(lyra observatory_swift)
+
+        # Link the Swift static library and required frameworks.
+        # Observation is a Swift runtime library, not a standalone framework.
+        # We must add the SDK's usr/lib/swift to the library search path so the
+        # linker resolves libswiftObservation, libswiftCore, etc.
+        target_link_libraries(lyra PRIVATE
+            ${CMAKE_BINARY_DIR}/libObservatory.a
+            "-framework SwiftUI"
+            "-L${OBSERVATORY_SDK_PATH}/usr/lib/swift"
+            "-lswiftObservation"
+            "-L/usr/lib/swift"
+            "-lswiftCore"
+        )
+        # Ensure ObservatoryWindow.mm can find the generated Observatory-Swift.h.
+        target_include_directories(lyra PRIVATE ${CMAKE_BINARY_DIR})
     endif()
 
     find_library(FOUNDATION_LIBRARY      Foundation     REQUIRED)

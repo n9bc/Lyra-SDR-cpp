@@ -4,6 +4,7 @@
 
 #import "bridge/LyraEngineFacade.h"
 #import "bridge/ObservatoryWindow.h"
+#import "Observatory-Swift.h"
 
 // Strong statics: the C++ caller discards the returned objects, so under ARC
 // nothing else would keep them alive past the next autorelease pool drain.
@@ -20,8 +21,6 @@ LyraEngineFacade *lyra_create_engine_facade(void *stream, void *dsp,
 
 NSWindow *lyra_show_observatory_window(LyraEngineFacade *facade)
 {
-    (void)facade;  // consumed by the Swift host once Task 6 links it in
-
     NSWindow *window = [[NSWindow alloc]
         initWithContentRect:NSMakeRect(0, 0, 1200, 800)
                   styleMask:(NSWindowStyleMaskTitled
@@ -33,12 +32,8 @@ NSWindow *lyra_show_observatory_window(LyraEngineFacade *facade)
     window.title = @"Lyra Observatory";
     window.releasedWhenClosed = NO;
 
-    // TODO(Task 6): replace this placeholder with the NSHostingView returned
-    // by the Swift ObservatoryHost once the Swift module builds under CMake.
-    NSTextField *label = [NSTextField
-        labelWithString:@"Observatory — Swift bridge pending"];
-    label.alignment = NSTextAlignmentCenter;
-    window.contentView = label;
+    NSView *hostingView = [ObservatoryHost createHostingViewWithFacade:facade];
+    window.contentView = hostingView;
 
     sObservatoryWindow = window;
     [window center];
