@@ -227,6 +227,7 @@ using lyra::ui::MeterModel;
 
 - (int)copySpectrumInto:(float *)dst maxBins:(int)maxBins
 {
+    NSAssert([NSThread isMainThread], @"copySpectrumInto must be called from the main thread");
     if (!_dsp || !dst || maxBins <= 0) return 0;
     return _dsp->copySpectrum(dst, maxBins);
 }

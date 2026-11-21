@@ -876,6 +876,7 @@ if(APPLE)
         )
 
         # Collect every Observatory Swift source (excluding Tests and Package.swift).
+        # Adding new .swift files requires re-running cmake configure (not just build).
         file(GLOB OBSERVATORY_SWIFT_BRIDGE   Observatory/Bridge/*.swift)
         file(GLOB OBSERVATORY_SWIFT_SHELL    Observatory/Shell/*.swift)
         file(GLOB OBSERVATORY_SWIFT_PANELS   Observatory/Panels/*.swift)

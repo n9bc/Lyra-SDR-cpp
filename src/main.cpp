@@ -1510,6 +1510,9 @@ int main(int argc, char *argv[])
         qInfo("[startup] Observatory window shown");
         const int obsRc = app.exec();
         g_shutdown_complete.store(true, std::memory_order_release);
+        // Known and intentional for P0: this early return skips destroy_cmaster()
+        // and the other post-exec teardown; process exit handles
+        // cleanup. Add proper teardown here when Observatory matures.
         return obsRc;
     }
 #endif
