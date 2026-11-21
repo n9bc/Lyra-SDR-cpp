@@ -1506,7 +1506,7 @@ int main(int argc, char *argv[])
         void *facade = lyra_create_engine_facade(
             static_cast<void *>(stream), static_cast<void *>(wdspEngine),
             static_cast<void *>(meterModel));
-        lyra_show_observatory_window(facade);
+        (void)lyra_show_observatory_window(facade);
         qInfo("[startup] Observatory window shown");
         const int obsRc = app.exec();
         g_shutdown_complete.store(true, std::memory_order_release);

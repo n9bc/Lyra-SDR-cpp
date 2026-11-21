@@ -5,10 +5,17 @@
 #import "bridge/LyraEngineFacade.h"
 #import "bridge/ObservatoryWindow.h"
 
+// Strong statics: the C++ caller discards the returned objects, so under ARC
+// nothing else would keep them alive past the next autorelease pool drain.
+// There is only ever one Observatory window / facade per process.
+static LyraEngineFacade *sFacade;
+static NSWindow *sObservatoryWindow;
+
 LyraEngineFacade *lyra_create_engine_facade(void *stream, void *dsp,
                                             void *meter)
 {
-    return [LyraEngineFacade facadeWithStream:stream dsp:dsp meter:meter];
+    sFacade = [LyraEngineFacade facadeWithStream:stream dsp:dsp meter:meter];
+    return sFacade;
 }
 
 NSWindow *lyra_show_observatory_window(LyraEngineFacade *facade)
@@ -33,6 +40,7 @@ NSWindow *lyra_show_observatory_window(LyraEngineFacade *facade)
     label.alignment = NSTextAlignmentCenter;
     window.contentView = label;
 
+    sObservatoryWindow = window;
     [window center];
     [window makeKeyAndOrderFront:nil];
     return window;
