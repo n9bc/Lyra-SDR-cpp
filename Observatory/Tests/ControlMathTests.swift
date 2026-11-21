@@ -28,3 +28,25 @@ final class ControlMathTests: XCTestCase {
         XCTAssertEqual(LyraRotaryDial.angle(for: 99, in: 0...10), 135)
     }
 }
+
+extension ControlMathTests {
+    func testSmallScrollDeltasAccumulateOnSteppedRange() {
+        var v = -60.0
+        var rem = 0.0
+        for _ in 0..<10 {
+            v = ControlMath.scrollAdjusted(v, remainder: &rem, deltaPoints: 1, in: -60...0, step: 1, fine: false)
+        }
+        XCTAssertGreaterThanOrEqual(v - (-60), 2)
+        XCTAssertEqual(v, -57)
+    }
+    func testScrollRemainderResetsAtEdges() {
+        var rem = 0.5
+        let v = ControlMath.scrollAdjusted(100, remainder: &rem, deltaPoints: 50, in: 0...100, step: 1, fine: false)
+        XCTAssertEqual(v, 100)
+        XCTAssertEqual(rem, 0)
+    }
+    func testNudged() {
+        XCTAssertEqual(ControlMath.nudged(50, in: 0...100, step: nil, up: true, coarse: false), 51)
+        XCTAssertEqual(ControlMath.nudged(5, in: 0...100, step: nil, up: false, coarse: true), 0)
+    }
+}

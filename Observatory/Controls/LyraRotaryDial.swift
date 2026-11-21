@@ -38,7 +38,7 @@ struct LyraRotaryDial: View {
     }
 
     private var fraction: Double { ControlMath.fraction(value, in: range) }
-    private var readout: String { unit.isEmpty ? format(value) : "\(format(value)) \(unit)" }
+    private var readout: String { ControlMath.readout(value, unit: unit, format: format) }
 
     var body: some View {
         VStack(spacing: LyraDS.Space.xs) {
@@ -67,7 +67,6 @@ struct LyraRotaryDial: View {
             }
             .frame(width: Self.diameter, height: Self.diameter)
             .contentShape(Circle())
-            .overlay(ScrollWheelCapture { dy in adjust(byPoints: dy) })
 
             Text(readout)
                 .font(LyraDS.Font.frequency(size: 11))
@@ -77,30 +76,8 @@ struct LyraRotaryDial: View {
                 .foregroundStyle(LyraDS.Palette.textMuted)
         }
         .gesture(dragGesture)
-        .onTapGesture(count: 2) {
-            if let defaultValue {
-                withAnimation(LyraDS.Motion.standard) { value = ControlMath.clamp(defaultValue, to: range) }
-            }
-        }
-        .focusable()
-        .onKeyPress(keys: [.upArrow, .rightArrow, .downArrow, .leftArrow]) { press in
-            let up = press.key == .upArrow || press.key == .rightArrow
-            let s = ControlMath.keyboardStep(in: range, step: step, coarse: press.modifiers.contains(.shift))
-            value = ControlMath.clamp(value + (up ? s : -s), to: range)
-            return .handled
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(readout)
-        .accessibilityAdjustableAction { direction in
-            let s = ControlMath.keyboardStep(in: range, step: step, coarse: false)
-            switch direction {
-            case .increment: value = ControlMath.clamp(value + s, to: range)
-            case .decrement: value = ControlMath.clamp(value - s, to: range)
-            @unknown default: break
-            }
-        }
-        .help("\(label): \(readout)")
+        .modifier(LyraValueControl(label: label, value: $value, range: range, step: step,
+                                   defaultValue: defaultValue, readout: readout))
     }
 
     private var ticks: some View {
@@ -135,52 +112,6 @@ struct LyraRotaryDial: View {
                                                  in: range, step: step, fine: fine)
             }
             .onEnded { _ in dragStart = nil }
-    }
-
-    private func adjust(byPoints dy: Double) {
-        let fine = NSEvent.modifierFlags.contains(.option)
-        value = ControlMath.dragAdjusted(value, deltaPoints: dy, in: range, step: step, fine: fine)
-    }
-}
-
-// MARK: - Scroll wheel support (shared with LyraSlider)
-
-/// Transparent overlay that reports scroll-wheel deltas for events over its bounds.
-/// It never takes hit-testing, so clicks and drags pass through to the control below.
-struct ScrollWheelCapture: NSViewRepresentable {
-    let onScroll: (Double) -> Void
-
-    func makeNSView(context: Context) -> ScrollWheelNSView {
-        let v = ScrollWheelNSView()
-        v.onScroll = onScroll
-        return v
-    }
-
-    func updateNSView(_ nsView: ScrollWheelNSView, context: Context) {
-        nsView.onScroll = onScroll
-    }
-}
-
-final class ScrollWheelNSView: NSView {
-    var onScroll: ((Double) -> Void)?
-    private var monitor: Any?
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
-        guard window != nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
-            let p = self.convert(event.locationInWindow, from: nil)
-            guard self.bounds.contains(p) else { return event }
-            // Mouse wheels report coarse "line" deltas; scale them up to trackpad-like points.
-            let dy = Double(event.scrollingDeltaY) * (event.hasPreciseScrollingDeltas ? 1 : 8)
-            self.onScroll?(dy)
-            return nil
-        }
     }
 }
 

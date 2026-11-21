@@ -37,7 +37,7 @@ struct LyraSlider: View {
     }
 
     private var fraction: Double { ControlMath.fraction(value, in: range) }
-    private var readout: String { unit.isEmpty ? format(value) : "\(format(value)) \(unit)" }
+    private var readout: String { ControlMath.readout(value, unit: unit, format: format) }
     private var horizontal: Bool { axis == .horizontal }
 
     var body: some View {
@@ -62,25 +62,8 @@ struct LyraSlider: View {
             }
         }
         content
-            .focusable()
-            .onKeyPress(keys: [.upArrow, .rightArrow, .downArrow, .leftArrow]) { press in
-                let up = press.key == .upArrow || press.key == .rightArrow
-                let s = ControlMath.keyboardStep(in: range, step: step, coarse: press.modifiers.contains(.shift))
-                value = ControlMath.clamp(value + (up ? s : -s), to: range)
-                return .handled
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
-            .accessibilityValue(readout)
-            .accessibilityAdjustableAction { direction in
-                let s = ControlMath.keyboardStep(in: range, step: step, coarse: false)
-                switch direction {
-                case .increment: value = ControlMath.clamp(value + s, to: range)
-                case .decrement: value = ControlMath.clamp(value - s, to: range)
-                @unknown default: break
-                }
-            }
-            .help("\(label): \(readout)")
+            .modifier(LyraValueControl(label: label, value: $value, range: range, step: step,
+                                       defaultValue: defaultValue, readout: readout))
     }
 
     private var header: some View {
@@ -126,15 +109,6 @@ struct LyraSlider: View {
                    alignment: horizontal ? .leading : .bottom)
             .contentShape(Rectangle())
             .gesture(drag(length: length, usable: usable))
-            .onTapGesture(count: 2) {
-                if let defaultValue {
-                    withAnimation(LyraDS.Motion.standard) { value = ControlMath.clamp(defaultValue, to: range) }
-                }
-            }
-            .overlay(ScrollWheelCapture { dy in
-                value = ControlMath.dragAdjusted(value, deltaPoints: dy, in: range, step: step,
-                                                 fine: NSEvent.modifierFlags.contains(.option))
-            })
         }
     }
 

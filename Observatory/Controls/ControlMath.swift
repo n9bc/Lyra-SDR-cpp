@@ -38,6 +38,31 @@ nonisolated enum ControlMath {
         return snap(v + deltaPoints / perRange * span, in: r, step: step)
     }
 
+    /// Keyboard/accessibility nudge: one keyboard step up or down, clamped.
+    static func nudged(_ v: Double, in r: ClosedRange<Double>, step: Double?,
+                       up: Bool, coarse: Bool) -> Double {
+        let s = keyboardStep(in: r, step: step, coarse: coarse)
+        return clamp(v + (up ? s : -s), to: r)
+    }
+
+    /// Scroll adjustment that carries the sub-step remainder between events, so small deltas
+    /// on a stepped range accumulate instead of rounding back to the same value.
+    /// `remainder` is in value units and holds what snapping/clamping did not consume.
+    static func scrollAdjusted(_ v: Double, remainder: inout Double, deltaPoints: Double,
+                               in r: ClosedRange<Double>, step: Double?, fine: Bool) -> Double {
+        let span = r.upperBound - r.lowerBound
+        let perRange = fine ? fineDragPointsPerRange : dragPointsPerRange
+        let raw = v + remainder + deltaPoints / perRange * span
+        let result = snap(raw, in: r, step: step)
+        let clamped = raw < r.lowerBound || raw > r.upperBound
+        remainder = clamped ? 0 : raw - result
+        return result
+    }
+
+    static func readout(_ v: Double, unit: String, format: (Double) -> String) -> String {
+        unit.isEmpty ? format(v) : "\(format(v)) \(unit)"
+    }
+
     private static func snap(_ raw: Double, in r: ClosedRange<Double>, step: Double?) -> Double {
         guard let step, step > 0 else { return clamp(raw, to: r) }
         let snapped = r.lowerBound + ((raw - r.lowerBound) / step).rounded() * step
