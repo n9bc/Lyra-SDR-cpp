@@ -15,6 +15,10 @@
 #include "wdsp_engine.h"
 #include "mic_source.h"
 #include "mainwindow.h"
+#if LYRA_OBSERVATORY
+#include "bridge/ObservatoryWindow.h"
+#include "metermodel.h"
+#endif
 #include "statusbus.h"
 #include "hid_vfo_wheel.h"
 #include "single_instance.h"   // one-instance guard (TCI-port / double-radio collision)
@@ -1493,6 +1497,22 @@ int main(int argc, char *argv[])
     QObject::connect(prefs, &lyra::ui::Prefs::locationChanged,
                      wx, &lyra::wx::WxService::reloadConfig);
     qInfo("[startup] services ready — building main window");
+#if LYRA_OBSERVATORY
+    {
+        // Observatory path: MainWindow (and its ~900 lines of post-construct
+        // wiring below) is skipped.  MeterModel is normally a MainWindow
+        // member, so it is built here for the facade.
+        auto *meterModel = new lyra::ui::MeterModel(stream, wdspEngine, &app);
+        void *facade = lyra_create_engine_facade(
+            static_cast<void *>(stream), static_cast<void *>(wdspEngine),
+            static_cast<void *>(meterModel));
+        lyra_show_observatory_window(facade);
+        qInfo("[startup] Observatory window shown");
+        const int obsRc = app.exec();
+        g_shutdown_complete.store(true, std::memory_order_release);
+        return obsRc;
+    }
+#endif
     auto *hidVfo = new lyra::ui::HidVfoWheel(&app);
     auto *win = new lyra::ui::MainWindow(discovery, stream, wdsp,
                                          wdspEngine, prefs, wx, profiles);

@@ -70,6 +70,7 @@ set(PA_BUILD_EXAMPLES    OFF CACHE BOOL "" FORCE)
 # skip its own SDK lookup / internet download.  Compiled in, but OFF at
 # run time until the operator ticks "Enable ASIO devices" — no ASIO
 # driver is loaded otherwise (PaLyra_SetAsioEnabled, pa_win_hostapis.c).
+option(LYRA_OBSERVATORY "Build with Observatory SwiftUI UI instead of the Qt MainWindow (macOS)" OFF)
 option(LYRA_WITH_ASIO "Build ASIO host support (opt-in at run time)" ON)
 if(WIN32 AND LYRA_WITH_ASIO)
     set(LYRA_ASIOSDK "${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk")
@@ -850,6 +851,18 @@ if(APPLE)
         src/bridge/LyraEngineFacade.mm
         PROPERTIES SKIP_AUTOMOC ON COMPILE_OPTIONS -fobjc-arc
     )
+
+    # Observatory SwiftUI UI in place of the Qt MainWindow (opt-in).  Swift
+    # compilation/linking is a separate step (Task 6); for now the window is a
+    # placeholder.  ARC for the same reason as the facade.
+    if(LYRA_OBSERVATORY)
+        target_sources(lyra PRIVATE src/bridge/ObservatoryWindow.mm)
+        set_source_files_properties(
+            src/bridge/ObservatoryWindow.mm
+            PROPERTIES SKIP_AUTOMOC ON COMPILE_OPTIONS -fobjc-arc
+        )
+        target_compile_definitions(lyra PRIVATE LYRA_OBSERVATORY=1)
+    endif()
 
     find_library(FOUNDATION_LIBRARY      Foundation     REQUIRED)
     find_library(CORE_FOUNDATION_LIBRARY CoreFoundation REQUIRED)
