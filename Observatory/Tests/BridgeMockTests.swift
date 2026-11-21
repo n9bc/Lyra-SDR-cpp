@@ -165,3 +165,72 @@ final class RadioBridgeTests: XCTestCase {
         XCTAssertFalse(bridge.isRunning)
     }
 }
+
+@MainActor
+private final class FakeDspFacade: DspFacade {
+    var mode = "USB"
+    var bandwidthHz = 2400
+    var nrEnabled = false, nbEnabled = false, anfEnabled = false, squelchEnabled = false
+    var agcMode = "SLOW"
+    var passbandLowHz = 300.0
+    var passbandHighHz = 2700.0
+    var callback: (@MainActor () -> Void)?
+
+    // Mimics a backend that picks its own bandwidth on mode change.
+    func setMode(_ mode: String) { self.mode = mode; bandwidthHz = 1800; callback?() }
+    func setBandwidthHz(_ hz: Int) { bandwidthHz = hz; callback?() }
+    func setNrEnabled(_ on: Bool) { nrEnabled = on; callback?() }
+    func setNbEnabled(_ on: Bool) { nbEnabled = on; callback?() }
+    func setAnfEnabled(_ on: Bool) { anfEnabled = on; callback?() }
+    func setAgcMode(_ mode: String) { agcMode = mode; callback?() }
+    func observeDsp(_ onChange: @escaping @MainActor () -> Void) { callback = onChange }
+}
+
+@MainActor
+final class DspBridgeTests: XCTestCase {
+    func testMockDefaults() {
+        let bridge = DspBridge.mock()
+        XCTAssertEqual(bridge.mode, "USB")
+        XCTAssertEqual(bridge.bandwidth, 3000)
+        XCTAssertTrue(bridge.nrEnabled)
+    }
+
+    func testModeChangeResetsBandwidth() {
+        let bridge = DspBridge.mock()
+        bridge.setMode("CW")
+        XCTAssertEqual(bridge.bandwidth, 500)
+    }
+
+    func testModeStringsMatchWdspEngine() {
+        for mode in ["USB", "LSB", "CW", "AM", "FM", "SAM", "CWL", "CWU", "DIGU", "DIGL"] {
+            let bridge = DspBridge.mock()
+            bridge.setMode(mode)
+            XCTAssertEqual(bridge.mode, mode)
+        }
+    }
+
+    func testFacadeInitReadsInitialStateWithoutBandwidthReset() {
+        let bridge = DspBridge(facade: FakeDspFacade())
+        XCTAssertEqual(bridge.mode, "USB")
+        XCTAssertEqual(bridge.bandwidth, 2400) // backend value, not mode default 2700
+        XCTAssertEqual(bridge.agcMode, "SLOW")
+        XCTAssertEqual(bridge.passbandLowHz, 300.0)
+        XCTAssertEqual(bridge.passbandHighHz, 2700.0)
+    }
+
+    func testFacadeActionsForwardAndCallbackKeepsBackendBandwidth() {
+        let fake = FakeDspFacade()
+        let bridge = DspBridge(facade: fake)
+        bridge.setMode("CW")
+        XCTAssertEqual(fake.mode, "CW")
+        XCTAssertEqual(bridge.mode, "CW")
+        XCTAssertEqual(bridge.bandwidth, 1800) // not CW default 500
+        bridge.toggleNR()
+        XCTAssertTrue(fake.nrEnabled)
+        XCTAssertTrue(bridge.nrEnabled)
+        bridge.setAgcMode("FAST")
+        XCTAssertEqual(bridge.agcMode, "FAST")
+        bridge.setBandwidth(400)
+        XCTAssertEqual(bridge.bandwidth, 400)
+    }
+}

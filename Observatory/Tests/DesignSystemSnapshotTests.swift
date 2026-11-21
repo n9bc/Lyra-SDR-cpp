@@ -2,7 +2,7 @@ import XCTest
 @testable import Observatory
 
 final class DesignSystemSnapshotTests: XCTestCase {
-    func testModeChangeUpdatesDefaultBandwidth() {
+    @MainActor func testModeChangeUpdatesDefaultBandwidth() {
         let dsp = DspBridge.mock()
         dsp.setMode("CW")
         XCTAssertEqual(dsp.bandwidth, 500)
