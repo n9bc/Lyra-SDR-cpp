@@ -40,6 +40,9 @@ enum LyraDS {
         static let freqSub = Color(hex: "#A3ACC8")
         static let txFill = Color(hex: "#E8335F")
         static let txText = Color.white
+        static let moxHint = Color(hex: "#FF9DB8")
+        static let moxIdleFill = pink.opacity(0.06)
+        static let meterTrack = Color(hex: "#171A2E")
 
         static let panelBorder = Color.white.opacity(0.07)
         static let chipBorder = Color.white.opacity(0.09)
