@@ -23,9 +23,18 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantMap>
 
 #include <cmath>
+#include <memory>
+
+// wire/RadioNet.h pulls in win32_compat.h, whose BOOL clashes with Objective-C,
+// so declare only the radio-layer pointer (create_rnet() sets it).
+namespace lyra::wire {
+class RadioNet;
+extern RadioNet *prn;
+}  // namespace lyra::wire
 
 using lyra::dsp::WdspEngine;
 using lyra::ipc::HL2Discovery;
@@ -42,6 +51,20 @@ namespace {
 // MeterModel's TX level meters use them: MIC peak, ALC average.
 constexpr int kTxaMicPk = 0;
 constexpr int kTxaAlcAv = 13;
+
+// Console connect state (one facade).  Each -connectRadio and -disconnectRadio
+// bumps the generation, so a superseded readiness retry or sweep does nothing.
+quint64 sConnectGeneration = 0;
+QMetaObject::Connection sConsoleScanFound;
+QMetaObject::Connection sConsoleScanDone;
+constexpr int kRadioLayerRetryMs = 250;
+constexpr int kRadioLayerRetries = 80;  // 20 s
+
+void dropConsoleScan()
+{
+    QObject::disconnect(sConsoleScanFound);
+    QObject::disconnect(sConsoleScanDone);
+}
 
 // The host's P2 bridge while a P2 session runs, else null.
 P2RxBridge *runningP2(LyraEngineFacade *facade)
@@ -506,11 +529,109 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 
 - (void)connectRadio
 {
-    [self beginConnectToIp:self.savedRadioIp];
+    dropConsoleScan();
+    [self connectRadioGeneration:++sConnectGeneration attempt:0];
+}
+
+// One connect attempt: wait for the radio layer, clear a dead attempt, then
+// find the radio by scanning (see connectRadio in LyraEngineFacade.h).
+- (void)connectRadioGeneration:(quint64)generation attempt:(int)attempt
+{
+    if (generation != sConnectGeneration) return;  // superseded or cancelled
+    MainWindow *host = [self engineHost];
+    HL2Stream *st = [self engineStream];
+    if (!host || !st) return;
+
+    // create_rnet() runs after FFTW wisdom loads, and MainWindow::beginConnect
+    // refuses ("radio layer not ready yet") until it has.  A launch-time
+    // connect gets here first, so wait for it.
+    if (!lyra::wire::prn) {
+        if (attempt >= kRadioLayerRetries) {
+            qWarning("[console] connect: radio layer never came up");
+            return;
+        }
+        __weak LyraEngineFacade *weakSelf = self;
+        QTimer::singleShot(kRadioLayerRetryMs, host, [weakSelf, generation, attempt]() {
+            [weakSelf connectRadioGeneration:generation attempt:attempt + 1];
+        });
+        return;
+    }
+
+    // Connect is offered only while nothing streams, so a running stream here
+    // is a dead earlier attempt (socket open, no data).  beginConnect ignores
+    // a running stream, so close it first.
+    if (P2RxBridge *p2 = host->p2Bridge(); p2 && p2->isRunning()) p2->close();
+    if (st->isRunning()) st->close();
+
+    const auto rig = lyra::rig::registry::rig(lyra::rig::registry::activeRigId());
+    const QString saved = QString::fromNSString(self.savedRadioIp);
+    HL2Discovery *disc = [self engineDiscovery];
+    // P2 rigs open by address through beginConnect's P2 path; the sweep below
+    // is P1-only, as MainWindow's scan is.
+    if (!disc || lyra::rig::capabilitiesFor(rig.family).protocol == 2) {
+        host->beginConnect(saved);
+        return;
+    }
+
+    // The radio's address can change (DHCP, or the HL2's 169.254 fallback), so
+    // find it where it is now, as Settings -> Hardware -> Scan does.  Open the
+    // HL2 with the active rig's MAC as soon as it answers; otherwise, when the
+    // sweep ends, the first other HL2, else the saved address (so the 8 s
+    // watchdog and the console's timeout report it).
+    struct Sweep {
+        bool opened = false;
+        QString ip, mac, board;
+        int code = 0, beta = 0, numRxs = 0, protocol = 1;
+        bool busy = false;
+        bool found = false;
+    };
+    auto sweep = std::make_shared<Sweep>();
+    const QString rigMac = rig.mac;
+    auto open = [disc, host](const QString &ip, const QString &mac, const QString &board,
+                             int code, int beta, bool busy, int numRxs, int protocol) {
+        dropConsoleScan();
+        disc->rememberRadio(ip, mac, board, code, beta, busy, numRxs, protocol);
+        qWarning("[console] scan found %s (%s) — connecting", qPrintable(ip), qPrintable(mac));
+        host->beginConnect(ip);
+    };
+    sConsoleScanFound = QObject::connect(disc, &HL2Discovery::radioFound, host,
+        [sweep, rigMac, generation, open](const QString &ip, const QString &mac,
+                                          const QString &board, int code, int beta,
+                                          bool busy, int numRxs, int protocol) {
+            if (generation != sConnectGeneration || sweep->opened) return;
+            if (protocol != 1 || lyra::rig::registry::familyForBoardName(board)
+                                     != lyra::rig::RadioFamily::Hl2)
+                return;
+            if (rigMac.isEmpty() || mac.compare(rigMac, Qt::CaseInsensitive) == 0) {
+                sweep->opened = true;
+                open(ip, mac, board, code, beta, busy, numRxs, protocol);
+                return;
+            }
+            if (!sweep->found) {
+                *sweep = Sweep{false, ip, mac, board, code, beta, numRxs, protocol, busy, true};
+            }
+        });
+    sConsoleScanDone = QObject::connect(disc, &HL2Discovery::scanFinished, host,
+        [sweep, generation, open, host, saved](int) {
+            if (generation != sConnectGeneration || sweep->opened) return;
+            sweep->opened = true;
+            if (sweep->found) {
+                open(sweep->ip, sweep->mac, sweep->board, sweep->code, sweep->beta,
+                     sweep->busy, sweep->numRxs, sweep->protocol);
+                return;
+            }
+            dropConsoleScan();
+            qWarning("[console] scan found no HL2 — trying saved %s", qPrintable(saved));
+            host->beginConnect(saved);
+        });
+    disc->scan(1.5, 2, 1);
 }
 
 - (void)disconnectRadio
 {
+    // Cancels a connect still waiting for the radio layer or the sweep.
+    ++sConnectGeneration;
+    dropConsoleScan();
     MainWindow *host = [self engineHost];
     P2RxBridge *p2 = host ? host->p2Bridge() : nullptr;
     if (p2 && p2->isRunning()) {
