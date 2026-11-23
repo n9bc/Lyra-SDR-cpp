@@ -163,15 +163,16 @@ extension View {
                     startPoint: .top, endPoint: .bottom)))
             .overlay(
                 shape.strokeBorder(
-                    highlighted ? LyraDS.Palette.cyan.opacity(0.55) : LyraDS.Palette.vfoBorder,
+                    highlighted ? LyraDS.Palette.vfoBorderHighlight : LyraDS.Palette.vfoBorder,
                     lineWidth: 1))
             .overlay(alignment: .top) {
                 Rectangle()
-                    .fill(Color.white.opacity(0.05))
+                    .fill(LyraDS.Palette.vfoInnerHighlight)
                     .frame(height: 1)
                     .padding(.horizontal, 6)
             }
             .clipShape(shape)
+            .shadow(color: highlighted ? LyraDS.Palette.vfoGlowHighlight : .clear, radius: 14)
     }
 }
 

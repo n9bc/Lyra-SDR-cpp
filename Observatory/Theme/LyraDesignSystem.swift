@@ -31,6 +31,9 @@ enum LyraDS {
         static let vfoTop = Color(hex: "#0F1427")
         static let vfoBottom = Color(hex: "#080A14")
         static let vfoBorder = Color(hex: "#78A0FF").opacity(0.16)
+        static let vfoBorderHighlight = Color(hex: "#00E5FF").opacity(0.32)
+        static let vfoGlowHighlight = Color(hex: "#00E5FF").opacity(0.06)
+        static let vfoInnerHighlight = Color.white.opacity(0.05)
         static let chipFill = surfaceElevated
         static let segmentOff = Color(hex: "#1A1E33")
         static let freqGlow = Color(hex: "#E4FCFF")
