@@ -1,5 +1,7 @@
 import CoreGraphics
+import AppKit
 import Foundation
+import SwiftUI
 
 /// Deterministic sample imagery for the static console (no system random generator).
 /// Ported from the approved mockup's generating script.
@@ -69,6 +71,11 @@ enum SampleImagery {
 
     private struct RGB { var r: Float; var g: Float; var b: Float }
 
+    nonisolated private static func rgb(_ color: Color) -> RGB {
+        let c = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        return RGB(r: Float(c.redComponent), g: Float(c.greenComponent), b: Float(c.blueComponent))
+    }
+
     nonisolated private static func stopColor(_ t: Float) -> RGB {
         let c = LyraDS.Palette.sample(LyraDS.Palette.spectrumStops, at: t)
         return RGB(r: c.x, g: c.y, b: c.z)
@@ -76,11 +83,14 @@ enum SampleImagery {
 
     /// Sample waterfall: a dark blue grid ground with one signal trace per entry of `signals`.
     /// Deterministic; RGBA8, opaque.
-    nonisolated static func waterfall(width: Int, height: Int, axis: FrequencyAxis, signals: [Int64]) -> CGImage {
+    /// `traceWidthHz` is the width of each signal trace (5 kHz suits the RF display, about 70 Hz the 0-3 kHz audio axis).
+    nonisolated static func waterfall(width: Int, height: Int, axis: FrequencyAxis, signals: [Int64],
+                                      traceWidthHz: Int64 = 5_000) -> CGImage {
         let w = max(width, 1), h = max(height, 1)
         var buf = [UInt8](repeating: 255, count: w * h * 4)
         let blue = stopColor(0.0), cyan = stopColor(0.3), purple = stopColor(0.55)
-        let ground = RGB(r: 7.0 / 255, g: 16.0 / 255, b: 54.0 / 255)
+        let ground = rgb(LyraDS.Palette.waterfallGround)
+        let core = rgb(LyraDS.Palette.freqGlow), shade = rgb(LyraDS.Palette.void)
 
         struct Trace { var x0: Int; var x1: Int; var kind: Int; var op: Float }
         let traces: [Trace] = signals.enumerated().compactMap { idx, hz in
@@ -88,7 +98,7 @@ enum SampleImagery {
             let r = rnd(Double(hz) / 1000 + Double(idx))
             let kind = r < 0.15 ? 0 : (r < 0.5 ? 1 : 2)
             let amp = Float(0.3 + 0.6 * rnd(Double(hz) / 777))
-            let px = max(3, Int((5 * 1000 / Double(max(axis.highHz - axis.lowHz, 1)) * Double(axis.width)).rounded()))
+            let px = max(3, Int((Double(traceWidthHz) / Double(max(axis.highHz - axis.lowHz, 1)) * Double(axis.width)).rounded()))
             let cx = Int(axis.x(for: hz).rounded())
             return Trace(x0: cx - px / 2, x1: cx + px / 2, kind: kind, op: 0.45 + amp * 0.55)
         }
@@ -102,10 +112,10 @@ enum SampleImagery {
                 if gridA > 0 { c = mix(c, blue, gridA) }
                 for tr in traces where x >= tr.x0 && x < tr.x1 {
                     let (color, a) = traceSample(kind: tr.kind, x: x, x0: tr.x0, x1: tr.x1, y: y,
-                                                 cyan: cyan, purple: purple, blue: blue)
+                                                 cyan: cyan, purple: purple, blue: blue, core: core)
                     if a > 0 { c = mix(c, color, a * tr.op) }
                 }
-                if y % 3 == 0 { c = mix(c, RGB(r: 0, g: 0, b: 0), 0.28) }
+                if y % 3 == 0 { c = mix(c, shade, 0.28) }
                 let o = (y * w + x) * 4
                 buf[o] = byte(c.r); buf[o + 1] = byte(c.g); buf[o + 2] = byte(c.b)
             }
@@ -121,14 +131,14 @@ enum SampleImagery {
     }
 
     nonisolated private static func traceSample(
-        kind: Int, x: Int, x0: Int, x1: Int, y: Int, cyan: RGB, purple: RGB, blue: RGB
+        kind: Int, x: Int, x0: Int, x1: Int, y: Int, cyan: RGB, purple: RGB, blue: RGB, core: RGB
     ) -> (RGB, Float) {
         switch kind {
         case 0: // narrow carrier: soft horizontal edges, bright core
             let u = Float(x - x0) / Float(max(x1 - x0 - 1, 1))
             let edge = min(u, 1 - u)
             let a: Float = edge < 0.4 ? edge / 0.4 : 1
-            return (mix(cyan, RGB(r: 1, g: 1, b: 1), 0.5), a)
+            return (mix(cyan, core, 0.5), a)
         case 1: // keyed bursts: 9 on, 6 dim
             let p = y % 15
             return (cyan, p < 9 ? 1 : 0.15)

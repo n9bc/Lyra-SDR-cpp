@@ -35,7 +35,7 @@ struct DisplayAreaLayout: Equatable {
     }
 }
 
-/// Centre display panel: toolbar, dB scale, Metal spectrum with overlays, frequency scale,
+/// Centre display panel: toolbar, Metal spectrum with overlays, frequency scale,
 /// sample waterfall and audio terrain. Reads `SpectrumBridge` from the environment (via
 /// `NeonSpectrumView`). Sample imagery only in Milestone 1.
 struct DisplayAreaView: View {
@@ -46,8 +46,6 @@ struct DisplayAreaView: View {
         self.display = display
         self.main = main
     }
-
-    nonisolated static let dbLabels = ["\u{2212}40", "\u{2212}60", "\u{2212}80", "\u{2212}100", "\u{2212}120"]
 
     private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
         VStack(spacing: 0) {
@@ -70,7 +68,8 @@ struct DisplayAreaView: View {
             VStack(spacing: 0) {
                 DisplayToolbarView(display: display)
                 HStack(spacing: 0) {
-                    gutterLabels(Self.dbLabels, padding: EdgeInsets(top: 22, leading: 0, bottom: 6, trailing: 3))
+                    // dB labels come from NeonSpectrumView itself; keep the gutter so rows stay aligned.
+                    Color.clear.frame(width: DisplayAreaLayout.gutter)
                     ZStack(alignment: .topLeading) {
                         NeonSpectrumView()
                         SpectrumOverlays(display: display, main: main, axis: axis)

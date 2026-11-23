@@ -54,6 +54,8 @@ enum LyraDS {
         static let sBoxBorderOff = Color.white.opacity(0.12)
         static let barFill = Color(hex: "#080A12")
         static let barBorder = Color.white.opacity(0.06)
+        /// Sample waterfall ground (mockup #071036).
+        static let waterfallGround = Color(hex: "#071036")
 
         private static func stop(_ position: Float, _ hex: UInt32) -> GradientStop {
             GradientStop(

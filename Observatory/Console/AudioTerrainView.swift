@@ -4,6 +4,7 @@ import SwiftUI
 struct SampleWaterfallImage: View {
     let axis: (_ width: CGFloat) -> FrequencyAxis
     let signals: [Int64]
+    var traceWidthHz: Int64 = 5_000
     @State private var cached: (size: CGSize, image: CGImage)?
 
     var body: some View {
@@ -18,7 +19,8 @@ struct SampleWaterfallImage: View {
             .onChange(of: geo.size, initial: true) { _, size in
                 let w = Int(size.width.rounded()), h = Int(size.height.rounded())
                 guard w > 0, h > 0, cached?.size != size else { return }
-                cached = (size, SampleImagery.waterfall(width: w, height: h, axis: axis(size.width), signals: signals))
+                cached = (size, SampleImagery.waterfall(width: w, height: h, axis: axis(size.width), signals: signals,
+                                                          traceWidthHz: traceWidthHz))
             }
         }
         .clipped()
@@ -78,7 +80,7 @@ struct AudioTerrainView: View {
             ZStack(alignment: .bottom) {
                 LyraDS.Palette.void
                 if view != .threeD {
-                    SampleWaterfallImage(axis: audioAxis, signals: [520, 1500, 2450])
+                    SampleWaterfallImage(axis: audioAxis, signals: [520, 1500, 2450], traceWidthHz: 70)
                         .opacity(view == .both ? mix : 1)
                 }
                 if view != .waterfall { ridgeCanvas }

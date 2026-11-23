@@ -23,3 +23,19 @@ final class SampleImageryTests: XCTestCase {
         XCTAssertEqual(img.height, 132)
     }
 }
+
+final class SampleImageryTraceTests: XCTestCase {
+    private func pixel(_ img: CGImage, x: Int, y: Int) -> [UInt8] {
+        let data = img.dataProvider!.data! as Data
+        let o = y * img.bytesPerRow + x * 4
+        return Array(data[o..<o + 3])
+    }
+
+    func testAudioTraceIsNarrow() {
+        let axis = FrequencyAxis(lowHz: 0, highHz: 3000, width: 600)
+        let img = SampleImagery.waterfall(width: 600, height: 60, axis: axis, signals: [1500], traceWidthHz: 70)
+        let y = 4
+        let centre = pixel(img, x: 300, y: y)
+        for x in [100, 200, 400, 500] { XCTAssertNotEqual(pixel(img, x: x, y: y), centre) }
+    }
+}
