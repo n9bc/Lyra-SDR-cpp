@@ -43,4 +43,15 @@ final class ConsoleFormatTests: XCTestCase {
         XCTAssertEqual(m.zone(at: 0), .normal)
         XCTAssertEqual(m.zone(at: 43), .over)
     }
+    func testSignedDbNonFiniteDoesNotTrap() {
+        XCTAssertEqual(ConsoleFormat.signedDb(.nan), "\u{2014} dB")
+        XCTAssertEqual(ConsoleFormat.signedDb(.infinity), "\u{2014} dB")
+        XCTAssertEqual(ConsoleFormat.signedDb(-.infinity), "\u{2014} dB")
+    }
+    func testLitCountNonFiniteDoesNotTrap() {
+        let m = SegmentMeterModel(count: 44)
+        XCTAssertEqual(m.litCount(fraction: .infinity), 44)
+        XCTAssertEqual(m.litCount(fraction: -.infinity), 0)
+        XCTAssertEqual(m.litCount(fraction: .nan), 0)
+    }
 }

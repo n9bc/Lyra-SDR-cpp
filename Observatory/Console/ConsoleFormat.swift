@@ -36,9 +36,10 @@ enum ConsoleFormat {
         return (hz < 0 ? minus : "+") + body + " kHz"
     }
 
-    /// "+12 dB", "−5 dB" (U+2212), "0 dB".
+    /// "+12 dB", "−5 dB" (U+2212), "0 dB". Non-finite input (NaN, ±inf) yields the placeholder "— dB".
     nonisolated static func signedDb(_ db: Double) -> String {
-        let r = Int(db.rounded())
+        guard db.isFinite else { return "\u{2014} dB" }
+        let r = Int(min(max(db.rounded(), -1e9), 1e9))
         if r == 0 { return "0 dB" }
         return (r < 0 ? minus : "+") + "\(abs(r)) dB"
     }
@@ -68,7 +69,8 @@ struct SegmentMeterModel {
 
     nonisolated func litCount(fraction: Double) -> Int {
         guard !fraction.isNaN else { return 0 }
-        return min(max(Int((fraction * Double(count)).rounded()), 0), count)
+        let f = min(max(fraction, 0), 1)
+        return min(max(Int((f * Double(count)).rounded()), 0), count)
     }
 
     nonisolated func zone(at index: Int) -> SegmentZone {
