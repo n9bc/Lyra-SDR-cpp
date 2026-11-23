@@ -9,8 +9,11 @@ struct VFOPanelView: View {
     let transmitState: TransmitState
     /// True when this receiver has the session focus; drives the highlighted border and glow.
     let focused: Bool
+    let capabilities: BackendCapabilities
 
-    init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState, focused: Bool) {
+    init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState, focused: Bool,
+         capabilities: BackendCapabilities) {
+        self.capabilities = capabilities
         self.receiver = receiver
         self.title = title
         self.transmitState = transmitState
@@ -38,7 +41,7 @@ struct VFOPanelView: View {
         }
         return marks
     }()
-    /// Placeholder zero-beat marker position (sample data has no tuning-error field yet).
+    /// Placeholder zero-beat marker position; the bar shows only while the zero-beat control is sample data.
     private static let zeroBeatPosition = 0.46
 
     private func chip(_ label: String, _ help: String, _ kind: VFOChipStyle = .plain) -> some View {
@@ -56,7 +59,7 @@ struct VFOPanelView: View {
         guard on else { return "Sub receiver off" }
         var s = String(format: "%.1f", receiver.signalDbm).replacingOccurrences(of: "-", with: "\u{2212}")
         s += " dBm"
-        if let snr = receiver.snrDb { s += " \u{00B7} SNR \(Int(snr.rounded())) dB" }
+        if let snr = ConsoleFormat.snr(receiver.snrDb) { s += " \u{00B7} " + snr }
         return s
     }
 
@@ -112,7 +115,8 @@ struct VFOPanelView: View {
                 chip("AGC \(receiver.agc.rawValue.uppercased())", "Select AGC mode", on ? .cyan : .plain)
                 if on {
                     chip("ZERO BEAT", "Zero-beat the received signal")
-                    zeroBeatBar
+                        .consoleAvailability(capabilities.control(.zeroBeat), help: "Zero-beat the received signal")
+                    if capabilities.control(.zeroBeat) == .mocked { zeroBeatBar }
                 }
             }
         }
@@ -258,25 +262,25 @@ struct VFOPanelView: View {
 }
 
 #Preview("Main VFO") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Sub VFO (disabled)") {
-    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle, focused: false)
+    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle, focused: false, capabilities: .allMocked)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO on air") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir, focused: true)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir, focused: true, capabilities: .allMocked)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO at minimum window") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked)
         .frame(width: 529, height: 212)
         .background(LyraDS.Palette.void)
 }

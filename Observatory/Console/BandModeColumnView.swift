@@ -4,12 +4,23 @@ import SwiftUI
 /// snapshot; only the band-list tab is local view state. Actions are empty in Milestone 1.
 struct BandModeColumnView: View {
     let snapshot: RadioSnapshot
+    let capabilities: BackendCapabilities
 
-    init(snapshot: RadioSnapshot) { self.snapshot = snapshot }
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities) {
+        self.snapshot = snapshot
+        self.capabilities = capabilities
+    }
+
+    /// Propagation header detail: "Sample" while only this feed is sample data (when the whole
+    /// console is sample data the status bar badge already says so).
+    nonisolated static func propagationDetail(_ capabilities: BackendCapabilities) -> String {
+        capabilities.status(.propagation) == .mocked && capabilities.status(.connection) != .mocked
+            ? "Sample" : "Follow off"
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            BandModeColumnContent(snapshot: snapshot)
+            BandModeColumnContent(snapshot: snapshot, capabilities: capabilities)
         }
         // Both columns overflow at 1280x800: show the scroller and flash it once so the cut-off reads as scrollable.
         .scrollIndicatorsFlash(onAppear: true)
@@ -19,12 +30,14 @@ struct BandModeColumnView: View {
 
 struct BandModeColumnContent: View {
     let snapshot: RadioSnapshot
+    let capabilities: BackendCapabilities
 
     /// Which band list is shown (Ham, BC, Gen…) is presentation only, so it stays local.
     @State private var tab: String
 
-    init(snapshot: RadioSnapshot) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities) {
         self.snapshot = snapshot
+        self.capabilities = capabilities
         _tab = State(initialValue: snapshot.band.selectedTab)
     }
 
@@ -148,7 +161,7 @@ struct BandModeColumnContent: View {
     private var propagationSection: some View {
         let p = snapshot.propagation
         return VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("Propagation", detail: "Follow off")
+            ConsoleSectionHeader("Propagation", detail: BandModeColumnView.propagationDetail(capabilities))
             HStack(spacing: 14) {
                 ForEach([("SFI", p.sfi), ("A", p.aIndex), ("K", p.kIndex)], id: \.0) { item in
                     HStack(spacing: 4) {
@@ -183,13 +196,13 @@ struct BandModeColumnContent: View {
 }
 
 #Preview("Band and mode column, full height") {
-    BandModeColumnView(snapshot: .sample)
+    BandModeColumnView(snapshot: .sample, capabilities: .allMocked)
         .frame(height: 760)
         .background(LyraDS.Palette.void)
 }
 
 #Preview("Band and mode column, 330 pt") {
-    BandModeColumnView(snapshot: .sample)
+    BandModeColumnView(snapshot: .sample, capabilities: .allMocked)
         .frame(height: 330)
         .background(LyraDS.Palette.void)
 }

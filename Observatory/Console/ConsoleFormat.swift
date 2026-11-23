@@ -49,6 +49,15 @@ enum ConsoleFormat {
         focused == .sub ? "SUB \u{00B7} " + detail : detail
     }
 
+    /// "SNR 24 dB"; nil when the engine has no estimate (nil or NaN).
+    nonisolated static func snr(_ db: Double?) -> String? {
+        guard let db, db.isFinite else { return nil }
+        return "SNR \(Int(min(max(db.rounded(), -1e9), 1e9))) dB"
+    }
+
+    /// AGC header: the AGC settings are shared by both receivers, so no focus prefix.
+    nonisolated static func agcGainDetail(_ gainDb: Int) -> String { "Gain \(gainDb) dB" }
+
     nonisolated static func telemetry(volts: Double?) -> String {
         guard let volts else { return "not reported" }
         return String(format: "%.1f V", volts)

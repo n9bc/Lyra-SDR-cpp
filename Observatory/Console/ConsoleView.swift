@@ -24,7 +24,8 @@ struct ConsoleView: View {
             HStack(spacing: gap) {
                 VFOPanelView(receiver: snapshot.main, title: "MAIN \u{00B7} \(snapshot.main.bandName)",
                              transmitState: snapshot.transmit.state,
-                             focused: snapshot.session.focused == snapshot.main.id)
+                             focused: snapshot.session.focused == snapshot.main.id,
+                             capabilities: backend.capabilities)
                     .frame(maxHeight: .infinity)
                 VFOCenterColumn(session: snapshot.session, sub: snapshot.sub,
                                 splitTx: snapshot.main.splitTx || snapshot.sub.splitTx,
@@ -33,7 +34,8 @@ struct ConsoleView: View {
                     .frame(maxHeight: .infinity)
                 VFOPanelView(receiver: snapshot.sub, title: "SUB \u{00B7} \(snapshot.sub.bandName)",
                              transmitState: snapshot.transmit.state,
-                             focused: snapshot.session.focused == snapshot.sub.id)
+                             focused: snapshot.session.focused == snapshot.sub.id,
+                             capabilities: backend.capabilities)
                     .frame(maxHeight: .infinity)
             }
             .frame(height: ConsoleLayout.vfoRowHeight)
@@ -46,12 +48,13 @@ struct ConsoleView: View {
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
                                 sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                BandModeColumnView(snapshot: snapshot)
+                BandModeColumnView(snapshot: snapshot, capabilities: backend.capabilities)
             }
             .frame(maxHeight: .infinity)
 
             TransmitDeckView(transmit: snapshot.transmit, keyer: snapshot.keyer,
-                             monitorTx: snapshot.audio.monitorTx)
+                             monitorTx: snapshot.audio.monitorTx,
+                             capabilities: backend.capabilities)
 
             StatusBarView(snapshot: snapshot, capabilities: backend.capabilities)
                 .frame(height: ConsoleLayout.statusBarHeight)

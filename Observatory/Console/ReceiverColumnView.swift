@@ -31,7 +31,7 @@ struct ReceiverColumnContent: View {
         String(format: "%+.0f %@", v, unit).replacingOccurrences(of: "-", with: "\u{2212}")
     }
 
-    private var nbOn: Bool { snapshot.dsp.toggles.first { $0.label == "NB" }?.isOn ?? false }
+    private var nbOn: Bool { snapshot.dsp.toggles.first { $0.id == "NB" }?.isOn ?? false }
     private var balanceText: String {
         let balance = snapshot.audio.balance
         return abs(balance) < 0.02 ? "C" : String(format: "%@%.0f", balance < 0 ? "L" : "R", abs(balance) * 100)
@@ -112,8 +112,7 @@ struct ReceiverColumnContent: View {
     private var agcSection: some View {
         let threshold = Double(snapshot.dsp.agcThresholdDbfs)
         return VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("AGC", detail: ConsoleFormat.focusDetail("Gain \(snapshot.dsp.agcGainDb) dB",
-                                                                         focused: snapshot.session.focused))
+            ConsoleSectionHeader("AGC", detail: ConsoleFormat.agcGainDetail(snapshot.dsp.agcGainDb))
             LyraSegmentedControl("AGC mode", selection: .constant(snapshot.focusedReceiver.agc), options: AGCMode.allCases,
                                  title: { $0.rawValue }, accent: LyraDS.Palette.cyan)
             ConsoleSliderRow(label: "Thresh", help: "AGC threshold", value: .constant(threshold), range: -140...0,

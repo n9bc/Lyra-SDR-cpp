@@ -185,8 +185,8 @@ struct TransmitSnapshot: Equatable, Sendable {
     var paCapture: Bool
     var psEnabled: Bool
     var psFeedback: Int?
-    var fwdPowerW: Double
-    var swr: Double
+    var fwdPowerW: Double?
+    var swr: Double?
     var alcDb: Double
     var micLevelDb: Double
 }
@@ -207,11 +207,11 @@ struct TelemetrySnapshot: Equatable, Sendable {
     var temperatureC: Double?
     var supplyV: Double?
     var paCurrentA: Double?
-    var cpuPct: Int
-    var tciClients: Int
+    var cpuPct: Int?
+    var tciClients: Int?
     var utc: Date
     var timeZone: TimeZone
-    var graphics: String
+    var graphics: String?
 }
 
 struct SessionSnapshot: Equatable, Sendable {
@@ -253,7 +253,10 @@ struct RadioSnapshot: Equatable, Sendable {
 
 extension RadioSnapshot {
     private static func toggles(_ labels: [String], on: Set<String>) -> [QuickToggle] {
-        labels.map { QuickToggle(id: $0, label: $0, isOn: on.contains($0)) }
+        labels.map { label in
+            QuickToggle(id: String(label.split(separator: " ").first ?? ""), label: label,
+                        isOn: on.contains(label))
+        }
     }
 
     static let sample = RadioSnapshot(

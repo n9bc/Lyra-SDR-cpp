@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Protection toggles (ATT on TX, SWR prot, PA cap, PS on) plus the PureSignal feedback readout.
-/// Local state seeded from the snapshot; the actions do not reach an engine in Milestone 1.
+/// Read straight from the snapshot; the actions do not reach an engine before Milestone 5.
 /// MON TX is not here: it is the audio snapshot's `monitorTx`, shared with the receiver column.
 struct TransmitProtectionState: Equatable {
     var attOnTx: Bool
@@ -18,28 +18,29 @@ struct TransmitProtectionState: Equatable {
 }
 
 struct TransmitProtectionGrid: View {
-    @Binding var state: TransmitProtectionState
+    let state: TransmitProtectionState
     /// From the snapshot (`audio.monitorTx`); read-only here.
     let monitorTx: Bool
     let feedback: Int?
+    let status: CapabilityStatus
 
     var body: some View {
         LazyVGrid(columns: consoleColumns(2), spacing: 5) {
-            toggle("ATT on TX", "Attenuate on transmit", $state.attOnTx, .on)
-            toggle("SWR prot", "SWR protection", $state.swrProtect, .armed)
-            toggle("PA cap", "PA capture", $state.paCap, .on)
-            toggle("MON TX", "Monitor transmit audio", .constant(monitorTx), .on)
-            toggle("PS on", "PureSignal", $state.psOn, .on)
+            toggle("ATT on TX", "Attenuate on transmit", state.attOnTx, .on)
+            toggle("SWR prot", "SWR protection", state.swrProtect, .armed)
+            toggle("PA cap", "PA capture", state.paCap, .on)
+            toggle("MON TX", "Monitor transmit audio", monitorTx, .on)
+            toggle("PS on", "PureSignal", state.psOn, .on)
             TransmitFeedbackReadout(feedback: feedback)
         }
         .frame(width: 170)
     }
 
-    private func toggle(_ title: String, _ help: String, _ isOn: Binding<Bool>,
+    private func toggle(_ title: String, _ help: String, _ isOn: Bool,
                         _ onKind: ConsoleChipStyle) -> some View {
-        ConsoleChip(title: title, help: help, kind: isOn.wrappedValue ? onKind : .plain,
-                    fullWidth: true) { isOn.wrappedValue.toggle() }
-            .accessibilityValue(isOn.wrappedValue ? "On" : "Off")
+        ConsoleChip(title: title, help: help, kind: isOn ? onKind : .plain, fullWidth: true)
+            .consoleAvailability(status, help: help)
+            .accessibilityValue(isOn ? "On" : "Off")
     }
 }
 
@@ -68,18 +69,19 @@ struct TransmitFeedbackReadout: View {
 
 /// Fallback when the deck is too narrow for the protection grid: the same toggles in a menu.
 struct TransmitProtectionMenu: View {
-    @Binding var state: TransmitProtectionState
+    let state: TransmitProtectionState
     /// From the snapshot (`audio.monitorTx`); read-only here.
     let monitorTx: Bool
     let feedback: Int?
+    let status: CapabilityStatus
 
     var body: some View {
         Menu {
-            Toggle("ATT on TX", isOn: $state.attOnTx)
-            Toggle("SWR prot", isOn: $state.swrProtect)
-            Toggle("PA cap", isOn: $state.paCap)
+            Toggle("ATT on TX", isOn: .constant(state.attOnTx))
+            Toggle("SWR prot", isOn: .constant(state.swrProtect))
+            Toggle("PA cap", isOn: .constant(state.paCap))
             Toggle("MON TX", isOn: .constant(monitorTx))
-            Toggle("PS on", isOn: $state.psOn)
+            Toggle("PS on", isOn: .constant(state.psOn))
             Text("PS feedback \(feedback.map(String.init) ?? "\u{2014}")")
         } label: {
             HStack(spacing: 5) {
@@ -92,7 +94,7 @@ struct TransmitProtectionMenu: View {
         .buttonStyle(ConsoleChipButtonStyle(.plain))
         .fixedSize()
         .accessibilityLabel("Transmit protection")
-        .help("Transmit protection and PureSignal toggles")
+        .consoleAvailability(status, help: "Transmit protection and PureSignal toggles")
     }
 }
 
@@ -106,13 +108,15 @@ struct TransmitMeters: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ConsoleSectionHeader("Transmit", detail: detail).padding(.bottom, 0)
-            row("PWR", fraction: transmit.fwdPowerW / 100, readout: String(format: "%.1f W", transmit.fwdPowerW),
+            row("PWR", fraction: (transmit.fwdPowerW ?? 0) / 100,
+                readout: transmit.fwdPowerW.map { String(format: "%.1f W", $0) },
                 fill: AnyShapeStyle(LyraDS.Palette.pink))
-            row("SWR", fraction: (transmit.swr - 1) / 2, readout: String(format: "%.2f", transmit.swr),
+            row("SWR", fraction: ((transmit.swr ?? 1) - 1) / 2,
+                readout: transmit.swr.map { String(format: "%.2f", $0) },
                 fill: AnyShapeStyle(LyraDS.Palette.green))
-            row("ALC", fraction: (transmit.alcDb + 30) / 30, readout: ConsoleFormat.signedDb(transmit.alcDb),
+            row("ALC", fraction: (transmit.alcDb + 30) / 30, readout: Optional(ConsoleFormat.signedDb(transmit.alcDb)),
                 fill: AnyShapeStyle(LyraDS.Palette.yellow))
-            row("Mic", fraction: (transmit.micLevelDb + 60) / 60, readout: ConsoleFormat.signedDb(transmit.micLevelDb),
+            row("Mic", fraction: (transmit.micLevelDb + 60) / 60, readout: Optional(ConsoleFormat.signedDb(transmit.micLevelDb)),
                 fill: AnyShapeStyle(LinearGradient(
                     colors: [LyraDS.Palette.electricBlue, LyraDS.Palette.cyan],
                     startPoint: .leading, endPoint: .trailing)))
@@ -120,9 +124,9 @@ struct TransmitMeters: View {
         .frame(width: 210)
     }
 
-    private func row(_ label: String, fraction: Double, readout: String, fill: AnyShapeStyle) -> some View {
-        let shown = live ? min(max(fraction.isFinite ? fraction : 0, 0), 1) : 0
-        let text = live ? readout : "\u{2014}"
+    private func row(_ label: String, fraction: Double, readout: String?, fill: AnyShapeStyle) -> some View {
+        let shown = live && readout != nil ? min(max(fraction.isFinite ? fraction : 0, 0), 1) : 0
+        let text = (live ? readout : nil) ?? "\u{2014}"
         return HStack(spacing: 6) {
             Text(label).font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
                 .frame(width: 36, alignment: .leading)
@@ -148,7 +152,9 @@ struct TransmitMeters: View {
 struct KeyerStrip: View {
     let keyer: KeyerSnapshot
     let showCaption: Bool
-    @Binding var txEnabled: Bool
+    let status: CapabilityStatus
+    /// True while the keyer feed is sample data.
+    let sample: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -156,16 +162,25 @@ struct KeyerStrip: View {
                 Text(keyer.title.uppercased())
                     .font(.system(size: 11, weight: .semibold)).tracking(0.99)
                     .foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
+                if sample {
+                    Text("Sample")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(LyraDS.Palette.yellow)
+                        .help("The keyer clips are sample data")
+                }
                 if showCaption {
                     Text("changes with mode: CW macros and WPM in CW \u{00B7} repeater and CTCSS in FM")
                         .font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 ConsoleChip(title: "Rec", help: "Record a clip")
+                    .consoleAvailability(status, help: "Record a clip")
                 ConsoleChip(title: "Stop", help: "Stop playback or recording")
+                    .consoleAvailability(status, help: "Stop playback or recording")
                 ConsoleChip(title: "TX enabled", help: "Allow the keyer to transmit",
-                            kind: txEnabled ? .armed : .plain) { txEnabled.toggle() }
-                    .accessibilityValue(txEnabled ? "On" : "Off")
+                            kind: keyer.txEnabled ? .armed : .plain)
+                    .consoleAvailability(status, help: "Allow the keyer to transmit")
+                    .accessibilityValue(keyer.txEnabled ? "On" : "Off")
             }
             LazyVGrid(columns: consoleColumns(3), spacing: 5) {
                 ForEach(keyer.clips) { clip in
@@ -183,7 +198,7 @@ struct KeyerStrip: View {
                     }
                     .buttonStyle(ConsoleChipButtonStyle(.plain, height: 30, fullWidth: true))
                     .accessibilityLabel("\(clip.key) \(clip.name)")
-                    .help("Play \(clip.name) (\(clip.key))")
+                    .consoleAvailability(status, help: "Play \(clip.name) (\(clip.key))")
                 }
             }
         }

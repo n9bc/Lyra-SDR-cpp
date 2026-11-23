@@ -7,6 +7,18 @@ struct StatusBarModel {
     struct Badge: Equatable {
         let kind: BadgeKind
         let text: String
+        var help: String? = nil
+    }
+
+    /// The badge for sample-fed readings: all-mocked reads "Sample data", a mix names the
+    /// mocked features, and nothing mocked yields no badge.
+    nonisolated static func sampleBadge(_ capabilities: BackendCapabilities) -> (text: String, help: String)? {
+        let mocked = capabilities.mockedFeatures
+        if mocked.isEmpty { return nil }
+        if mocked.count == BackendFeature.allCases.count {
+            return ("Sample data", "Every reading is sample data")
+        }
+        return ("Partly sample", "Sample data: " + mocked.map(\.displayName).joined(separator: ", "))
     }
 
     let leftMessage: String
@@ -21,14 +33,17 @@ struct StatusBarModel {
         let temp = t.temperatureC.map { String(format: "T %.1f °C", $0) } ?? "T not reported"
         let volts = t.supplyV.map { ConsoleFormat.telemetry(volts: $0) } ?? "V not reported"
         let pa = t.paCurrentA.map { String(format: "PA %.2f A", $0) } ?? "PA not reported"
-        let clients = "TCI \u{00B7} \(t.tciClients) \(t.tciClients == 1 ? "client" : "clients")"
 
         var list: [Badge] = []
-        if capabilities.isSampleData { list.append(Badge(kind: .sample, text: "Sample data")) }
-        list.append(Badge(kind: .tci(clients: t.tciClients), text: clients))
+        if let sample = Self.sampleBadge(capabilities) {
+            list.append(Badge(kind: .sample, text: sample.text, help: sample.help))
+        }
+        if let n = t.tciClients {
+            list.append(Badge(kind: .tci(clients: n), text: "TCI \u{00B7} \(n) \(n == 1 ? "client" : "clients")"))
+        }
         list.append(Badge(kind: .telemetry, text: "HL2 \(temp) \u{00B7} \(volts) \u{00B7} \(pa)"))
-        list.append(Badge(kind: .cpu, text: "CPU \(t.cpuPct) %"))
-        list.append(Badge(kind: .graphics, text: t.graphics))
+        if let cpu = t.cpuPct { list.append(Badge(kind: .cpu, text: "CPU \(cpu) %")) }
+        if let graphics = t.graphics { list.append(Badge(kind: .graphics, text: graphics)) }
         items = list
     }
 }
@@ -55,7 +70,7 @@ struct StatusBarView: View {
                 .frame(height: 18)
                 .background(Capsule().fill(LyraDS.Palette.yellow.opacity(0.08)))
                 .overlay(Capsule().strokeBorder(LyraDS.Palette.yellow, lineWidth: 1))
-                .help("Values are sample data; no radio is connected")
+                .help(b.help ?? "Sample data")
         case .tci(let clients):
             HStack(spacing: 5) {
                 Circle()
