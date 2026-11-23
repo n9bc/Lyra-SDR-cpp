@@ -89,4 +89,29 @@ final class ConnectionTrackerTests: XCTestCase {
         tracker.update(running: true, p2Running: false, datagramsPerSec: 380, now: at(1))
         XCTAssertEqual(tracker.phase, .streaming)
     }
+
+    func testRadioOffWhileSocketRunsTimesOut() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        for s in stride(from: 0.0, through: 7.9, by: 0.1) {
+            tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(s))
+        }
+        XCTAssertEqual(tracker.phase, .stalled)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(8.0))
+        XCTAssertEqual(tracker.phase, .error("No radio answered at 169.254.19.221"))
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(12))
+        XCTAssertEqual(tracker.phase, .error("No radio answered at 169.254.19.221"))
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 380, now: at(13))
+        XCTAssertEqual(tracker.phase, .streaming)
+    }
+
+    func testDataThenSilenceStaysStalled() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 380, now: at(1))
+        for s in stride(from: 2.0, through: 20.0, by: 0.5) {
+            tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(s))
+        }
+        XCTAssertEqual(tracker.phase, .stalled)
+    }
 }

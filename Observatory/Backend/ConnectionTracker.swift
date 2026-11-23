@@ -21,11 +21,18 @@ struct ConnectionTracker: Equatable, Sendable {
     private var openedAt: Date?
     /// The last update that carried data.
     private var lastDataAt: Date?
+    /// Whether any data has arrived since the last connect request.
+    private var hadData = false
+    /// The requested connect got a socket but no datagram within `connectTimeout`.
+    private var timedOut = false
 
     mutating func requestConnect(ip: String, at: Date) {
         requestedIP = ip
         connectRequestedAt = at
         disconnectRequested = false
+        hadData = false
+        timedOut = false
+        lastDataAt = nil
         phase = .connecting
     }
 
@@ -57,8 +64,20 @@ struct ConnectionTracker: Equatable, Sendable {
 
         if p2Running || datagramsPerSec > 0 {
             lastDataAt = now
+            hadData = true
+            timedOut = false
             phase = .streaming
             return
+        }
+
+        // A requested connect whose socket opened but never got data: the radio is off or
+        // unreachable (the engine reports running before any radio contact).
+        if !hadData, let at = connectRequestedAt {
+            if timedOut || now.timeIntervalSince(at) >= Self.connectTimeout {
+                timedOut = true
+                phase = .error("No radio answered at \(requestedIP ?? "the radio")")
+                return
+            }
         }
 
         let silentSince = lastDataAt ?? openedAt ?? now
@@ -87,5 +106,7 @@ struct ConnectionTracker: Equatable, Sendable {
     private mutating func clearSession() {
         openedAt = nil
         lastDataAt = nil
+        hadData = false
+        timedOut = false
     }
 }
