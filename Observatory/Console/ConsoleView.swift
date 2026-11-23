@@ -56,6 +56,7 @@ struct ConsoleView: View {
         }
         .padding(gap)
         .background(LyraDS.Palette.void)
+        .background(ConsoleKeyMonitor(snapshot: { backend.snapshot }, send: backend.send))
         .environment(spectrum)
         .preferredColorScheme(.dark)
         .frame(minWidth: ConsoleLayout.minWindow.width, minHeight: ConsoleLayout.minWindow.height)
