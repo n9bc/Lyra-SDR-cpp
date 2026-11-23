@@ -52,6 +52,8 @@ enum LyraDS {
         static let zeroBeatTrack = Color(hex: "#171A2E")
         static let sBoxBorder = Color.white.opacity(0.2)
         static let sBoxBorderOff = Color.white.opacity(0.12)
+        static let barFill = Color(hex: "#080A12")
+        static let barBorder = Color.white.opacity(0.06)
 
         private static func stop(_ position: Float, _ hex: UInt32) -> GradientStop {
             GradientStop(
