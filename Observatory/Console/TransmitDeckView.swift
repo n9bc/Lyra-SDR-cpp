@@ -8,6 +8,8 @@ import SwiftUI
 struct TransmitDeckView: View {
     let transmit: TransmitSnapshot
     let keyer: KeyerSnapshot
+    /// MON TX state from the audio snapshot, the same value the receiver column shows.
+    let monitorTx: Bool
 
     @State private var drive: Double
     @State private var tune: Double
@@ -17,9 +19,10 @@ struct TransmitDeckView: View {
     @State private var protection: TransmitProtectionState
     @State private var keyerTxEnabled: Bool
 
-    init(transmit: TransmitSnapshot, keyer: KeyerSnapshot) {
+    init(transmit: TransmitSnapshot, keyer: KeyerSnapshot, monitorTx: Bool) {
         self.transmit = transmit
         self.keyer = keyer
+        self.monitorTx = monitorTx
         _drive = State(initialValue: Double(transmit.drivePct))
         _tune = State(initialValue: Double(transmit.tunePct))
         _mic = State(initialValue: transmit.micGainDb)
@@ -78,9 +81,9 @@ struct TransmitDeckView: View {
             }
             divider
             if protectionMenu {
-                TransmitProtectionMenu(state: $protection, feedback: transmit.psFeedback)
+                TransmitProtectionMenu(state: $protection, monitorTx: monitorTx, feedback: transmit.psFeedback)
             } else {
-                TransmitProtectionGrid(state: $protection, feedback: transmit.psFeedback)
+                TransmitProtectionGrid(state: $protection, monitorTx: monitorTx, feedback: transmit.psFeedback)
             }
             divider
             TransmitMeters(transmit: transmit, live: mox.metersLive, detail: mox.headerDetail)
@@ -136,7 +139,7 @@ struct MOXButton: View {
     var s = RadioSnapshot.sample
     s.transmit.state = state
     if state == .onAir { s.transmit.fwdPowerW = 62; s.transmit.swr = 1.3; s.transmit.alcDb = -8; s.transmit.micLevelDb = -14 }
-    return TransmitDeckView(transmit: s.transmit, keyer: s.keyer)
+    return TransmitDeckView(transmit: s.transmit, keyer: s.keyer, monitorTx: s.audio.monitorTx)
         .frame(width: width)
         .padding(8)
         .background(LyraDS.Palette.void)

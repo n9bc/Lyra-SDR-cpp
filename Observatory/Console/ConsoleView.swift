@@ -23,7 +23,8 @@ struct ConsoleView: View {
                 VFOPanelView(receiver: snapshot.main, title: "MAIN \u{00B7} \(snapshot.main.bandName)",
                              transmitState: snapshot.transmit.state)
                     .frame(maxHeight: .infinity)
-                VFOCenterColumn(session: snapshot.session, sub: snapshot.sub)
+                VFOCenterColumn(session: snapshot.session, sub: snapshot.sub,
+                                splitTx: snapshot.main.splitTx || snapshot.sub.splitTx)
                     .frame(width: ConsoleLayout.vfoCenterWidth)
                     .frame(maxHeight: .infinity)
                 VFOPanelView(receiver: snapshot.sub, title: "SUB \u{00B7} \(snapshot.sub.bandName)",
@@ -41,7 +42,8 @@ struct ConsoleView: View {
             }
             .frame(maxHeight: .infinity)
 
-            TransmitDeckView(transmit: snapshot.transmit, keyer: snapshot.keyer)
+            TransmitDeckView(transmit: snapshot.transmit, keyer: snapshot.keyer,
+                             monitorTx: snapshot.audio.monitorTx)
 
             StatusBarView(snapshot: snapshot, capabilities: backend.capabilities)
                 .frame(height: ConsoleLayout.statusBarHeight)

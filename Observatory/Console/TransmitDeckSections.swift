@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Protection toggles (ATT on TX, SWR prot, PA cap, MON TX, PS on) plus the PureSignal feedback readout.
+/// Protection toggles (ATT on TX, SWR prot, PA cap, PS on) plus the PureSignal feedback readout.
 /// Local state seeded from the snapshot; the actions do not reach an engine in Milestone 1.
+/// MON TX is not here: it is the audio snapshot's `monitorTx`, shared with the receiver column.
 struct TransmitProtectionState: Equatable {
     var attOnTx: Bool
     var swrProtect: Bool
     var paCap: Bool
-    var monTx = false
     var psOn: Bool
 
     init(_ t: TransmitSnapshot) {
@@ -19,6 +19,8 @@ struct TransmitProtectionState: Equatable {
 
 struct TransmitProtectionGrid: View {
     @Binding var state: TransmitProtectionState
+    /// From the snapshot (`audio.monitorTx`); read-only here.
+    let monitorTx: Bool
     let feedback: Int?
 
     var body: some View {
@@ -26,7 +28,7 @@ struct TransmitProtectionGrid: View {
             toggle("ATT on TX", "Attenuate on transmit", $state.attOnTx, .on)
             toggle("SWR prot", "SWR protection", $state.swrProtect, .armed)
             toggle("PA cap", "PA capture", $state.paCap, .on)
-            toggle("MON TX", "Monitor transmit audio", $state.monTx, .on)
+            toggle("MON TX", "Monitor transmit audio", .constant(monitorTx), .on)
             toggle("PS on", "PureSignal", $state.psOn, .on)
             TransmitFeedbackReadout(feedback: feedback)
         }
@@ -67,6 +69,8 @@ struct TransmitFeedbackReadout: View {
 /// Fallback when the deck is too narrow for the protection grid: the same toggles in a menu.
 struct TransmitProtectionMenu: View {
     @Binding var state: TransmitProtectionState
+    /// From the snapshot (`audio.monitorTx`); read-only here.
+    let monitorTx: Bool
     let feedback: Int?
 
     var body: some View {
@@ -74,7 +78,7 @@ struct TransmitProtectionMenu: View {
             Toggle("ATT on TX", isOn: $state.attOnTx)
             Toggle("SWR prot", isOn: $state.swrProtect)
             Toggle("PA cap", isOn: $state.paCap)
-            Toggle("MON TX", isOn: $state.monTx)
+            Toggle("MON TX", isOn: .constant(monitorTx))
             Toggle("PS on", isOn: $state.psOn)
             Text("PS feedback \(feedback.map(String.init) ?? "\u{2014}")")
         } label: {

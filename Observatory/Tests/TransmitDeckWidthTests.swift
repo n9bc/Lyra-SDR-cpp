@@ -7,7 +7,7 @@ import SwiftUI
     /// deck's 14 pt side padding and a safety margin.
     func testNarrowestLevelFitsMinimumWidth() {
         let s = RadioSnapshot.sample
-        let deck = TransmitDeckView(transmit: s.transmit, keyer: s.keyer)
+        let deck = TransmitDeckView(transmit: s.transmit, keyer: s.keyer, monitorTx: s.audio.monitorTx)
             .deck(showCaption: false, protectionMenu: true)
         let ideal = NSHostingView(rootView: deck).fittingSize.width
         let available: CGFloat = 1264 - 2 * 14
@@ -19,7 +19,7 @@ import SwiftUI
     /// Dials must keep their natural width (value and label fully shown) in the narrowest level.
     func testDialsKeepIntrinsicWidth() {
         let s = RadioSnapshot.sample
-        let deck = TransmitDeckView(transmit: s.transmit, keyer: s.keyer)
+        let deck = TransmitDeckView(transmit: s.transmit, keyer: s.keyer, monitorTx: s.audio.monitorTx)
             .deck(showCaption: false, protectionMenu: true)
         let host = NSHostingView(rootView: deck.frame(width: 1236, height: 120))
         host.frame = NSRect(x: 0, y: 0, width: 1236, height: 120)

@@ -50,10 +50,12 @@ struct DisplayToolbarView: View {
             ConsoleMenuChip(label: display.peakHold, help: "Peak hold", options: Self.peakOptions,
                             selection: .constant(display.peakHold))
             ConsoleChip(title: "Avg", help: "Spectrum averaging", kind: display.averaging ? .on : .plain)
-            ConsoleChip(title: "Spots", help: "Show spots")
+            // Spots are drawn whenever the snapshot carries any.
+            ConsoleChip(title: "Spots", help: "Show spots", kind: display.spots.isEmpty ? .plain : .on)
             ConsoleChip(title: "Band plan", help: "Show band plan", kind: display.bandPlanVisible ? .on : .plain)
             Spacer(minLength: 6)
-            ConsoleChip(title: "WF-ID", help: "Waterfall ID warning", kind: .warn)
+            // No snapshot field reports a waterfall ID yet, so the chip stays neutral.
+            ConsoleChip(title: "WF-ID", help: "Waterfall ID")
         }
         .padding(.horizontal, 10)
         .frame(height: Self.height)

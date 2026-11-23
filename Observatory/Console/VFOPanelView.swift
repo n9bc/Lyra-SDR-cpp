@@ -17,7 +17,24 @@ struct VFOPanelView: View {
     private var on: Bool { receiver.enabled }
     private var isMain: Bool { receiver.id == .main }
 
-    private static let sLabels = ["S", "1", "3", "5", "7", "9", "+20", "+40", "+60"]
+    struct SScaleMark: Equatable, Sendable {
+        let label: String
+        let fraction: Double
+    }
+
+    /// Scale labels placed where the (nonlinear) meter puts their S-value: S0 = −127 dBm,
+    /// S1…S9 = −121…−73 dBm in 6 dB steps, then +20/+40/+60 dB over S9.
+    nonisolated static let sScale: [SScaleMark] = {
+        let s9 = -73.0
+        var marks = [SScaleMark(label: "S", fraction: ConsoleFormat.meterFraction(dbm: s9 - 54))]
+        for n in stride(from: 1, through: 9, by: 2) {
+            marks.append(SScaleMark(label: "\(n)", fraction: ConsoleFormat.meterFraction(dbm: s9 - Double(9 - n) * 6)))
+        }
+        for over in [20, 40, 60] {
+            marks.append(SScaleMark(label: "+\(over)", fraction: ConsoleFormat.meterFraction(dbm: s9 + Double(over))))
+        }
+        return marks
+    }()
     /// Placeholder zero-beat marker position (sample data has no tuning-error field yet).
     private static let zeroBeatPosition = 0.46
 
@@ -74,15 +91,7 @@ struct VFOPanelView: View {
 
     private var leftColumn: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                ForEach(Array(Self.sLabels.enumerated()), id: \.offset) { i, label in
-                    if i > 0 { Spacer(minLength: 0) }
-                    Text(label)
-                        .foregroundStyle(i >= 6 && on ? LyraDS.Palette.pink : (on ? LyraDS.Palette.textMuted : LyraDS.Palette.chipDimText))
-                }
-            }
-            .font(mono(11))
-            .frame(maxWidth: 262)
+            sScaleRow
             SegmentMeterView(dbm: receiver.signalDbm, enabled: on)
             Text(readout).font(mono(11)).lineLimit(1)
                 .foregroundStyle(on ? LyraDS.Palette.textMuted : LyraDS.Palette.chipDimText)
@@ -104,6 +113,30 @@ struct VFOPanelView: View {
                 }
             }
         }
+    }
+
+    /// Labels over the segment meter, each at its S-value's meter fraction. The first and last
+    /// are edge-aligned so they stay inside the meter's width.
+    private var sScaleRow: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let last = Self.sScale.count - 1
+            ZStack(alignment: .leading) {
+                ForEach(Array(Self.sScale.enumerated()), id: \.offset) { i, mark in
+                    let anchor: CGFloat = i == 0 ? 0 : (i == last ? 1 : 0.5)
+                    Text(mark.label)
+                        .fixedSize()
+                        .foregroundStyle(mark.fraction > 0.6 && on ? LyraDS.Palette.pink
+                                         : (on ? LyraDS.Palette.textMuted : LyraDS.Palette.chipDimText))
+                        .alignmentGuide(.leading) { d in d.width * anchor - w * mark.fraction }
+                }
+            }
+            .frame(width: w, alignment: .leading)
+        }
+        .font(mono(10))
+        .frame(maxWidth: 262)
+        .frame(height: 13)
+        .accessibilityHidden(true)
     }
 
     private var zeroBeatBar: some View {

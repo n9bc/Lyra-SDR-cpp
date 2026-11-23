@@ -5,10 +5,13 @@ import SwiftUI
 struct VFOCenterColumn: View {
     let session: SessionSnapshot
     let sub: ReceiverSnapshot
+    /// Split operation as the receivers report it (either VFO transmitting split).
+    let splitTx: Bool
 
-    init(session: SessionSnapshot, sub: ReceiverSnapshot) {
+    init(session: SessionSnapshot, sub: ReceiverSnapshot, splitTx: Bool) {
         self.session = session
         self.sub = sub
+        self.splitTx = splitTx
     }
 
     private func chip(_ label: String, _ help: String, _ kind: VFOChipStyle = .plain) -> some View {
@@ -35,7 +38,7 @@ struct VFOCenterColumn: View {
                 chip("B \u{2192} A", "Copy VFO B to VFO A"))
             row(chip("A \u{21C4} B", "Swap VFO A and VFO B"),
                 chip("MEM \u{25BE}", "Open the memory list"))
-            chip("SPLIT", "Toggle split operation")
+            chip("SPLIT", "Toggle split operation", splitTx ? .cyan : .plain)
             chip("SUB RX", "Toggle the sub receiver", sub.enabled ? .cyan : .plain)
             row(chip("CTUN", "Toggle click-to-tune", session.ctunEnabled ? .cyan : .plain),
                 chip("LOCK", "Toggle VFO lock", session.vfoLocked ? .cyan : .plain))
@@ -46,7 +49,7 @@ struct VFOCenterColumn: View {
 }
 
 #Preview("VFO centre column") {
-    VFOCenterColumn(session: RadioSnapshot.sample.session, sub: RadioSnapshot.sample.sub)
+    VFOCenterColumn(session: RadioSnapshot.sample.session, sub: RadioSnapshot.sample.sub, splitTx: false)
         .frame(width: ConsoleLayout.vfoCenterWidth, height: ConsoleLayout.vfoRowHeight - 8)
         .padding(8)
         .background(LyraDS.Palette.void)
