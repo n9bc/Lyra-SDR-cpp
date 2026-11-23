@@ -18,37 +18,37 @@ struct ConsoleView: View {
         let snapshot = backend.snapshot
         let gap = ConsoleLayout.gap
         VStack(spacing: gap) {
-            TopBarView(snapshot: snapshot, capabilities: backend.capabilities)
+            TopBarView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
                 .frame(height: ConsoleLayout.topBarHeight)
 
             HStack(spacing: gap) {
                 VFOPanelView(receiver: snapshot.main, title: "MAIN \u{00B7} \(snapshot.main.bandName)",
                              transmitState: snapshot.transmit.state,
                              focused: snapshot.session.focused == snapshot.main.id,
-                             capabilities: backend.capabilities)
+                             capabilities: backend.capabilities, send: backend.send)
                     .frame(maxHeight: .infinity)
                 VFOCenterColumn(session: snapshot.session, sub: snapshot.sub,
                                 splitTx: snapshot.main.splitTx || snapshot.sub.splitTx,
-                                send: backend.send)
+                                capabilities: backend.capabilities, send: backend.send)
                     .frame(width: ConsoleLayout.vfoCenterWidth)
                     .frame(maxHeight: .infinity)
                 VFOPanelView(receiver: snapshot.sub, title: "SUB \u{00B7} \(snapshot.sub.bandName)",
                              transmitState: snapshot.transmit.state,
                              focused: snapshot.session.focused == snapshot.sub.id,
-                             capabilities: backend.capabilities)
+                             capabilities: backend.capabilities, send: backend.send)
                     .frame(maxHeight: .infinity)
             }
             .frame(height: ConsoleLayout.vfoRowHeight)
 
             HStack(spacing: gap) {
-                ReceiverColumnView(snapshot: snapshot)
+                ReceiverColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
                 DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
                                 focused: snapshot.session.focused, store: displayStore,
                                 sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
                                 sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                BandModeColumnView(snapshot: snapshot, capabilities: backend.capabilities)
+                BandModeColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
             }
             .frame(maxHeight: .infinity)
 

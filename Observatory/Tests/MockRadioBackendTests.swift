@@ -87,3 +87,99 @@ private final class Flag: @unchecked Sendable {
         XCTAssertTrue(fired.isSet); XCTAssertTrue(backend.snapshot.sub.enabled)
     }
 }
+
+@MainActor final class MockReceiverCommandTests: XCTestCase {
+    private func apply(_ c: RadioCommand, _ s: RadioSnapshot = .sample) -> RadioSnapshot {
+        MockRadioBackend.applying(c, to: s)
+    }
+    private func subOn() -> RadioSnapshot { apply(.setSubEnabled(true)) }
+
+    func testConnectAndDisconnect() {
+        XCTAssertEqual(apply(.disconnect).connection.phase, .disconnected)
+        XCTAssertEqual(apply(.connect, apply(.disconnect)).connection.phase, .streaming)
+    }
+    func testSplitOnPutsTransmitOnSub() {
+        let s = apply(.setSplit(true))
+        XCTAssertTrue(s.main.splitTx); XCTAssertTrue(s.sub.splitTx)
+        XCTAssertFalse(s.main.isTxVFO); XCTAssertTrue(s.sub.isTxVFO)
+    }
+    func testSplitOffReturnsTransmitToMain() {
+        let s = apply(.setSplit(false), apply(.setSplit(true)))
+        XCTAssertFalse(s.main.splitTx); XCTAssertFalse(s.sub.splitTx)
+        XCTAssertTrue(s.main.isTxVFO); XCTAssertFalse(s.sub.isTxVFO)
+    }
+    func testCopyAToB() {
+        let s = apply(.copyAToB)
+        XCTAssertEqual(s.sub.frequencyHz, s.main.frequencyHz)
+        XCTAssertEqual(s.main.frequencyHz, 7_128_500)
+    }
+    func testCopyBToA() {
+        let s = apply(.copyBToA)
+        XCTAssertEqual(s.main.frequencyHz, 14_195_000); XCTAssertEqual(s.sub.frequencyHz, 14_195_000)
+    }
+    func testSwapAB() {
+        let s = apply(.swapAB)
+        XCTAssertEqual(s.main.frequencyHz, 14_195_000); XCTAssertEqual(s.sub.frequencyHz, 7_128_500)
+    }
+    func testFlagToggles() {
+        XCTAssertFalse(apply(.setRIT(false)).main.ritEnabled)
+        XCTAssertTrue(apply(.setXIT(true)).main.xitEnabled)
+        XCTAssertFalse(apply(.setCTUN(false)).session.ctunEnabled)
+        XCTAssertTrue(apply(.setVFOLock(true)).session.vfoLocked)
+    }
+    func testSetModeChangesOnlyThatReceiver() {
+        let s = apply(.setMode(.sub, .cwu))
+        XCTAssertEqual(s.sub.mode, .cwu); XCTAssertEqual(s.main.mode, .lsb)
+    }
+    func testSetFilterAndBandwidthLock() {
+        XCTAssertEqual(apply(.setFilter(.main, hz: 2400)).main.filterHz, 2400)
+        XCTAssertEqual(apply(.setFilter(.main, hz: 2400)).sub.filterHz, 2700)
+        XCTAssertFalse(apply(.setBandwidthLock(false)).filter.bwLocked)
+    }
+    func testSelectBandTunesFocusedReceiverAndRecentres() {
+        let s = apply(.selectBand("20"))
+        XCTAssertEqual(s.band.selectedBand, "20")
+        XCTAssertEqual(s.main.frequencyHz, 14_200_000)
+        XCTAssertEqual(s.display.spanLowHz, 14_130_000); XCTAssertEqual(s.display.spanHighHz, 14_270_000)
+        XCTAssertEqual(s.sub.frequencyHz, 14_195_000)
+    }
+    func testSelectBandTunesFocusedSub() {
+        var s = apply(.focus(.sub), subOn())
+        s = apply(.selectBand("10"), s)
+        XCTAssertEqual(s.sub.frequencyHz, 28_500_000); XCTAssertEqual(s.main.frequencyHz, 7_128_500)
+        XCTAssertEqual(s.session.statusMessage, "Tuned to 28.500.000 USB")
+    }
+    func testSelectUnknownBandChangesNothing() {
+        XCTAssertEqual(apply(.selectBand("99")), .sample)
+    }
+    func testAGCIsSharedByBothReceivers() {
+        let s = apply(.setAGC(.fast))
+        XCTAssertEqual(s.main.agc, .fast); XCTAssertEqual(s.sub.agc, .fast)
+    }
+    func testSetDSPTurnsOnDSPAndQuickToggle() {
+        let s = apply(.setDSP(.nb, true))
+        XCTAssertEqual(s.dsp.toggles.first { $0.id == "NB" }?.isOn, true)
+        XCTAssertEqual(s.main.quickToggles.first { $0.id == "NB" }?.isOn, true)
+        let off = apply(.setDSP(.nb, false), s)
+        XCTAssertEqual(off.dsp.toggles.first { $0.id == "NB" }?.isOn, false)
+        XCTAssertEqual(off.main.quickToggles.first { $0.id == "NB" }?.isOn, false)
+    }
+    func testSetDSPNotchUsesNFId() {
+        let s = apply(.setDSP(.nf, false))
+        XCTAssertEqual(s.dsp.toggles.first { $0.id == "NF" }?.isOn, false)
+        XCTAssertEqual(s.main.quickToggles.first { $0.id == "NOTCH" }?.isOn, false)
+    }
+    func testSetDSPSquelchUpdatesSquelchFlag() {
+        XCTAssertTrue(apply(.setDSP(.sq, true)).dsp.squelchOn)
+    }
+    func testTuneAndSelectBandSetStatusMessage() {
+        XCTAssertEqual(apply(.tune(.main, deltaHz: 1_000)).session.statusMessage, "Tuned to 7.129.500 LSB")
+        XCTAssertEqual(apply(.selectBand("20")).session.statusMessage, "Tuned to 14.200.000 LSB")
+    }
+    func testLockedRefusesTuning() {
+        var locked = RadioSnapshot.sample; locked.session.vfoLocked = true
+        for c: RadioCommand in [.tune(.main, deltaHz: 1_000), .selectBand("20"), .copyAToB, .copyBToA, .swapAB] {
+            XCTAssertEqual(apply(c, locked), locked, "\(c)")
+        }
+    }
+}

@@ -1,15 +1,21 @@
 import SwiftUI
 
 /// Left console column: front end, audio, AGC, noise and DSP. Every engine-owned value renders
-/// from the snapshot; actions are empty in Milestone 1.
+/// from the snapshot. The AGC mode, squelch and DSP toggles send commands; the rest has no action yet.
 struct ReceiverColumnView: View {
     let snapshot: RadioSnapshot
+    let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
 
-    init(snapshot: RadioSnapshot) { self.snapshot = snapshot }
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, send: @escaping (RadioCommand) -> Void) {
+        self.snapshot = snapshot
+        self.capabilities = capabilities
+        self.send = send
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            ReceiverColumnContent(snapshot: snapshot)
+            ReceiverColumnContent(snapshot: snapshot, capabilities: capabilities, send: send)
         }
         // Both columns overflow at 1280x800: show the scroller and flash it once so the cut-off reads as scrollable.
         .scrollIndicatorsFlash(onAppear: true)
@@ -19,12 +25,21 @@ struct ReceiverColumnView: View {
 
 struct ReceiverColumnContent: View {
     let snapshot: RadioSnapshot
+    let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
 
     /// Capture length is a local choice made before a capture, not an engine value.
     @State private var captureLength = "5 s"
 
-    init(snapshot: RadioSnapshot) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, send: @escaping (RadioCommand) -> Void) {
         self.snapshot = snapshot
+        self.capabilities = capabilities
+        self.send = send
+    }
+
+    /// The AGC selection: read from the focused receiver, written by sending `.setAGC`.
+    private var agcSelection: Binding<AGCMode> {
+        Binding(get: { snapshot.focusedReceiver.agc }, set: { send(.setAGC($0)) })
     }
 
     private static func signed(_ v: Double, _ unit: String) -> String {
@@ -113,8 +128,11 @@ struct ReceiverColumnContent: View {
         let threshold = Double(snapshot.dsp.agcThresholdDbfs)
         return VStack(alignment: .leading, spacing: 0) {
             ConsoleSectionHeader("AGC", detail: ConsoleFormat.agcGainDetail(snapshot.dsp.agcGainDb))
-            LyraSegmentedControl("AGC mode", selection: .constant(snapshot.focusedReceiver.agc), options: AGCMode.allCases,
-                                 title: { $0.rawValue }, accent: LyraDS.Palette.cyan)
+            let agcStatus = capabilities.control(.agcMode)
+            LyraSegmentedControl("AGC mode", selection: agcSelection, options: AGCMode.allCases,
+                                 title: { $0.rawValue }, accent: LyraDS.Palette.cyan,
+                                 help: ConsoleAvailability.help(agcStatus, normal: "AGC mode: \(snapshot.focusedReceiver.agc.rawValue)"))
+                .disabled(ConsoleAvailability.isDisabled(agcStatus))
             ConsoleSliderRow(label: "Thresh", help: "AGC threshold", value: .constant(threshold), range: -140...0,
                              step: 1, readout: Self.signed(threshold, "dBFS"))
                 .padding(.top, 6)
@@ -122,7 +140,8 @@ struct ReceiverColumnContent: View {
                 ConsoleChip(title: "Auto threshold", help: "Set AGC threshold automatically")
                 Spacer(minLength: 0)
                 Text("Squelch").font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
-                ConsoleChip(title: "SQ", help: "Squelch", kind: snapshot.dsp.squelchOn ? .on : .plain)
+                ConsoleChip(title: "SQ", help: "Squelch", kind: snapshot.dsp.squelchOn ? .on : .plain,
+                            status: capabilities.control(.dsp(.sq))) { send(.setDSP(.sq, !snapshot.dsp.squelchOn)) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -137,7 +156,12 @@ struct ReceiverColumnContent: View {
             ConsoleSectionHeader("Noise and DSP", detail: "\(d.notchCount) notches")
             LazyVGrid(columns: consoleColumns(5), spacing: 5) {
                 ForEach(d.toggles) { t in
-                    ConsoleChip(title: t.label, help: t.label, kind: t.isOn ? .on : .plain, fullWidth: true)
+                    let function = DSPFunction(rawValue: t.id)
+                    ConsoleChip(title: t.label, help: t.label, kind: t.isOn ? .on : .plain, fullWidth: true,
+                                status: function.map { capabilities.control(.dsp($0)) }
+                                    ?? .unavailable("No engine control for \(t.label)")) {
+                        if let function { send(.setDSP(function, !t.isOn)) }
+                    }
                 }
             }
             ConsoleSliderRow(label: "NR mode", help: "NR mode", value: .constant(Double(d.nrMode)), range: 1...4,
@@ -160,13 +184,13 @@ struct ReceiverColumnContent: View {
 }
 
 #Preview("Receiver column, full height") {
-    ReceiverColumnView(snapshot: .sample)
+    ReceiverColumnView(snapshot: .sample, capabilities: .allMocked, send: { _ in })
         .frame(height: 760)
         .background(LyraDS.Palette.void)
 }
 
 #Preview("Receiver column, 330 pt") {
-    ReceiverColumnView(snapshot: .sample)
+    ReceiverColumnView(snapshot: .sample, capabilities: .allMocked, send: { _ in })
         .frame(height: 330)
         .background(LyraDS.Palette.void)
 }

@@ -39,12 +39,15 @@ struct PowerChipModel: Equatable, Sendable {
 struct TopBarView: View {
     let snapshot: RadioSnapshot
     let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
     /// Fixed time for previews and tests only; nil (the app) shows the current time.
     let clockOverride: Date?
 
-    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, clockOverride: Date? = nil) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities,
+         send: @escaping (RadioCommand) -> Void, clockOverride: Date? = nil) {
         self.snapshot = snapshot
         self.capabilities = capabilities
+        self.send = send
         self.clockOverride = clockOverride
     }
 
@@ -60,7 +63,8 @@ struct TopBarView: View {
 
     private var power: some View {
         let chip = powerChip
-        return Button {} label: {
+        let status = capabilities.control(.connect)
+        return Button { send(snapshot.connection.phase.powerCommand) } label: {
             HStack(spacing: 5) {
                 Image(systemName: "power").font(.system(size: 12, weight: .semibold))
                 Text(chip.label)
@@ -68,8 +72,9 @@ struct TopBarView: View {
             .padding(.horizontal, 3)
         }
         .buttonStyle(ConsoleChipButtonStyle(chip.style, height: 30))
+        .disabled(ConsoleAvailability.isDisabled(status))
         .accessibilityLabel("Radio power, \(chip.label)")
-        .help(chip.help)
+        .help(ConsoleAvailability.help(status, normal: chip.help))
     }
 
     private var radio: some View {
@@ -268,13 +273,13 @@ struct TopBarView: View {
 }
 
 #Preview("Top bar, sample, 1280") {
-    TopBarView(snapshot: .sample, capabilities: .allMocked, clockOverride: RadioSnapshot.sample.telemetry.utc)
+    TopBarView(snapshot: .sample, capabilities: .allMocked, send: { _ in }, clockOverride: RadioSnapshot.sample.telemetry.utc)
         .frame(width: 1280)
         .background(LyraDS.Palette.void)
 }
 
 #Preview("Top bar, sample, 1600") {
-    TopBarView(snapshot: .sample, capabilities: .allMocked)
+    TopBarView(snapshot: .sample, capabilities: .allMocked, send: { _ in })
         .frame(width: 1600)
         .background(LyraDS.Palette.void)
 }

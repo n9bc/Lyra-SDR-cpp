@@ -1,12 +1,13 @@
 import AppKit
 
-/// Everything the console's View menu can do.
+/// Everything the console's View and Radio menus can do.
 enum ConsoleMenuAction: Hashable {
     case focus(ReceiverID)
     case toggleSub
     case layout(DisplayLayout)
     case toggleTerrain
     case terrainView(TerrainView)
+    case toggleConnection
 
     /// The menu shortcut, if any. ⌘1/⌘2 focus a receiver, ⌥⌘1–3 pick a layout in
     /// `DisplayLayout.allCases` order, ⌥⌘T shows or hides the audio terrain.
@@ -17,6 +18,7 @@ enum ConsoleMenuAction: Hashable {
         case .layout(let layout):
             (String((DisplayLayout.allCases.firstIndex(of: layout) ?? 0) + 1), [.command, .option])
         case .toggleTerrain: ("t", [.command, .option])
+        case .toggleConnection: ("k", [.command])
         case .toggleSub, .terrainView: nil
         }
     }
@@ -49,6 +51,7 @@ struct ConsoleMenuState {
         case .layout(let l): layout == l
         case .toggleTerrain: false
         case .terrainView(let v): terrainView == v
+        case .toggleConnection: false
         }
     }
 
@@ -60,11 +63,12 @@ struct ConsoleMenuState {
         case .layout(let l): l.title
         case .toggleTerrain: terrainExpanded ? "Hide Audio Terrain" : "Show Audio Terrain"
         case .terrainView(let v): v.rawValue
+        case .toggleConnection: snapshot.connection.phase.powerCommand == .connect ? "Connect" : "Disconnect"
         }
     }
 }
 
-/// Owns the console's View and Window menus and the window's size rules. Engine-owned state
+/// Owns the console's View, Radio and Window menus and the window's size rules. Engine-owned state
 /// changes only through `backend.send(_:)`; screen-only state goes to `display`.
 @MainActor
 final class ConsoleShell: NSObject, NSMenuItemValidation {
@@ -72,6 +76,7 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
     let display: DisplayStore
 
     private static let viewMenuID = NSUserInterfaceItemIdentifier("lyra.console.view")
+    private static let radioMenuID = NSUserInterfaceItemIdentifier("lyra.console.radio")
     private static let windowMenuID = NSUserInterfaceItemIdentifier("lyra.console.window")
 
     /// Carries a `ConsoleMenuAction` on an `NSMenuItem` (`representedObject` needs an object).
@@ -106,6 +111,7 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         case .layout(let l): display.layout = l
         case .toggleTerrain: display.terrainExpanded.toggle()
         case .terrainView(let v): display.terrainView = v
+        case .toggleConnection: backend.send(backend.snapshot.connection.phase.powerCommand)
         }
     }
 
@@ -177,11 +183,12 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
 
     // MARK: - Menus
 
-    /// Inserts the View menu after the app menu and a Window menu after it, replacing only
+    /// Inserts the View menu after the app menu, then Radio and Window, replacing only
     /// items this method inserted earlier; everything else in the main menu belongs to Qt.
     func installMenus() {
         guard let mainMenu = NSApp.mainMenu else { return }
-        for item in mainMenu.items where item.identifier == Self.viewMenuID || item.identifier == Self.windowMenuID {
+        let ours = [Self.viewMenuID, Self.radioMenuID, Self.windowMenuID]
+        for item in mainMenu.items where item.identifier.map(ours.contains) ?? false {
             mainMenu.removeItem(item)
         }
 
@@ -192,12 +199,18 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         let viewIndex = min(1, mainMenu.numberOfItems)
         mainMenu.insertItem(viewItem, at: viewIndex)
 
+        let radioItem = NSMenuItem(title: "Radio", action: nil, keyEquivalent: "")
+        radioItem.identifier = Self.radioMenuID
+        radioItem.submenu = makeRadioMenu()
+        radioItem.setAccessibilityLabel("Radio")
+        mainMenu.insertItem(radioItem, at: viewIndex + 1)
+
         let windowMenu = makeWindowMenu()
         let windowItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
         windowItem.identifier = Self.windowMenuID
         windowItem.submenu = windowMenu
         windowItem.setAccessibilityLabel("Window")
-        mainMenu.insertItem(windowItem, at: viewIndex + 1)
+        mainMenu.insertItem(windowItem, at: viewIndex + 2)
 
         if NSApp.windowsMenu == nil || (ownWindowsMenu != nil && NSApp.windowsMenu === ownWindowsMenu) {
             NSApp.windowsMenu = windowMenu
@@ -222,6 +235,12 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         terrainItem.submenu = terrain
         terrainItem.setAccessibilityLabel("Audio Terrain View")
         menu.addItem(terrainItem)
+        return menu
+    }
+
+    private func makeRadioMenu() -> NSMenu {
+        let menu = NSMenu(title: "Radio")
+        menu.addItem(item(.toggleConnection))
         return menu
     }
 
@@ -260,6 +279,8 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         menuItem.title = title
         menuItem.setAccessibilityLabel(title)
         menuItem.state = state.isChecked(box.action) ? .on : .off
+        if box.action == .toggleConnection,
+           ConsoleAvailability.isDisabled(backend.capabilities.control(.connect)) { return false }
         return state.isEnabled(box.action)
     }
 }

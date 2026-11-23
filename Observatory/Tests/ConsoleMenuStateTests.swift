@@ -22,7 +22,7 @@ import AppKit
         XCTAssertEqual(state(expanded: false).title(.toggleTerrain), "Show Audio Terrain")
     }
     func testShortcutsAreUniqueAndAvoidSystemOnes() {
-        let all: [ConsoleMenuAction] = [.focus(.main), .focus(.sub), .toggleSub, .toggleTerrain]
+        let all: [ConsoleMenuAction] = [.focus(.main), .focus(.sub), .toggleSub, .toggleTerrain, .toggleConnection]
             + DisplayLayout.allCases.map { .layout($0) } + TerrainView.allCases.map { .terrainView($0) }
         let keys = all.compactMap { $0.keyEquivalent }.map { "\($0.modifiers.rawValue)-\($0.key)" }
         XCTAssertEqual(Set(keys).count, keys.count)
@@ -30,6 +30,23 @@ import AppKit
         for reserved in [",", "q", "m", "h", "w"] { XCTAssertFalse(keys.contains("\(cmd)-\(reserved)")) }
         XCTAssertEqual(ConsoleMenuAction.focus(.sub).keyEquivalent?.key, "2")
         XCTAssertEqual(ConsoleMenuAction.layout(.waterfallOnly).keyEquivalent?.modifiers, [.command, .option])
+    }
+    func testConnectionTitleFollowsPhase() {
+        var s = RadioSnapshot.sample
+        s.connection.phase = .disconnected
+        XCTAssertEqual(state(s).title(.toggleConnection), "Connect")
+        s.connection.phase = .error("x")
+        XCTAssertEqual(state(s).title(.toggleConnection), "Connect")
+        s.connection.phase = .streaming
+        XCTAssertEqual(state(s).title(.toggleConnection), "Disconnect")
+        XCTAssertEqual(ConsoleMenuAction.toggleConnection.keyEquivalent?.key, "k")
+        XCTAssertEqual(ConsoleMenuAction.toggleConnection.keyEquivalent?.modifiers, [.command])
+    }
+    func testPerformToggleConnection() {
+        let backend = MockRadioBackend()
+        let shell = ConsoleShell(backend: backend, display: DisplayStore(defaults: UserDefaults(suiteName: "lyra-test-\(UUID().uuidString)")!))
+        shell.perform(.toggleConnection); XCTAssertEqual(backend.snapshot.connection.phase, .disconnected)
+        shell.perform(.toggleConnection); XCTAssertEqual(backend.snapshot.connection.phase, .streaming)
     }
     func testPerformSendsEngineStateAndSetsDisplayState() {
         let backend = MockRadioBackend()

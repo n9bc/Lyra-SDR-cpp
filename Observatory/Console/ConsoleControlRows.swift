@@ -42,6 +42,8 @@ struct ConsoleMenuChip: View {
     let help: String
     let options: [String]
     @Binding var selection: String
+    /// Backend availability; an unavailable menu is disabled and its one tooltip is the reason.
+    var status: CapabilityStatus = .available
 
     var body: some View {
         Menu {
@@ -60,7 +62,8 @@ struct ConsoleMenuChip: View {
         .fixedSize()
         .accessibilityLabel(help)
         .accessibilityValue(selection)
-        .help(help)
+        .disabled(ConsoleAvailability.isDisabled(status))
+        .help(ConsoleAvailability.help(status, normal: help))
     }
 }
 

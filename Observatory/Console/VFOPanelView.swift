@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One receiver's VFO panel: header chips, S-meter, mode/AGC, RIT/XIT, frequency, quick toggles.
-/// Static in Milestone 1: every button has an empty action.
+/// Header, mode, AGC, RIT/XIT, split and the quick toggles send commands; the rest only report availability.
 struct VFOPanelView: View {
     let receiver: ReceiverSnapshot
     let title: String
@@ -10,10 +10,12 @@ struct VFOPanelView: View {
     /// True when this receiver has the session focus; drives the highlighted border and glow.
     let focused: Bool
     let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
 
     init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState, focused: Bool,
-         capabilities: BackendCapabilities) {
+         capabilities: BackendCapabilities, send: @escaping (RadioCommand) -> Void) {
         self.capabilities = capabilities
+        self.send = send
         self.receiver = receiver
         self.title = title
         self.transmitState = transmitState
@@ -44,9 +46,28 @@ struct VFOPanelView: View {
     /// Placeholder zero-beat marker position; the bar shows only while the zero-beat control is sample data.
     private static let zeroBeatPosition = 0.46
 
+    /// Why RIT and XIT are off on the Sub panel.
+    nonisolated static let ritXitSubHelp = "RIT and XIT apply to the main receiver"
+
+    /// The control a quick toggle id stands for. Nil for ids with no engine path of their own.
+    nonisolated static func quickToggleControl(_ id: String) -> ConsoleControl? {
+        switch id {
+        case "ATT": .attenuator
+        case "LNA", "AUTO": .frontEnd
+        case "NOTCH": .dsp(.nf)
+        default: DSPFunction(rawValue: id).map { .dsp($0) }
+        }
+    }
+
+    /// The command a quick toggle sends: DSP functions toggle; ATT, LNA and AUTO have no command yet.
+    nonisolated static func quickToggleCommand(_ toggle: QuickToggle) -> RadioCommand? {
+        let function = toggle.id == "NOTCH" ? DSPFunction.nf : DSPFunction(rawValue: toggle.id)
+        return function.map { .setDSP($0, !toggle.isOn) }
+    }
+
     private func chip(_ label: String, _ help: String, _ kind: VFOChipStyle = .plain,
-                      status: CapabilityStatus = .available) -> some View {
-        Button(label) {}
+                      status: CapabilityStatus = .available, action: @escaping () -> Void = {}) -> some View {
+        Button(label, action: action)
             .buttonStyle(VFOChipButtonStyle(kind))
             .disabled(ConsoleAvailability.isDisabled(status))
             .accessibilityLabel(help)
@@ -107,14 +128,16 @@ struct VFOPanelView: View {
                 Text("VFO").font(mono(12)).tracking(0.96).foregroundStyle(LyraDS.Palette.textMuted)
                 Text(isMain ? "A" : "B").font(mono(17))
                     .foregroundStyle(on ? LyraDS.Palette.textPrimary : LyraDS.Palette.chipText)
-                chip(receiver.mode.rawValue, "Select mode", on ? .cyan : .plain)
+                chip(receiver.mode.rawValue, "Select mode", on ? .cyan : .plain,
+                     status: capabilities.control(.mode)) { send(.setMode(receiver.id, receiver.mode.next)) }
                 Text("FIL").font(mono(12)).tracking(0.96).foregroundStyle(LyraDS.Palette.textMuted)
                 Text(filterText).font(mono(14))
                     .foregroundStyle(on ? LyraDS.Palette.textPrimary : LyraDS.Palette.chipText)
             }
             .padding(.top, 4)
             HStack(spacing: 7) {
-                chip("AGC \(receiver.agc.rawValue.uppercased())", "Select AGC mode", on ? .cyan : .plain)
+                chip("AGC \(receiver.agc.rawValue.uppercased())", "Select AGC mode", on ? .cyan : .plain,
+                     status: capabilities.control(.agcMode)) { send(.setAGC(receiver.agc.next)) }
                 if on {
                     chip("ZERO BEAT", "Zero-beat the received signal", status: capabilities.control(.zeroBeat))
                     if capabilities.control(.zeroBeat) == .mocked { zeroBeatBar }
@@ -159,8 +182,9 @@ struct VFOPanelView: View {
             .accessibilityHidden(true)
     }
 
-    private func ghost(_ label: String, _ value: String, lit: Bool, help: String) -> some View {
-        Button {} label: {
+    private func ghost(_ label: String, _ value: String, lit: Bool, help: String,
+                       status: CapabilityStatus = .available, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 6) {
                 Text(label).frame(width: 70, alignment: .trailing)
                 Text(value).frame(width: 92, alignment: .trailing)
@@ -171,8 +195,9 @@ struct VFOPanelView: View {
             .padding(.vertical, 1)
         }
         .buttonStyle(.plain)
+        .disabled(ConsoleAvailability.isDisabled(status))
         .accessibilityLabel(help)
-        .help(help)
+        .help(ConsoleAvailability.help(status, normal: help))
     }
 
     private func rightColumn(fontSize: CGFloat) -> some View {
@@ -180,11 +205,19 @@ struct VFOPanelView: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(spacing: 2) {
                     ghost("RIT", ConsoleFormat.offsetKHz(receiver.ritOffsetHz), lit: receiver.ritEnabled,
-                          help: "Toggle receive incremental tuning")
+                          help: "Toggle receive incremental tuning",
+                          status: isMain ? capabilities.control(.rit) : .unavailable(Self.ritXitSubHelp)) {
+                        send(.setRIT(!receiver.ritEnabled))
+                    }
                     ghost("XIT", ConsoleFormat.offsetKHz(receiver.xitOffsetHz), lit: receiver.xitEnabled,
-                          help: "Toggle transmit incremental tuning")
+                          help: "Toggle transmit incremental tuning",
+                          status: isMain ? capabilities.control(.xit) : .unavailable(Self.ritXitSubHelp)) {
+                        send(.setXIT(!receiver.xitEnabled))
+                    }
                     ghost("SPLIT TX", receiver.splitTx ? "ON" : "\u{2014}", lit: receiver.splitTx,
-                          help: "Toggle split transmit")
+                          help: "Toggle split transmit", status: capabilities.control(.split)) {
+                        send(.setSplit(!receiver.splitTx))
+                    }
                 }
                 Text(on ? ConsoleFormat.sUnits(dbm: receiver.signalDbm) : "S0")
                     .font(mono(15)).lineLimit(1)
@@ -254,7 +287,11 @@ struct VFOPanelView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 ForEach(receiver.quickToggles) { t in
-                    chip(t.label, "Toggle \(t.label)", t.isOn && on ? .active : .plain)
+                    chip(t.label, "Toggle \(t.label)", t.isOn && on ? .active : .plain,
+                         status: Self.quickToggleControl(t.id).map(capabilities.control)
+                             ?? .unavailable("No engine control for \(t.label)")) {
+                        if let command = Self.quickToggleCommand(t) { send(command) }
+                    }
                 }
             }
         }
@@ -263,25 +300,25 @@ struct VFOPanelView: View {
 }
 
 #Preview("Main VFO") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked, send: { _ in })
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Sub VFO (disabled)") {
-    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle, focused: false, capabilities: .allMocked)
+    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle, focused: false, capabilities: .allMocked, send: { _ in })
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO on air") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir, focused: true, capabilities: .allMocked)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir, focused: true, capabilities: .allMocked, send: { _ in })
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO at minimum window") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true, capabilities: .allMocked, send: { _ in })
         .frame(width: 529, height: 212)
         .background(LyraDS.Palette.void)
 }

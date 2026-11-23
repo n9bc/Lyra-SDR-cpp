@@ -1,14 +1,16 @@
 import SwiftUI
 
 /// Right console column: band, mode, filter, propagation. Engine-owned selections render from the
-/// snapshot; only the band-list tab is local view state. Actions are empty in Milestone 1.
+/// snapshot; only the band-list tab is local view state. Band, mode, filter and BW lock send commands.
 struct BandModeColumnView: View {
     let snapshot: RadioSnapshot
     let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
 
-    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, send: @escaping (RadioCommand) -> Void) {
         self.snapshot = snapshot
         self.capabilities = capabilities
+        self.send = send
     }
 
     /// Propagation header detail: "Sample" while only this feed is sample data (when the whole
@@ -20,7 +22,7 @@ struct BandModeColumnView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            BandModeColumnContent(snapshot: snapshot, capabilities: capabilities)
+            BandModeColumnContent(snapshot: snapshot, capabilities: capabilities, send: send)
         }
         // Both columns overflow at 1280x800: show the scroller and flash it once so the cut-off reads as scrollable.
         .scrollIndicatorsFlash(onAppear: true)
@@ -31,13 +33,15 @@ struct BandModeColumnView: View {
 struct BandModeColumnContent: View {
     let snapshot: RadioSnapshot
     let capabilities: BackendCapabilities
+    let send: (RadioCommand) -> Void
 
     /// Which band list is shown (Ham, BC, Gen…) is presentation only, so it stays local.
     @State private var tab: String
 
-    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, send: @escaping (RadioCommand) -> Void) {
         self.snapshot = snapshot
         self.capabilities = capabilities
+        self.send = send
         _tab = State(initialValue: snapshot.band.selectedTab)
     }
 
@@ -71,14 +75,15 @@ struct BandModeColumnContent: View {
             HStack(spacing: 4) {
                 ForEach(snapshot.band.tabs, id: \.self) { name in
                     ConsoleChip(title: name, help: "\(name) bands", kind: tab == name ? .on : .plain,
-                                height: 22, fullWidth: true) { tab = name }
+                                height: 22, fullWidth: true,
+                                status: name == "Ham" ? .available : capabilities.control(.bandTabs)) { tab = name }
                 }
             }
             .padding(.bottom, 7)
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
                 ForEach(snapshot.band.bands, id: \.self) { name in
                     ConsoleChip(title: name, help: "Band \(name)", kind: snapshot.band.selectedBand == name ? .on : .plain,
-                                fullWidth: true)
+                                fullWidth: true, status: capabilities.control(.band)) { send(.selectBand(name)) }
                 }
             }
         }
@@ -93,7 +98,9 @@ struct BandModeColumnContent: View {
             LazyVGrid(columns: consoleColumns(5), spacing: 5) {
                 ForEach(RadioMode.allCases, id: \.self) { m in
                     ConsoleChip(title: m.rawValue, help: "Mode \(m.rawValue)", kind: snapshot.focusedReceiver.mode == m ? .on : .plain,
-                                fullWidth: true)
+                                fullWidth: true, status: capabilities.control(.mode)) {
+                        send(.setMode(snapshot.session.focused, m))
+                    }
                 }
             }
         }
@@ -101,7 +108,7 @@ struct BandModeColumnContent: View {
         .consolePanel()
     }
 
-    private func field(_ text: Binding<String>, _ help: String) -> some View {
+    private func field(_ text: Binding<String>, _ help: String, status: CapabilityStatus) -> some View {
         TextField("", text: text)
             .textFieldStyle(.plain)
             .multilineTextAlignment(.trailing)
@@ -112,8 +119,9 @@ struct BandModeColumnContent: View {
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(LyraDS.Palette.barFill))
             .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(LyraDS.Palette.chipBorder, lineWidth: 1))
+            .disabled(ConsoleAvailability.isDisabled(status))
             .accessibilityLabel(help)
-            .help(help)
+            .help(ConsoleAvailability.help(status, normal: help))
     }
 
     private func fieldLabel(_ s: String) -> some View {
@@ -121,36 +129,45 @@ struct BandModeColumnContent: View {
     }
 
     private var filterSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let focused = snapshot.focusedReceiver
+        return VStack(alignment: .leading, spacing: 0) {
             ConsoleSectionHeader("Filter", detail: ConsoleFormat.focusDetail(
                 String(format: "RX %.1f kHz", Double(snapshot.focusedReceiver.filterHz) / 1000),
                 focused: snapshot.session.focused))
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
-                ForEach(snapshot.filter.presets, id: \.self) { name in
-                    ConsoleChip(title: name, help: "Filter \(name)", kind: snapshot.filter.selectedPreset == name ? .on : .plain,
-                                fullWidth: true)
+                ForEach(FilterPresets.entries(mode: focused.mode, currentHz: focused.filterHz), id: \.hz) { entry in
+                    ConsoleChip(title: entry.label, help: "Filter \(entry.label)",
+                                kind: focused.filterHz == entry.hz ? .on : .plain, fullWidth: true,
+                                status: capabilities.control(.filterPreset)) {
+                        send(.setFilter(snapshot.session.focused, hz: entry.hz))
+                    }
                 }
             }
             Grid(horizontalSpacing: 6, verticalSpacing: 0) {
                 GridRow {
                     fieldLabel("RX lo").frame(width: 44, alignment: .leading)
-                    field(.constant("\(snapshot.filter.rxLowHz) Hz"), "RX low cut")
+                    field(.constant("\(snapshot.filter.rxLowHz) Hz"), "RX low cut",
+                          status: capabilities.control(.filterEdges))
                     fieldLabel("TX lo").frame(width: 44, alignment: .leading)
-                    field(.constant("\(snapshot.filter.txLowHz) Hz"), "TX low cut")
+                    field(.constant("\(snapshot.filter.txLowHz) Hz"), "TX low cut",
+                          status: capabilities.control(.filterEdges))
                 }
             }
             .padding(.top, 8)
             HStack(spacing: 5) {
-                Button {} label: {
+                let lockStatus = capabilities.control(.bwLock)
+                Button { send(.setBandwidthLock(!snapshot.filter.bwLocked)) } label: {
                     HStack(spacing: 5) { Image(systemName: "link").font(.system(size: 11)); Text("BW lock") }
                 }
                 .buttonStyle(ConsoleChipButtonStyle(snapshot.filter.bwLocked ? .on : .plain))
+                .disabled(ConsoleAvailability.isDisabled(lockStatus))
                 .accessibilityLabel("Lock TX bandwidth to RX")
-                .help("Lock TX bandwidth to RX")
+                .help(ConsoleAvailability.help(lockStatus, normal: "Lock TX bandwidth to RX"))
                 Spacer(minLength: 0)
                 fieldLabel("TX BW")
                 ConsoleMenuChip(label: snapshot.filter.txBandwidthLabel, help: "TX bandwidth",
-                                options: txBandwidthOptions, selection: .constant(snapshot.filter.txBandwidthLabel))
+                                options: txBandwidthOptions, selection: .constant(snapshot.filter.txBandwidthLabel),
+                                status: capabilities.control(.txBandwidth))
             }
             .padding(.top, 6)
         }
@@ -196,13 +213,13 @@ struct BandModeColumnContent: View {
 }
 
 #Preview("Band and mode column, full height") {
-    BandModeColumnView(snapshot: .sample, capabilities: .allMocked)
+    BandModeColumnView(snapshot: .sample, capabilities: .allMocked, send: { _ in })
         .frame(height: 760)
         .background(LyraDS.Palette.void)
 }
 
 #Preview("Band and mode column, 330 pt") {
-    BandModeColumnView(snapshot: .sample, capabilities: .allMocked)
+    BandModeColumnView(snapshot: .sample, capabilities: .allMocked, send: { _ in })
         .frame(height: 330)
         .background(LyraDS.Palette.void)
 }

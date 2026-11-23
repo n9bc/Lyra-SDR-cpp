@@ -7,16 +7,20 @@ struct LyraSegmentedControl<T: Hashable>: View {
     let options: [T]
     let title: (T) -> String
     let accent: Color
+    /// Overrides the default tooltip (a disabled control passes its reason here).
+    let help: String?
 
     @Namespace private var highlight
 
     init(_ label: String, selection: Binding<T>, options: [T],
-         title: @escaping (T) -> String, accent: Color = LyraDS.Palette.magenta) {
+         title: @escaping (T) -> String, accent: Color = LyraDS.Palette.magenta,
+         help: String? = nil) {
         self.label = label
         self._selection = selection
         self.options = options
         self.title = title
         self.accent = accent
+        self.help = help
     }
 
     /// Next index after moving `delta` steps; clamped to `0...count-1`, never wraps.
@@ -67,7 +71,7 @@ struct LyraSegmentedControl<T: Hashable>: View {
             @unknown default: break
             }
         }
-        .help("\(label): \(title(selection))")
+        .help(help ?? "\(label): \(title(selection))")
     }
 
     private func select(_ option: T) {

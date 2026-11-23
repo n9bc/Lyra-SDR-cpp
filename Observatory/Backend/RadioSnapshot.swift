@@ -11,9 +11,33 @@ enum AGCMode: String, CaseIterable, Sendable {
     case off = "Off", fast = "Fast", med = "Med", slow = "Slow"
 }
 
+extension RadioMode {
+    /// The mode after this one in `allCases` order, wrapping at the end.
+    nonisolated var next: RadioMode {
+        let all = Self.allCases
+        return all[((all.firstIndex(of: self) ?? 0) + 1) % all.count]
+    }
+}
+
+extension AGCMode {
+    /// Off, Fast, Med, Slow, then back to Off.
+    nonisolated var next: AGCMode {
+        let all = Self.allCases
+        return all[((all.firstIndex(of: self) ?? 0) + 1) % all.count]
+    }
+}
+
 enum ConnectionPhase: Equatable, Sendable {
     case disconnected, discovering, connecting, socketOpen, streaming, stalled
     case error(String)
+
+    /// The command the power control sends: connect while offline or failed, otherwise disconnect.
+    nonisolated var powerCommand: RadioCommand {
+        switch self {
+        case .disconnected, .error: .connect
+        default: .disconnect
+        }
+    }
 }
 
 enum TransmitState: Equatable, Sendable {
@@ -112,8 +136,6 @@ struct BandSnapshot: Equatable, Sendable {
 }
 
 struct FilterSnapshot: Equatable, Sendable {
-    var presets: [String]
-    var selectedPreset: String
     var rxLowHz: Int
     var txLowHz: Int
     var bwLocked: Bool
@@ -294,9 +316,7 @@ extension RadioSnapshot {
             bands: ["160", "80", "60", "40", "30", "20", "17", "15", "12", "10", "6", "WWV"],
             selectedBand: "40"),
         filter: FilterSnapshot(
-            presets: ["1.8k", "2.1k", "2.4k", "2.7k", "2.9k", "3.3k", "3.8k", "4.4k", "5.0k", "6.0k",
-                      "Var 1", "Var 2"],
-            selectedPreset: "2.7k", rxLowHz: 100, txLowHz: 100, bwLocked: true,
+            rxLowHz: 100, txLowHz: 100, bwLocked: true,
             txBandwidthLabel: "2.7 kHz"),
         display: DisplaySnapshot(
             spanLowHz: 7_060_000, spanHighHz: 7_200_000,
