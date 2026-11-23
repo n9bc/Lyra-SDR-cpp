@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Right console column: band, mode, filter, propagation. Local state only in Milestone 1.
+/// Right console column: band, mode, filter, propagation. Engine-owned selections render from the
+/// snapshot; only the band-list tab is local view state. Actions are empty in Milestone 1.
 struct BandModeColumnView: View {
     let snapshot: RadioSnapshot
 
@@ -17,25 +18,12 @@ struct BandModeColumnView: View {
 struct BandModeColumnContent: View {
     let snapshot: RadioSnapshot
 
+    /// Which band list is shown (Ham, BC, Gen…) is presentation only, so it stays local.
     @State private var tab: String
-    @State private var band: String
-    @State private var mode: RadioMode
-    @State private var preset: String
-    @State private var rxLow: String
-    @State private var txLow: String
-    @State private var bwLocked: Bool
-    @State private var txBandwidth: String
 
     init(snapshot: RadioSnapshot) {
         self.snapshot = snapshot
         _tab = State(initialValue: snapshot.band.selectedTab)
-        _band = State(initialValue: snapshot.band.selectedBand)
-        _mode = State(initialValue: snapshot.main.mode)
-        _preset = State(initialValue: snapshot.filter.selectedPreset)
-        _rxLow = State(initialValue: "\(snapshot.filter.rxLowHz) Hz")
-        _txLow = State(initialValue: "\(snapshot.filter.txLowHz) Hz")
-        _bwLocked = State(initialValue: snapshot.filter.bwLocked)
-        _txBandwidth = State(initialValue: snapshot.filter.txBandwidthLabel)
     }
 
     private static func color(_ q: PropagationQuality) -> Color {
@@ -63,6 +51,7 @@ struct BandModeColumnContent: View {
 
     private var bandSection: some View {
         VStack(alignment: .leading, spacing: 0) {
+            let band = snapshot.band.selectedBand
             ConsoleSectionHeader("Band", detail: Int(band) != nil ? "\(band) m" : band)
             HStack(spacing: 4) {
                 ForEach(snapshot.band.tabs, id: \.self) { name in
@@ -73,8 +62,8 @@ struct BandModeColumnContent: View {
             .padding(.bottom, 7)
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
                 ForEach(snapshot.band.bands, id: \.self) { name in
-                    ConsoleChip(title: name, help: "Band \(name)", kind: band == name ? .on : .plain,
-                                fullWidth: true) { band = name }
+                    ConsoleChip(title: name, help: "Band \(name)", kind: snapshot.band.selectedBand == name ? .on : .plain,
+                                fullWidth: true)
                 }
             }
         }
@@ -84,11 +73,11 @@ struct BandModeColumnContent: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("Mode", detail: mode.rawValue)
+            ConsoleSectionHeader("Mode", detail: snapshot.main.mode.rawValue)
             LazyVGrid(columns: consoleColumns(5), spacing: 5) {
                 ForEach(RadioMode.allCases, id: \.self) { m in
-                    ConsoleChip(title: m.rawValue, help: "Mode \(m.rawValue)", kind: mode == m ? .on : .plain,
-                                fullWidth: true) { mode = m }
+                    ConsoleChip(title: m.rawValue, help: "Mode \(m.rawValue)", kind: snapshot.main.mode == m ? .on : .plain,
+                                fullWidth: true)
                 }
             }
         }
@@ -120,30 +109,30 @@ struct BandModeColumnContent: View {
             ConsoleSectionHeader("Filter", detail: String(format: "RX %.1f kHz", Double(snapshot.main.filterHz) / 1000))
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
                 ForEach(snapshot.filter.presets, id: \.self) { name in
-                    ConsoleChip(title: name, help: "Filter \(name)", kind: preset == name ? .on : .plain,
-                                fullWidth: true) { preset = name }
+                    ConsoleChip(title: name, help: "Filter \(name)", kind: snapshot.filter.selectedPreset == name ? .on : .plain,
+                                fullWidth: true)
                 }
             }
             Grid(horizontalSpacing: 6, verticalSpacing: 0) {
                 GridRow {
                     fieldLabel("RX lo").frame(width: 44, alignment: .leading)
-                    field($rxLow, "RX low cut")
+                    field(.constant("\(snapshot.filter.rxLowHz) Hz"), "RX low cut")
                     fieldLabel("TX lo").frame(width: 44, alignment: .leading)
-                    field($txLow, "TX low cut")
+                    field(.constant("\(snapshot.filter.txLowHz) Hz"), "TX low cut")
                 }
             }
             .padding(.top, 8)
             HStack(spacing: 5) {
-                Button { bwLocked.toggle() } label: {
+                Button {} label: {
                     HStack(spacing: 5) { Image(systemName: "link").font(.system(size: 11)); Text("BW lock") }
                 }
-                .buttonStyle(ConsoleChipButtonStyle(bwLocked ? .on : .plain))
+                .buttonStyle(ConsoleChipButtonStyle(snapshot.filter.bwLocked ? .on : .plain))
                 .accessibilityLabel("Lock TX bandwidth to RX")
                 .help("Lock TX bandwidth to RX")
                 Spacer(minLength: 0)
                 fieldLabel("TX BW")
-                ConsoleMenuChip(label: txBandwidth, help: "TX bandwidth", options: txBandwidthOptions,
-                                selection: $txBandwidth)
+                ConsoleMenuChip(label: snapshot.filter.txBandwidthLabel, help: "TX bandwidth",
+                                options: txBandwidthOptions, selection: .constant(snapshot.filter.txBandwidthLabel))
             }
             .padding(.top, 6)
         }

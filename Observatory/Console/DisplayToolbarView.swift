@@ -1,13 +1,11 @@
 import SwiftUI
 
 /// Display toolbar (mockup centre panel, top row): zoom, wheel step, peak hold and display toggles.
-/// Actions are empty in Milestone 1; the chips reflect the snapshot. Falls back to a compact
+/// Actions are empty in Milestone 1; every selection renders from the snapshot (the engine owns
+/// them), so nothing here can disagree with the rest of the console. Falls back to a compact
 /// variant, then to horizontal scrolling, when the panel is narrow.
 struct DisplayToolbarView: View {
     let display: DisplaySnapshot
-    @State private var fineZoom: Double
-    @State private var wheel: String
-    @State private var peak: String
 
     static let height: CGFloat = 36
     nonisolated static let zoomSteps = [1, 2, 4, 8, 16]
@@ -16,10 +14,12 @@ struct DisplayToolbarView: View {
 
     init(display: DisplaySnapshot) {
         self.display = display
-        _fineZoom = State(initialValue: display.zoom)
-        _wheel = State(initialValue: display.wheelStepHz >= 1000
-                       ? "\(display.wheelStepHz / 1000) kHz" : "\(display.wheelStepHz) Hz")
-        _peak = State(initialValue: display.peakHold)
+    }
+
+    /// "500 Hz", "1 kHz", "2.5 kHz": the wheel step as the menu lists it.
+    nonisolated static func wheelLabel(hz: Int) -> String {
+        guard hz >= 1000 else { return "\(hz) Hz" }
+        return String(format: "%g kHz", Double(hz) / 1000)
     }
 
     private func label(_ text: String) -> some View {
@@ -34,19 +34,21 @@ struct DisplayToolbarView: View {
                             kind: abs(display.zoom - Double(z)) < 0.01 ? .on : .plain)
             }
             if !compact {
-                Slider(value: $fineZoom, in: 1...16)
+                Slider(value: .constant(display.zoom), in: 1...16)
                     .controlSize(.small).tint(LyraDS.Palette.cyan).frame(width: 90)
-                    .accessibilityLabel("Fine zoom").accessibilityValue(String(format: "%.1f times", fineZoom))
+                    .accessibilityLabel("Fine zoom").accessibilityValue(String(format: "%.1f times", display.zoom))
                     .help("Fine zoom")
             }
             Text(String(format: "%.1f\u{00D7}", display.zoom))
                 .font(.system(size: 12, design: .monospaced)).foregroundStyle(LyraDS.Palette.textPrimary)
                 .frame(width: 34, alignment: .trailing)
             if !compact { label("Wheel") }
-            ConsoleMenuChip(label: wheel, help: "Wheel step", options: Self.wheelOptions, selection: $wheel)
+            ConsoleMenuChip(label: Self.wheelLabel(hz: display.wheelStepHz), help: "Wheel step",
+                            options: Self.wheelOptions, selection: .constant(Self.wheelLabel(hz: display.wheelStepHz)))
             ConsoleChip(title: "Exact", help: "Exact tuning")
             if !compact { label("Peak") }
-            ConsoleMenuChip(label: peak, help: "Peak hold", options: Self.peakOptions, selection: $peak)
+            ConsoleMenuChip(label: display.peakHold, help: "Peak hold", options: Self.peakOptions,
+                            selection: .constant(display.peakHold))
             ConsoleChip(title: "Avg", help: "Spectrum averaging", kind: display.averaging ? .on : .plain)
             ConsoleChip(title: "Spots", help: "Show spots")
             ConsoleChip(title: "Band plan", help: "Show band plan", kind: display.bandPlanVisible ? .on : .plain)
