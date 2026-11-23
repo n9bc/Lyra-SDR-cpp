@@ -112,12 +112,14 @@ private final class FakeFacade: RadioFacade {
     var vfoBHz: UInt32 = 7_100_000
     var callback: (@MainActor () -> Void)?
     var startedIp: String?
+    let savedRadioIp = "10.0.0.5"
 
     func setRx1FreqHz(_ hz: UInt32) { rx1FreqHz = hz; callback?() }
     func setVfoBHz(_ hz: UInt32) { vfoBHz = hz; callback?() }
     func setMox(_ on: Bool) { moxActive = on; callback?() }
     func setSplitEnabled(_ on: Bool) { splitEnabled = on; callback?() }
     func start(withIp ip: String) { startedIp = ip; isRunning = true; callback?() }
+    func startSavedRadio() { start(withIp: savedRadioIp) }
     func stop() { isRunning = false; callback?() }
     func observeRadio(_ onChange: @escaping @MainActor () -> Void) { callback = onChange }
 }
@@ -159,7 +161,7 @@ final class RadioBridgeTests: XCTestCase {
         XCTAssertTrue(fake.moxActive)
         XCTAssertTrue(bridge.moxActive)
         bridge.start()
-        XCTAssertEqual(fake.startedIp, RadioBridge.defaultRadioIp)
+        XCTAssertEqual(fake.startedIp, fake.savedRadioIp)
         XCTAssertTrue(bridge.isRunning)
         bridge.stop()
         XCTAssertFalse(bridge.isRunning)

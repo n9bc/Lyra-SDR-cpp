@@ -1498,23 +1498,15 @@ int main(int argc, char *argv[])
                      wx, &lyra::wx::WxService::reloadConfig);
     qInfo("[startup] services ready — building main window");
 #if LYRA_OBSERVATORY
-    {
-        // Observatory path: MainWindow (and its ~900 lines of post-construct
-        // wiring below) is skipped.  MeterModel is normally a MainWindow
-        // member, so it is built here for the facade.
-        auto *meterModel = new lyra::ui::MeterModel(stream, wdspEngine, &app);
-        void *facade = lyra_create_engine_facade(
-            static_cast<void *>(stream), static_cast<void *>(wdspEngine),
-            static_cast<void *>(meterModel));
-        (void)lyra_show_observatory_window(facade);
-        qInfo("[startup] Observatory window shown");
-        const int obsRc = app.exec();
-        g_shutdown_complete.store(true, std::memory_order_release);
-        // Known and intentional for P0: this early return skips destroy_cmaster()
-        // and the other post-exec teardown; process exit handles
-        // cleanup. Add proper teardown here when Observatory matures.
-        return obsRc;
-    }
+    // Observatory hybrid mode: create the bridge facade now (backend objects
+    // already exist), but do NOT early-return.  MainWindow constructs hidden
+    // below and runs the full engine init (wdsp, create_rnet, auto-connect)
+    // so the radio actually works.  Observatory is the visible window; Qt
+    // handles engine wiring and settings behind the scenes.
+    auto *obsMeterModel = new lyra::ui::MeterModel(stream, wdspEngine, &app);
+    void *obsFacade = lyra_create_engine_facade(
+        static_cast<void *>(stream), static_cast<void *>(wdspEngine),
+        static_cast<void *>(obsMeterModel));
 #endif
     auto *hidVfo = new lyra::ui::HidVfoWheel(&app);
     auto *win = new lyra::ui::MainWindow(discovery, stream, wdsp,
@@ -1525,6 +1517,17 @@ int main(int argc, char *argv[])
     // Single-instance raise channel: a later launch of the same instanceId
     // pings this server (see acquireSingleInstance) instead of starting a
     // second radio; bring the existing window to the front.
+#if LYRA_OBSERVATORY
+    // Observatory hybrid: show the SwiftUI window now that MainWindow
+    // (hidden) and all its services exist.  Single-instance pings raise
+    // the Observatory window, not the hidden Qt one.
+    (void)lyra_show_observatory_window(obsFacade);
+    lyra_set_observatory_host(static_cast<void *>(win));
+    qInfo("[startup] Observatory window shown (hybrid mode — Qt hidden)");
+    lyra::ui::startSingleInstanceServer(siServerName, win, []() {
+        lyra_raise_observatory_window();
+    });
+#else
     lyra::ui::startSingleInstanceServer(siServerName, win, [win]() {
         win->setWindowState((win->windowState() & ~Qt::WindowMinimized)
                             | Qt::WindowActive);
@@ -1532,6 +1535,7 @@ int main(int argc, char *argv[])
         win->raise();
         win->activateWindow();
     });
+#endif
     // Defer showing the main window when a one-time FFTW-wisdom BUILD is
     // pending (the build runs in-process below, behind a modal 'please
     // wait').  We must NOT present a fully-rendered, ready-looking Lyra
@@ -1541,8 +1545,10 @@ int main(int argc, char *argv[])
     // exists (the normal case) show now; otherwise the singleShot below
     // reveals the window once the build finishes.
     const bool wisdomReady = lyra::dsp::WdspNative::wisdomExists();
+#if !LYRA_OBSERVATORY
     if (wisdomReady)
         win->show();
+#endif
 
     // Crash-safe graphics fallback (see the RHI block near the top of main):
     // we survived UI construction — clear the "startup pending" sentinel a
@@ -1584,6 +1590,7 @@ int main(int argc, char *argv[])
     // so the main window paints first, then the dialog pops over it).  A layout
     // reset is the more informative thing to tell the operator when it happened,
     // so it takes precedence over the graphics-safe-mode notice.
+#if !LYRA_OBSERVATORY
     if (layoutResetThisLaunch) {
         QTimer::singleShot(500, win, [win]() {
             QMessageBox box(win);
@@ -1622,6 +1629,7 @@ int main(int argc, char *argv[])
             }
         });
     }
+#endif
 
     // #49 v3 — the TX DSP rack models now exist (MainWindow members).
     // (1) Flag the active profile ● modified when any rack control changes,
@@ -1700,11 +1708,13 @@ int main(int argc, char *argv[])
             // main window we deferred so the user never saw a ready-
             // looking Lyra behind the 'please wait' modal.  No-op when
             // wisdom already existed (window shown at construction).
+#if !LYRA_OBSERVATORY
             if (!wisdomReady) {
                 win->show();
                 win->raise();
                 win->activateWindow();
             }
+#endif
 
             // Step 3c-ii: with the DLL loaded + wisdom in place, open
             // RX1 as a live WDSP channel.  Channel-lifecycle proof
@@ -2446,6 +2456,7 @@ int main(int argc, char *argv[])
             }
         }
 
+#if !LYRA_OBSERVATORY
         // Safety net: if the window was deferred for a wisdom build but
         // the DLL failed to load (so ensureWisdom never ran and never
         // revealed it), reveal it here so the app is still visible/usable.
@@ -2454,6 +2465,7 @@ int main(int argc, char *argv[])
             win->raise();
             win->activateWindow();
         }
+#endif
 
         // Startup companions (SDRLogger+, generic slots, Apps auto-start).
         // Arm ONLY after ensureWisdom() + create_rnet() (or a failed DLL

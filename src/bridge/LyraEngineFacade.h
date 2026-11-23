@@ -83,7 +83,11 @@ typedef void (^LyraMeterCallback)(LyraEngineFacade *facade);
 - (void)setMox:(BOOL)on;
 - (void)setSplitEnabled:(BOOL)on;
 - (void)startWithIp:(NSString *)ip;
+- (void)startSavedRadio;
 - (void)stop;
+
+/// Last-connected radio IP from the rig registry / QSettings.
+@property (nonatomic, readonly, copy) NSString *savedRadioIp;
 
 #pragma mark DSP actions
 

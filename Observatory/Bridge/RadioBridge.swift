@@ -20,7 +20,9 @@ protocol RadioFacade: AnyObject {
     func setMox(_ on: Bool)
     func setSplitEnabled(_ on: Bool)
     func start(withIp ip: String)
+    func startSavedRadio()
     func stop()
+    var savedRadioIp: String { get }
 
     /// Registers the single radio-state-changed callback (main thread). The
     /// callback re-reads the properties above.
@@ -43,10 +45,6 @@ final class RadioBridge {
     /// Ceiling for tunable frequency; keeps UInt32.max (a common sentinel) out of the
     /// state downstream consumers read. Real band-edge limits belong to the backend.
     static let maxFrequencyHz: UInt32 = 500_000_000
-
-    /// Default radio address used by `start()` in facade mode.
-    // TODO: take the HL2 address from settings instead of this placeholder.
-    static let defaultRadioIp = "192.168.1.100"
 
     @ObservationIgnored private let facade: (any RadioFacade)?
 
@@ -91,7 +89,7 @@ final class RadioBridge {
     }
 
     func start() {
-        if let facade { facade.start(withIp: Self.defaultRadioIp) } else { isRunning = true }
+        if let facade { facade.startSavedRadio() } else { isRunning = true }
     }
 
     func stop() {

@@ -6,7 +6,10 @@
 #include "bands.h"
 #include "hl2_stream.h"
 #include "metermodel.h"
+#include "rig/RigRegistry.h"
 #include "wdsp_engine.h"
+
+#include <QSettings>
 
 #include <QMetaObject>
 #include <QObject>
@@ -196,6 +199,22 @@ using lyra::ui::MeterModel;
 - (void)startWithIp:(NSString *)ip
 {
     if (_stream) _stream->open(QString::fromNSString(ip));
+}
+
+- (void)startSavedRadio
+{
+    NSString *ip = self.savedRadioIp;
+    if (ip.length > 0)
+        [self startWithIp:ip];
+}
+
+- (NSString *)savedRadioIp
+{
+    QString ip = lyra::rig::registry::rig(
+        lyra::rig::registry::activeRigId()).lastIp;
+    if (ip.isEmpty())
+        ip = QSettings().value(QStringLiteral("radio/lastIp")).toString();
+    return ip.toNSString();
 }
 
 - (void)stop { if (_stream) _stream->close(); }
