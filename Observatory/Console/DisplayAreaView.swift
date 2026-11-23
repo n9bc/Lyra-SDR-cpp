@@ -1,0 +1,141 @@
+import SwiftUI
+
+/// Vertical budget for the display panel: the terrain never drops below 120 pt, the spectrum
+/// and waterfall give way first when the panel is short.
+struct DisplayAreaLayout: Equatable {
+    var spectrum: CGFloat
+    var waterfall: CGFloat
+    var terrain: CGFloat
+
+    nonisolated static let gutter: CGFloat = 28
+    nonisolated static let scaleHeight: CGFloat = 18
+    nonisolated static let minTerrain: CGFloat = 120
+    nonisolated static let minSpectrum: CGFloat = 80
+    nonisolated static let minWaterfall: CGFloat = 24
+    nonisolated static let idealSpectrum: CGFloat = 218
+    nonisolated static let idealWaterfall: CGFloat = 132
+    /// Toolbar, frequency scale and terrain header (the fixed parts).
+    nonisolated static let fixed: CGFloat = 36 + scaleHeight + 32
+
+    nonisolated static func compute(height: CGFloat) -> DisplayAreaLayout {
+        let avail = max(height - fixed, 0)
+        let minSum = minTerrain + minSpectrum + minWaterfall
+        if avail <= minSum {
+            // Compress proportionally; the terrain keeps its floor while there is room for it.
+            let terrain = min(minTerrain, avail * minTerrain / minSum)
+            let rest = max(avail - terrain, 0)
+            let sp = rest * minSpectrum / (minSpectrum + minWaterfall)
+            return DisplayAreaLayout(spectrum: sp, waterfall: rest - sp, terrain: terrain)
+        }
+        var extra = avail - minSum
+        let sp = min(extra, idealSpectrum - minSpectrum); extra -= sp
+        let wf = min(extra, idealWaterfall - minWaterfall); extra -= wf
+        return DisplayAreaLayout(spectrum: minSpectrum + sp, waterfall: minWaterfall + wf,
+                                 terrain: minTerrain + extra)
+    }
+}
+
+/// Centre display panel: toolbar, dB scale, Metal spectrum with overlays, frequency scale,
+/// sample waterfall and audio terrain. Reads `SpectrumBridge` from the environment (via
+/// `NeonSpectrumView`). Sample imagery only in Milestone 1.
+struct DisplayAreaView: View {
+    let display: DisplaySnapshot
+    let main: ReceiverSnapshot
+
+    init(display: DisplaySnapshot, main: ReceiverSnapshot) {
+        self.display = display
+        self.main = main
+    }
+
+    nonisolated static let dbLabels = ["\u{2212}40", "\u{2212}60", "\u{2212}80", "\u{2212}100", "\u{2212}120"]
+
+    private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
+        VStack(spacing: 0) {
+            ForEach(labels.indices, id: \.self) { i in
+                Text(labels[i]).font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(LyraDS.Palette.chipDimText).lineLimit(1).minimumScaleFactor(0.6)
+                if i < labels.count - 1 { Spacer(minLength: 0) }
+            }
+        }
+        .padding(padding)
+        .frame(width: DisplayAreaLayout.gutter, alignment: .trailing)
+        .accessibilityHidden(true)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let lay = DisplayAreaLayout.compute(height: geo.size.height)
+            let w = max(geo.size.width - DisplayAreaLayout.gutter, 0)
+            let axis = FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: w)
+            VStack(spacing: 0) {
+                DisplayToolbarView(display: display)
+                HStack(spacing: 0) {
+                    gutterLabels(Self.dbLabels, padding: EdgeInsets(top: 22, leading: 0, bottom: 6, trailing: 3))
+                    ZStack(alignment: .topLeading) {
+                        NeonSpectrumView()
+                        SpectrumOverlays(display: display, main: main, axis: axis)
+                    }
+                    .frame(width: w, height: lay.spectrum)
+                    .clipped()
+                }
+                .frame(height: lay.spectrum)
+                frequencyScale(axis)
+                HStack(spacing: 0) {
+                    gutterLabels([":25", ":15", ":05"], padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
+                    ZStack(alignment: .topLeading) {
+                        SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
+                                             signals: display.spots.map(\.frequencyHz) + [main.frequencyHz])
+                        Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
+                            .frame(width: 1).offset(x: axis.x(for: main.frequencyHz))
+                    }
+                    .frame(width: w, height: lay.waterfall)
+                    .clipped()
+                }
+                .frame(height: lay.waterfall)
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: DisplayAreaLayout.gutter)
+                    AudioTerrainView(display: display)
+                }
+                .frame(height: lay.terrain + 32)
+            }
+        }
+        .background(LyraDS.Palette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(LyraDS.Palette.panelBorder, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Display")
+    }
+
+    private func frequencyScale(_ axis: FrequencyAxis) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(axis.ticks(every: 20_000).filter { $0.x > 18 && $0.x < axis.width - 18 }, id: \.hz) { tick in
+                Text(String(format: "%.3f", Double(tick.hz) / 1_000_000))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1).fixedSize()
+                    .position(x: tick.x, y: DisplayAreaLayout.scaleHeight / 2)
+            }
+        }
+        .frame(width: axis.width, height: DisplayAreaLayout.scaleHeight, alignment: .topLeading)
+        .background(LyraDS.Palette.barFill)
+        .overlay(alignment: .top) { Rectangle().fill(LyraDS.Palette.border).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(LyraDS.Palette.border).frame(height: 1) }
+        .padding(.leading, DisplayAreaLayout.gutter)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+#Preview("Display 940x620") {
+    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main)
+        .environment(SpectrumBridge.mock())
+        .frame(width: 940, height: 620)
+        .padding(8).background(LyraDS.Palette.void)
+}
+
+#Preview("Display 648x330") {
+    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main)
+        .environment(SpectrumBridge.mock())
+        .frame(width: 648, height: 330)
+        .padding(8).background(LyraDS.Palette.void)
+}
