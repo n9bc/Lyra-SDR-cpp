@@ -41,6 +41,13 @@ struct ReceiverDisplayStack: View {
             .accessibilityLabel("\(text.capitalized) receiver display")
     }
 
+    /// Time labels that fit the pane: all three when tall, the middle one when short, none when squeezed.
+    nonisolated static func waterfallGutterLabels(height: CGFloat) -> [String] {
+        if height >= 56 { return [":25", ":15", ":05"] }
+        if height >= 20 { return [":15"] }
+        return []
+    }
+
     private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
         VStack(spacing: 0) {
             ForEach(labels.indices, id: \.self) { i in
@@ -51,6 +58,8 @@ struct ReceiverDisplayStack: View {
         }
         .padding(padding)
         .frame(width: DisplayAreaLayout.gutter, alignment: .trailing)
+        .frame(maxHeight: waterfallHeight)
+        .clipped()
         .accessibilityHidden(true)
     }
 
@@ -79,8 +88,9 @@ struct ReceiverDisplayStack: View {
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0)
             }
-            .overlay(alignment: .topLeading) {
-                if let label { tag(label).padding(.top, SpectrumOverlays.bandPlanHeight + 2) }
+            .overlay(alignment: .bottomLeading) {
+                // Bottom, right of the dB labels: clear of the band-plan row, spot labels and the Sample marker.
+                if let label { tag(label).padding(.leading, 40).padding(.bottom, 2) }
             }
             .overlay(alignment: .topTrailing) {
                 if sampleSpectrum { sampleMarker.padding(.trailing, 2) }
@@ -93,7 +103,7 @@ struct ReceiverDisplayStack: View {
 
     private func waterfall(axis: FrequencyAxis, width w: CGFloat) -> some View {
         HStack(spacing: 0) {
-            gutterLabels([":25", ":15", ":05"], padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
+            gutterLabels(Self.waterfallGutterLabels(height: waterfallHeight), padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
             ZStack(alignment: .topLeading) {
                 SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
                                      signals: display.spots.map(\.frequencyHz) + [receiver.frequencyHz])
