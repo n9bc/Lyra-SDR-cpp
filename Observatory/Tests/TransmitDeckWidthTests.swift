@@ -14,3 +14,20 @@ import SwiftUI
         XCTAssertLessThanOrEqual(ideal, available - 30, "ideal \(ideal) vs available \(available)")
     }
 }
+
+@MainActor final class TransmitDeckDialTests: XCTestCase {
+    /// Dials must keep their natural width (value and label fully shown) in the narrowest level.
+    func testDialsKeepIntrinsicWidth() {
+        let s = RadioSnapshot.sample
+        let deck = TransmitDeckView(transmit: s.transmit, keyer: s.keyer)
+            .deck(showCaption: false, protectionMenu: true)
+        let host = NSHostingView(rootView: deck.frame(width: 1236, height: 120))
+        host.frame = NSRect(x: 0, y: 0, width: 1236, height: 120)
+        host.layoutSubtreeIfNeeded()
+        let natural = NSHostingView(rootView: LyraRotaryDial("Tune pwr", value: .constant(50), in: 0...100,
+                                                              unit: "%").fixedSize()).fittingSize.width
+        XCTAssertGreaterThanOrEqual(natural, 64)
+        // Total deck must still fit with all four dials at natural width.
+        XCTAssertLessThanOrEqual(NSHostingView(rootView: deck).fittingSize.width, 1236 - 30)
+    }
+}

@@ -61,16 +61,20 @@ struct TransmitDeckView: View {
             HStack(spacing: 10) {
                 LyraRotaryDial("Drive", value: $drive, in: 0...100, step: 1, unit: "%", defaultValue: 100)
                     .help("Drive level")
+                    .fixedSize()
                 LyraRotaryDial("Tune pwr", value: $tune, in: 0...100, step: 1, unit: "%", defaultValue: 50)
                     .help("Tune power")
+                    .fixedSize()
                 LyraRotaryDial("Mic", value: $mic, in: -40...10, step: 1,
                                accent: LyraDS.Palette.magenta, defaultValue: 0,
                                format: ConsoleFormat.signedDb)
                     .help("Microphone gain")
+                    .fixedSize()
                 LyraRotaryDial("Monitor", value: $monitor, in: 0...1, step: 0.01,
                                accent: LyraDS.Palette.purple, defaultValue: 0.4,
                                format: { String(format: "%.2f", $0) })
                     .help("Transmit monitor level")
+                    .fixedSize()
             }
             divider
             if protectionMenu {
