@@ -6,6 +6,18 @@ struct FilterPresetEntry: Equatable, Sendable {
     let hz: Int
     let label: String
     let isCustom: Bool
+
+    /// Short title for a narrow chip: the label, starred when it is a custom width.
+    nonisolated var chipTitle: String {
+        isCustom ? FilterPresets.label(hz) + "*" : label
+    }
+
+    /// The chip's tooltip and accessibility label.
+    nonisolated var chipHelp: String {
+        guard isCustom else { return "Filter \(label)" }
+        let width = FilterPresets.label(hz)
+        return "Custom width \(hz >= 1000 ? width + "Hz" : width)"
+    }
 }
 
 /// The engine's per-mode filter bandwidth presets (`src/qml/FilterPresets.js`), so the console

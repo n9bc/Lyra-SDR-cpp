@@ -136,7 +136,7 @@ struct BandModeColumnContent: View {
                 focused: snapshot.session.focused))
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
                 ForEach(FilterPresets.entries(mode: focused.mode, currentHz: focused.filterHz), id: \.hz) { entry in
-                    ConsoleChip(title: entry.label, help: "Filter \(entry.label)",
+                    ConsoleChip(title: entry.chipTitle, help: entry.chipHelp,
                                 kind: focused.filterHz == entry.hz ? .on : .plain, fullWidth: true,
                                 status: capabilities.control(.filterPreset)) {
                         send(.setFilter(snapshot.session.focused, hz: entry.hz))

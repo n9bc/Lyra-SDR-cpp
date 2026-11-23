@@ -34,6 +34,13 @@ final class FilterPresetsTests: XCTestCase {
         XCTAssertEqual(e.count, 12)
     }
 
+    func testChipTitleAndHelpStayShort() {
+        let e = FilterPresets.entries(mode: .usb, currentHz: 2750)
+        XCTAssertEqual(e[0].chipTitle, "2.8 k*"); XCTAssertEqual(e[0].chipHelp, "Custom width 2.8 kHz")
+        XCTAssertEqual(e[1].chipTitle, "1.5 k"); XCTAssertEqual(e[1].chipHelp, "Filter 1.5 k")
+        XCTAssertEqual(FilterPresets.entries(mode: .cwu, currentHz: 75)[0].chipHelp, "Custom width 75 Hz")
+    }
+
     func testNoCustomEntryForAPreset() {
         let e = FilterPresets.entries(mode: .usb, currentHz: 2700)
         XCTAssertEqual(e.map(\.hz), FilterPresets.presets(for: .usb))
