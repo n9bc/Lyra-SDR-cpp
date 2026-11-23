@@ -41,10 +41,35 @@ struct DisplayAreaLayout: Equatable {
 struct DisplayAreaView: View {
     let display: DisplaySnapshot
     let main: ReceiverSnapshot
+    /// Shows the "Sample" marker on the spectrum (see `showsSampleMarker`).
+    let sampleSpectrum: Bool
 
-    init(display: DisplaySnapshot, main: ReceiverSnapshot) {
+    init(display: DisplaySnapshot, main: ReceiverSnapshot, sampleSpectrum: Bool) {
         self.display = display
         self.main = main
+        self.sampleSpectrum = sampleSpectrum
+    }
+
+    /// Width of the "Sample" marker; the band plan stops short of it so the two never overlap.
+    static let sampleMarkerWidth: CGFloat = 56
+
+    /// Truthfulness: the spectrum is marked as sample whenever the backend mocks it.
+    nonisolated static func showsSampleMarker(_ capabilities: BackendCapabilities) -> Bool {
+        capabilities.status(.spectrum) == .mocked
+    }
+
+    private var sampleMarker: some View {
+        Text("Sample")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(LyraDS.Palette.yellow)
+            .lineLimit(1)
+            .frame(width: Self.sampleMarkerWidth, height: SpectrumOverlays.bandPlanHeight)
+            .background(Capsule().fill(LyraDS.Palette.void.opacity(0.85)))
+            .background(Capsule().fill(LyraDS.Palette.yellow.opacity(0.08)))
+            .overlay(Capsule().strokeBorder(LyraDS.Palette.yellow, lineWidth: 1))
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel("Sample spectrum")
     }
 
     private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
@@ -72,7 +97,11 @@ struct DisplayAreaView: View {
                     Color.clear.frame(width: DisplayAreaLayout.gutter)
                     ZStack(alignment: .topLeading) {
                         NeonSpectrumView()
-                        SpectrumOverlays(display: display, main: main, axis: axis)
+                        SpectrumOverlays(display: display, main: main, axis: axis,
+                                         bandPlanTrailingInset: sampleSpectrum ? Self.sampleMarkerWidth + 4 : 0)
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if sampleSpectrum { sampleMarker.padding(.trailing, 2) }
                     }
                     .frame(width: w, height: lay.spectrum)
                     .clipped()
@@ -126,14 +155,14 @@ struct DisplayAreaView: View {
 }
 
 #Preview("Display 940x620") {
-    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main)
+    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main, sampleSpectrum: true)
         .environment(SpectrumBridge.mock())
         .frame(width: 940, height: 620)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Display 648x330") {
-    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main)
+    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main, sampleSpectrum: true)
         .environment(SpectrumBridge.mock())
         .frame(width: 648, height: 330)
         .padding(8).background(LyraDS.Palette.void)

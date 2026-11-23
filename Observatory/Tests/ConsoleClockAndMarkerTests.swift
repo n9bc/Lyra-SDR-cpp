@@ -1,0 +1,29 @@
+import XCTest
+@testable import Observatory
+
+final class ConsoleClockAndMarkerTests: XCTestCase {
+    func testClockTextFormatsTheGivenDate() {
+        let d = Date(timeIntervalSince1970: 1_795_425_449) // 2026-11-23 09:17:29 UTC
+        let t = TopBarView.clockText(d, localZone: TimeZone(identifier: "Europe/Oslo")!)
+        XCTAssertEqual(t.utc, "09:17:29Z")
+        XCTAssertEqual(t.local, "10:17:29 local")
+    }
+
+    func testClockTextFollowsTheDateNotTheSnapshot() {
+        let d = Date(timeIntervalSince1970: 1_795_425_449 + 3_661)
+        let t = TopBarView.clockText(d, localZone: .gmt)
+        XCTAssertEqual(t.utc, "10:18:30Z")
+        XCTAssertEqual(t.local, "10:18:30 local")
+    }
+
+    func testSampleMarkerFollowsTheSpectrumCapability() {
+        XCTAssertTrue(DisplayAreaView.showsSampleMarker(.allMocked))
+        XCTAssertTrue(DisplayAreaView.showsSampleMarker(
+            BackendCapabilities(statuses: [.spectrum: .mocked], fallback: .available)))
+        XCTAssertFalse(DisplayAreaView.showsSampleMarker(
+            BackendCapabilities(statuses: [.spectrum: .available], fallback: .mocked)))
+        XCTAssertFalse(DisplayAreaView.showsSampleMarker(BackendCapabilities(fallback: .available)))
+        XCTAssertFalse(DisplayAreaView.showsSampleMarker(
+            BackendCapabilities(statuses: [.spectrum: .unavailable("No stream")], fallback: .available)))
+    }
+}

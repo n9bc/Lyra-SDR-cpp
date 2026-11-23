@@ -39,10 +39,13 @@ struct PowerChipModel: Equatable, Sendable {
 struct TopBarView: View {
     let snapshot: RadioSnapshot
     let capabilities: BackendCapabilities
+    /// Fixed time for previews and tests only; nil (the app) shows the current time.
+    let clockOverride: Date?
 
-    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities) {
+    init(snapshot: RadioSnapshot, capabilities: BackendCapabilities, clockOverride: Date? = nil) {
         self.snapshot = snapshot
         self.capabilities = capabilities
+        self.clockOverride = clockOverride
     }
 
     private static let txDSP = ["Speech", "EQ", "Combinator", "Plating"]
@@ -177,19 +180,28 @@ struct TopBarView: View {
         }
     }
 
+    /// UTC line ("09:17:29Z") and local line ("10:17:29 local") for `date`.
+    nonisolated static func clockText(_ date: Date, localZone: TimeZone) -> (utc: String, local: String) {
+        (ConsoleFormat.clock(date, in: localZone, utc: true),
+         "\(ConsoleFormat.clock(date, in: localZone, utc: false)) local")
+    }
+
+    /// Live clocks, ticking once a second. "Local" is this Mac's time zone.
     private var clocks: some View {
-        let t = snapshot.telemetry
-        return VStack(alignment: .trailing, spacing: 0) {
-            Text(ConsoleFormat.clock(t.utc, in: t.timeZone, utc: true))
-                .font(.system(size: 15, design: .monospaced))
-                .foregroundStyle(LyraDS.Palette.cyan)
-                .shadow(color: LyraDS.Palette.cyan.opacity(0.5), radius: 4)
-            Text("\(ConsoleFormat.clock(t.utc, in: t.timeZone, utc: false)) local")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(LyraDS.Palette.yellow)
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let text = Self.clockText(clockOverride ?? context.date, localZone: .current)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(text.utc)
+                    .font(.system(size: 15, design: .monospaced))
+                    .foregroundStyle(LyraDS.Palette.cyan)
+                    .shadow(color: LyraDS.Palette.cyan.opacity(0.5), radius: 4)
+                Text(text.local)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(LyraDS.Palette.yellow)
+            }
+            .fixedSize()
+            .accessibilityElement(children: .combine)
         }
-        .fixedSize()
-        .accessibilityElement(children: .combine)
     }
 
     private var trailing: some View {
@@ -256,7 +268,7 @@ struct TopBarView: View {
 }
 
 #Preview("Top bar, sample, 1280") {
-    TopBarView(snapshot: .sample, capabilities: .allMocked)
+    TopBarView(snapshot: .sample, capabilities: .allMocked, clockOverride: RadioSnapshot.sample.telemetry.utc)
         .frame(width: 1280)
         .background(LyraDS.Palette.void)
 }

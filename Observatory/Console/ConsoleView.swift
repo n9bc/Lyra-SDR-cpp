@@ -4,6 +4,9 @@ import SwiftUI
 /// transmit deck and status bar. Reads only the backend's snapshot and capabilities.
 struct ConsoleView: View {
     let backend: any RadioBackend
+    /// Held for the view's lifetime: `NeonSpectrumView`'s renderer binds to the first bridge it sees,
+    /// so creating one per body evaluation would leave it reading a stale instance.
+    @State private var spectrum = SpectrumBridge.mock()
 
     init(backend: any RadioBackend) {
         self.backend = backend
@@ -31,7 +34,8 @@ struct ConsoleView: View {
 
             HStack(spacing: gap) {
                 ReceiverColumnView(snapshot: snapshot)
-                DisplayAreaView(display: snapshot.display, main: snapshot.main)
+                DisplayAreaView(display: snapshot.display, main: snapshot.main,
+                                sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 BandModeColumnView(snapshot: snapshot)
             }
@@ -44,7 +48,7 @@ struct ConsoleView: View {
         }
         .padding(gap)
         .background(LyraDS.Palette.void)
-        .environment(SpectrumBridge.mock())
+        .environment(spectrum)
         .preferredColorScheme(.dark)
         .frame(minWidth: ConsoleLayout.minWindow.width, minHeight: ConsoleLayout.minWindow.height)
     }

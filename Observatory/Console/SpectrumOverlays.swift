@@ -6,6 +6,8 @@ struct SpectrumOverlays: View {
     let display: DisplaySnapshot
     let main: ReceiverSnapshot
     let axis: FrequencyAxis
+    /// Room kept clear at the right end of the band-plan strip (for the "Sample" marker).
+    var bandPlanTrailingInset: CGFloat = 0
 
     static let bandPlanHeight: CGFloat = 14
     nonisolated static let spotRowY: [CGFloat] = [26, 44]
@@ -73,7 +75,8 @@ struct SpectrumOverlays: View {
             }
             if display.bandPlanVisible {
                 ForEach(Array(display.bandPlan.enumerated()), id: \.offset) { _, seg in
-                    let x0 = max(axis.x(for: seg.lowHz), 0), x1 = min(axis.x(for: seg.highHz), w)
+                    let x0 = max(axis.x(for: seg.lowHz), 0)
+                    let x1 = min(axis.x(for: seg.highHz), w - bandPlanTrailingInset)
                     if x1 > x0 {
                         Text(seg.label)
                             .font(.system(size: 11, weight: .semibold))
