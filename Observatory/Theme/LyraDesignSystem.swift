@@ -49,6 +49,9 @@ enum LyraDS {
         static let chipDimFill = Color(hex: "#0F1220")
         static let vchipFill = Color(hex: "#0B0E1B")
         static let vchipBorder = Color.white.opacity(0.13)
+        static let zeroBeatTrack = Color(hex: "#171A2E")
+        static let sBoxBorder = Color.white.opacity(0.2)
+        static let sBoxBorderOff = Color.white.opacity(0.12)
 
         private static func stop(_ position: Float, _ hex: UInt32) -> GradientStop {
             GradientStop(
