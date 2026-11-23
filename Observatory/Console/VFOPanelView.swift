@@ -44,11 +44,13 @@ struct VFOPanelView: View {
     /// Placeholder zero-beat marker position; the bar shows only while the zero-beat control is sample data.
     private static let zeroBeatPosition = 0.46
 
-    private func chip(_ label: String, _ help: String, _ kind: VFOChipStyle = .plain) -> some View {
+    private func chip(_ label: String, _ help: String, _ kind: VFOChipStyle = .plain,
+                      status: CapabilityStatus = .available) -> some View {
         Button(label) {}
             .buttonStyle(VFOChipButtonStyle(kind))
+            .disabled(ConsoleAvailability.isDisabled(status))
             .accessibilityLabel(help)
-            .help(help)
+            .help(ConsoleAvailability.help(status, normal: help))
     }
 
     private func mono(_ size: CGFloat) -> Font { .system(size: size, design: .monospaced) }
@@ -114,8 +116,7 @@ struct VFOPanelView: View {
             HStack(spacing: 7) {
                 chip("AGC \(receiver.agc.rawValue.uppercased())", "Select AGC mode", on ? .cyan : .plain)
                 if on {
-                    chip("ZERO BEAT", "Zero-beat the received signal")
-                        .consoleAvailability(capabilities.control(.zeroBeat), help: "Zero-beat the received signal")
+                    chip("ZERO BEAT", "Zero-beat the received signal", status: capabilities.control(.zeroBeat))
                     if capabilities.control(.zeroBeat) == .mocked { zeroBeatBar }
                 }
             }

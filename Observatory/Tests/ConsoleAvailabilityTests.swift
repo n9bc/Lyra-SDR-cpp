@@ -74,3 +74,44 @@ final class ConsoleAvailabilityTests: XCTestCase {
                        "Follow off")
     }
 }
+
+final class ConsoleAvailabilityDecisionTests: XCTestCase {
+    func testOnlyUnavailableDisables() {
+        XCTAssertTrue(ConsoleAvailability.isDisabled(.unavailable("no")))
+        XCTAssertFalse(ConsoleAvailability.isDisabled(.mocked))
+        XCTAssertFalse(ConsoleAvailability.isDisabled(.available))
+    }
+
+    func testHelpIsReasonWhenUnavailableElseNormal() {
+        XCTAssertEqual(ConsoleAvailability.help(.unavailable("Not wired yet"), normal: "Tune carrier"), "Not wired yet")
+        XCTAssertEqual(ConsoleAvailability.help(.mocked, normal: "Tune carrier"), "Tune carrier")
+        XCTAssertEqual(ConsoleAvailability.help(.available, normal: "Tune carrier"), "Tune carrier")
+    }
+
+    func testChipDefaultsToAvailable() {
+        XCTAssertEqual(ConsoleChip(title: "A", help: "h").status, .available)
+    }
+
+    func testMeterReadingNilAndNotLive() {
+        let nilValue = TransmitMeters.reading(fraction: 0.5, readout: nil, live: true)
+        XCTAssertEqual(nilValue.fill, 0)
+        XCTAssertEqual(nilValue.text, "\u{2014}")
+        let idle = TransmitMeters.reading(fraction: 0.5, readout: "5.0 W", live: false)
+        XCTAssertEqual(idle.fill, 0)
+        XCTAssertEqual(idle.text, "\u{2014}")
+        let live = TransmitMeters.reading(fraction: 2, readout: "5.0 W", live: true)
+        XCTAssertEqual(live.fill, 1)
+        XCTAssertEqual(live.text, "5.0 W")
+    }
+
+    @MainActor func testStatusBarOmitsUnmeasuredBadges() {
+        var s = RadioSnapshot.sample
+        s.telemetry.tciClients = nil
+        s.telemetry.cpuPct = nil
+        s.telemetry.graphics = nil
+        let m = StatusBarModel(snapshot: s, capabilities: BackendCapabilities(fallback: .available))
+        XCTAssertEqual(m.items.map(\.kind), [.telemetry])
+        let full = StatusBarModel(snapshot: .sample, capabilities: BackendCapabilities(fallback: .available))
+        XCTAssertEqual(full.items.count, 4)
+    }
+}

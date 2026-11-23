@@ -38,8 +38,7 @@ struct TransmitProtectionGrid: View {
 
     private func toggle(_ title: String, _ help: String, _ isOn: Bool,
                         _ onKind: ConsoleChipStyle) -> some View {
-        ConsoleChip(title: title, help: help, kind: isOn ? onKind : .plain, fullWidth: true)
-            .consoleAvailability(status, help: help)
+        ConsoleChip(title: title, help: help, kind: isOn ? onKind : .plain, fullWidth: true, status: status)
             .accessibilityValue(isOn ? "On" : "Off")
     }
 }
@@ -124,9 +123,15 @@ struct TransmitMeters: View {
         .frame(width: 210)
     }
 
+    /// Bar fill and text for one meter: empty and "\u{2014}" unless the transmitter is live and the
+    /// engine reported a value (nil = not measured).
+    nonisolated static func reading(fraction: Double, readout: String?, live: Bool) -> (fill: Double, text: String) {
+        guard live, let readout else { return (0, "\u{2014}") }
+        return (min(max(fraction.isFinite ? fraction : 0, 0), 1), readout)
+    }
+
     private func row(_ label: String, fraction: Double, readout: String?, fill: AnyShapeStyle) -> some View {
-        let shown = live && readout != nil ? min(max(fraction.isFinite ? fraction : 0, 0), 1) : 0
-        let text = (live ? readout : nil) ?? "\u{2014}"
+        let (shown, text) = Self.reading(fraction: fraction, readout: readout, live: live)
         return HStack(spacing: 6) {
             Text(label).font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
                 .frame(width: 36, alignment: .leading)
@@ -173,13 +178,10 @@ struct KeyerStrip: View {
                         .font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                ConsoleChip(title: "Rec", help: "Record a clip")
-                    .consoleAvailability(status, help: "Record a clip")
-                ConsoleChip(title: "Stop", help: "Stop playback or recording")
-                    .consoleAvailability(status, help: "Stop playback or recording")
+                ConsoleChip(title: "Rec", help: "Record a clip", status: status)
+                ConsoleChip(title: "Stop", help: "Stop playback or recording", status: status)
                 ConsoleChip(title: "TX enabled", help: "Allow the keyer to transmit",
-                            kind: keyer.txEnabled ? .armed : .plain)
-                    .consoleAvailability(status, help: "Allow the keyer to transmit")
+                            kind: keyer.txEnabled ? .armed : .plain, status: status)
                     .accessibilityValue(keyer.txEnabled ? "On" : "Off")
             }
             LazyVGrid(columns: consoleColumns(3), spacing: 5) {

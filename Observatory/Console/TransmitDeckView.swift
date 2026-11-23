@@ -45,13 +45,10 @@ struct TransmitDeckView: View {
         HStack(spacing: 10) {
             MOXButton(presentation: mox)
             VStack(spacing: 5) {
-                ConsoleChip(title: "Tune", help: "Tune carrier", fullWidth: true)
-                    .consoleAvailability(txStatus, help: "Tune carrier")
-                ConsoleChip(title: "2-Tone", help: "Two-tone test", fullWidth: true)
-                    .consoleAvailability(txStatus, help: "Two-tone test")
+                ConsoleChip(title: "Tune", help: "Tune carrier", fullWidth: true, status: txStatus)
+                ConsoleChip(title: "2-Tone", help: "Two-tone test", fullWidth: true, status: txStatus)
                 ConsoleChip(title: "VOX", help: "Voice-operated transmit",
-                            kind: transmit.voxEnabled ? .armed : .plain, fullWidth: true)
-                    .consoleAvailability(txStatus, help: "Voice-operated transmit")
+                            kind: transmit.voxEnabled ? .armed : .plain, fullWidth: true, status: txStatus)
                     .accessibilityValue(transmit.voxEnabled ? "On" : "Off")
             }
             .frame(width: 78)

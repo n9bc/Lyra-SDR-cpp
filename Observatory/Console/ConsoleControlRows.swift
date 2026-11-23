@@ -71,6 +71,8 @@ struct ConsoleChip: View {
     var kind: ConsoleChipStyle = .plain
     var height: CGFloat = 26
     var fullWidth = false
+    /// Backend availability; an unavailable chip is disabled and its one tooltip is the reason.
+    var status: CapabilityStatus = .available
     var action: () -> Void = {}
 
     var body: some View {
@@ -78,8 +80,9 @@ struct ConsoleChip: View {
             Text(title).minimumScaleFactor(0.7)
         }
         .buttonStyle(ConsoleChipButtonStyle(kind, height: height, fullWidth: fullWidth))
+        .disabled(ConsoleAvailability.isDisabled(status))
         .accessibilityLabel(help)
-        .help(help)
+        .help(ConsoleAvailability.help(status, normal: help))
     }
 }
 
