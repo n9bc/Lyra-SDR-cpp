@@ -31,4 +31,10 @@ final class ConsoleClockAndMarkerTests: XCTestCase {
         XCTAssertEqual(AudioTerrainView.detailText(focused: .main), "received audio \u{00B7} MAIN \u{00B7} 0\u{2013}3 kHz \u{00B7} last 4 s")
         XCTAssertEqual(AudioTerrainView.detailText(focused: .sub), "received audio \u{00B7} SUB \u{00B7} 0\u{2013}3 kHz \u{00B7} last 4 s")
     }
+
+    func testVFOReadoutIsDroppedWhenTheSpectrumIsTooShortToShowItWhole() {
+        XCTAssertFalse(SpectrumOverlays.showsVFOLabel(height: 59))
+        XCTAssertTrue(SpectrumOverlays.showsVFOLabel(height: 76))
+        XCTAssertTrue(SpectrumOverlays.showsVFOLabel(height: 218))
+    }
 }

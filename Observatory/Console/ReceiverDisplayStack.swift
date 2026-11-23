@@ -86,7 +86,8 @@ struct ReceiverDisplayStack: View {
             ZStack(alignment: .topLeading) {
                 NeonSpectrumView()
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
-                                 bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0)
+                                 bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
+                                 height: spectrumHeight)
             }
             .overlay(alignment: .bottomLeading) {
                 // Bottom, right of the dB labels: clear of the band-plan row, spot labels and the Sample marker.

@@ -9,7 +9,13 @@ struct SpectrumOverlays: View {
     /// Room kept clear at the right end of the band-plan strip (for the "Sample" marker).
     var bandPlanTrailingInset: CGFloat = 0
 
+    /// Pane height; the VFO readout is dropped when it would not fit whole below the spot rows.
+    var height: CGFloat = .infinity
+
     static let bandPlanHeight: CGFloat = 14
+    nonisolated static let vfoLabelY: CGFloat = 56
+    nonisolated static let vfoLabelHeight: CGFloat = 20
+    nonisolated static func showsVFOLabel(height: CGFloat) -> Bool { height >= vfoLabelY + vfoLabelHeight }
     nonisolated static let spotRowY: [CGFloat] = [26, 44]
 
     nonisolated static func color(for kind: BandPlanKind) -> Color {
@@ -104,6 +110,7 @@ struct SpectrumOverlays: View {
                     .position(x: axis.x(for: spot.frequencyHz), y: Self.spotRowY[rows[i]] + 9)
                     .accessibilityLabel("Spot \(spot.call)")
             }
+            if Self.showsVFOLabel(height: height) {
             Text(vfoLabel)
                 .font(.system(size: 11, design: .monospaced)).foregroundStyle(LyraDS.Palette.yellow)
                 .lineLimit(1).fixedSize()
@@ -111,7 +118,8 @@ struct SpectrumOverlays: View {
                 .background(RoundedRectangle(cornerRadius: 4).fill(LyraDS.Palette.void.opacity(0.85)))
                 .frame(width: max(w - vfoX - 6, 0) > 110 ? nil : max(vfoX - 6, 0),
                        alignment: .trailing)
-                .offset(x: max(w - vfoX - 6, 0) > 110 ? vfoX + 6 : 0, y: 56)
+                .offset(x: max(w - vfoX - 6, 0) > 110 ? vfoX + 6 : 0, y: Self.vfoLabelY)
+            }
         }
         .frame(width: w, alignment: .topLeading)
         .clipped()
