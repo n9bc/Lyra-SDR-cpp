@@ -87,6 +87,7 @@ struct StatusBarView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Status bar")
+        .accessibilityValue(([model.leftMessage] + model.badges).joined(separator: ", "))
     }
 }
 
