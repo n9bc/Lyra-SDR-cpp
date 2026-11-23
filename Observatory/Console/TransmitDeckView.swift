@@ -45,8 +45,9 @@ struct TransmitDeckView: View {
             .strokeBorder(LyraDS.Palette.panelBorder, lineWidth: 1))
     }
 
-    private func deck(showCaption: Bool, protectionMenu: Bool) -> some View {
-        HStack(spacing: 14) {
+    /// One fallback level. Internal so tests can measure the narrowest level's ideal width.
+    func deck(showCaption: Bool, protectionMenu: Bool) -> some View {
+        HStack(spacing: 10) {
             MOXButton(presentation: mox)
             VStack(spacing: 5) {
                 ConsoleChip(title: "Tune", help: "Tune carrier", fullWidth: true)
@@ -57,7 +58,7 @@ struct TransmitDeckView: View {
             }
             .frame(width: 78)
             divider
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 LyraRotaryDial("Drive", value: $drive, in: 0...100, step: 1, unit: "%", defaultValue: 100)
                     .help("Drive level")
                 LyraRotaryDial("Tune pwr", value: $tune, in: 0...100, step: 1, unit: "%", defaultValue: 50)

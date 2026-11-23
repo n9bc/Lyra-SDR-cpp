@@ -183,6 +183,6 @@ struct KeyerStrip: View {
                 }
             }
         }
-        .frame(minWidth: 360, maxWidth: .infinity)
+        .frame(minWidth: 330, maxWidth: .infinity)
     }
 }
