@@ -206,6 +206,14 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 
 #pragma mark Connect
 
+- (void)cancelConsoleConnect
+{
+    // A pending retry timer sees the new generation and returns; the sweep's
+    // handlers are disconnected.
+    ++sConnectGeneration;
+    dropConsoleScan();
+}
+
 - (void)beginConnectToIp:(NSString *)ip
 {
     const QString address = QString::fromNSString(ip);
@@ -229,7 +237,8 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 - (void)attachHostWindow:(void *)mainWindow
 {
     auto *host = static_cast<MainWindow *>(mainWindow);
-    if (!host || [self engineHost]) return;
+    // Once only, and never after -invalidate (which nulls the stream).
+    if (!host || [self engineHost] || ![self engineStream]) return;
     [self setEngineHost:host];
     [self setEngineBandMemory:host->bandMemory()];
 
@@ -533,8 +542,9 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     [self connectRadioGeneration:++sConnectGeneration attempt:0];
 }
 
-// One connect attempt: wait for the radio layer, clear a dead attempt, then
-// find the radio by scanning (see connectRadio in LyraEngineFacade.h).
+// One connect attempt: wait for the radio layer, leave a live session alone,
+// clear a dead attempt, then find the radio by scanning (see connectRadio in
+// LyraEngineFacade.h).
 - (void)connectRadioGeneration:(quint64)generation attempt:(int)attempt
 {
     if (generation != sConnectGeneration) return;  // superseded or cancelled
@@ -557,11 +567,17 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
         return;
     }
 
-    // Connect is offered only while nothing streams, so a running stream here
-    // is a dead earlier attempt (socket open, no data).  beginConnect ignores
-    // a running stream, so close it first.
-    if (P2RxBridge *p2 = host->p2Bridge(); p2 && p2->isRunning()) p2->close();
-    if (st->isRunning()) st->close();
+    // A live session is left alone: then there is nothing to connect.  A P2
+    // session is running only once the radio has confirmed it, and P2RxBridge
+    // has no "stopped delivering" signal, so a running P2 session counts as
+    // live.  A P1 stream that is running without data is a dead attempt (the
+    // socket opens before any radio contact) or a stalled one; beginConnect
+    // ignores a running stream, so close it first.
+    if (P2RxBridge *p2 = host->p2Bridge(); p2 && p2->isRunning()) return;
+    if (st->isRunning()) {
+        if (st->datagramsPerSec() > 0) return;
+        st->close();
+    }
 
     const auto rig = lyra::rig::registry::rig(lyra::rig::registry::activeRigId());
     const QString saved = QString::fromNSString(self.savedRadioIp);
@@ -630,8 +646,7 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 - (void)disconnectRadio
 {
     // Cancels a connect still waiting for the radio layer or the sweep.
-    ++sConnectGeneration;
-    dropConsoleScan();
+    [self cancelConsoleConnect];
     MainWindow *host = [self engineHost];
     P2RxBridge *p2 = host ? host->p2Bridge() : nullptr;
     if (p2 && p2->isRunning()) {

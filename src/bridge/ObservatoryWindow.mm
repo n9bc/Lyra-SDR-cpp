@@ -8,6 +8,9 @@
 
 #include "mainwindow.h"
 
+#include <QCoreApplication>
+#include <QObject>
+
 // Strong statics: the C++ caller discards the returned objects, so under ARC
 // nothing else would keep them alive past the next autorelease pool drain.
 // There is only ever one Observatory window / facade per process.
@@ -57,6 +60,17 @@ void lyra_set_observatory_host(void *mainWindow)
 {
     sHostWindow = static_cast<lyra::ui::MainWindow *>(mainWindow);
     [sFacade attachHostWindow:mainWindow];
+
+    // Drop the facade's Qt connections and engine pointers before the engine
+    // objects are destroyed after app.exec() returns.  Order-independent among
+    // the aboutToQuit handlers: -invalidate only disconnects and forgets, and
+    // the engine objects all still exist while aboutToQuit runs.  (Connected
+    // after main.cpp's teardown handlers, so in practice it runs after their
+    // stream close; if it ran first, that close would just notify no one.)
+    if (QCoreApplication *app = QCoreApplication::instance()) {
+        QObject::connect(app, &QCoreApplication::aboutToQuit, app,
+                         []() { [sFacade invalidate]; });
+    }
 }
 
 void lyra_raise_observatory_window(void)

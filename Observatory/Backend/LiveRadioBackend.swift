@@ -62,9 +62,8 @@ final class LiveRadioBackend: RadioBackend {
             vfoLocked = on
             refresh()
             return
-        case .connect:
-            tracker.requestConnect(ip: state.link.savedIp, at: now())
         case .disconnect:
+            // First, so the drop the disconnect causes is not reported as an error.
             tracker.requestDisconnect()
         default:
             break
@@ -72,6 +71,12 @@ final class LiveRadioBackend: RadioBackend {
         // One batch, one perform: the executor stops at a blocked jump guard itself.
         let calls = LiveCommandPlanner.calls(for: command, state: state, vfoLocked: vfoLocked)
         if !calls.isEmpty { facade.perform(calls) }
+        if command == .connect {
+            // After the perform: connecting may first close a dead earlier attempt, and the
+            // engine reports that drop synchronously. It belongs to the old session; the new
+            // request starts clean after it.
+            tracker.requestConnect(ip: state.link.savedIp, at: now())
+        }
         if command == .connect || command == .disconnect { refresh() }
     }
 

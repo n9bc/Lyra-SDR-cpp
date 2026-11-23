@@ -11,6 +11,8 @@ final class FakeEngineFacade: EngineFacade {
     private(set) var performed: [[EngineCall]] = []
     private(set) var applied: [EngineCall] = []
     private(set) var onChange: (@MainActor (EngineChange) -> Void)?
+    /// Runs inside `perform`, before it returns, as the engine's synchronous signals do.
+    var onPerform: ((FakeEngineFacade, [EngineCall]) -> Void)?
 
     func readState() -> EngineState { state }
     func observe(_ onChange: @escaping @MainActor (EngineChange) -> Void) { self.onChange = onChange }
@@ -18,6 +20,7 @@ final class FakeEngineFacade: EngineFacade {
 
     func perform(_ calls: [EngineCall]) {
         performed.append(calls)
+        onPerform?(self, calls)
         for call in calls {
             if case .requireJumpAllowed = call, blockJumps { return }
             applied.append(call)
@@ -185,6 +188,62 @@ final class LiveRadioBackendTests: XCTestCase {
         backend.tick()
         XCTAssertEqual(backend.snapshot.connection.phase,
                        .error("No radio answered at 169.254.19.221"))
+    }
+
+    /// Retrying after a timeout: the facade closes the dead socket inside `perform`, and that
+    /// drop must land on the old attempt, not on the new connect request.
+    func testRetryAfterTimeoutStaysConnectingThroughTheSynchronousClose() {
+        facade.state.link.savedIp = "169.254.19.221"
+        let backend = make()
+        backend.send(.connect)
+        facade.state.link.running = true   // socket open, no datagrams
+        facade.fire(.stats)
+        advance(8)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase,
+                       .error("No radio answered at 169.254.19.221"))
+
+        facade.onPerform = { fake, calls in
+            guard calls.contains(.connect) else { return }
+            fake.state.link.running = false
+            fake.fire(.stats)
+        }
+        backend.send(.connect)
+        XCTAssertEqual(backend.snapshot.connection.phase, .connecting)
+        advance(3)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase, .connecting)
+
+        // The new request keeps its own timeout.
+        advance(5)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase,
+                       .error("No radio answered at 169.254.19.221"))
+    }
+
+    func testRetryAfterTimeoutStreamsWhenDataArrives() {
+        facade.state.link.savedIp = "169.254.19.221"
+        let backend = make()
+        backend.send(.connect)
+        facade.state.link.running = true
+        facade.fire(.stats)
+        advance(8)
+        backend.tick()
+
+        facade.onPerform = { fake, calls in
+            guard calls.contains(.connect) else { return }
+            fake.state.link.running = false
+            fake.fire(.stats)
+        }
+        backend.send(.connect)
+        advance(2)
+        facade.state.link.running = true
+        facade.fire(.stats)
+        XCTAssertEqual(backend.snapshot.connection.phase, .socketOpen)
+        advance(0.5)
+        facade.state.link.datagramsPerSec = 380
+        facade.fire(.stats)
+        XCTAssertEqual(backend.snapshot.connection.phase, .streaming)
     }
 
     func testDisconnectRequestsTrackerFirst() {

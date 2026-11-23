@@ -320,6 +320,9 @@ using lyra::ui::Prefs;
 
 - (void)invalidate
 {
+    // The console's pending connect (retry timer, discovery sweep) first: its
+    // connections are not in _connections.
+    [self cancelConsoleConnect];
     for (const QMetaObject::Connection &c : _connections)
         QObject::disconnect(c);
     _connections.clear();

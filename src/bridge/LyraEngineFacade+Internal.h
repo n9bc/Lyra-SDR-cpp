@@ -51,6 +51,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)connectConsoleSignals;
 // MainWindow::beginConnect (a no-op until the host window is attached).
 - (void)beginConnectToIp:(NSString *)ip;
+// Cancels a connect still waiting for the radio layer or the discovery
+// sweep, and drops the sweep's connections.  -invalidate calls it.
+- (void)cancelConsoleConnect;
 
 @end
 

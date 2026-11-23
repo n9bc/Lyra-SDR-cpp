@@ -279,8 +279,11 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 
 #pragma mark Teardown
 
-// Disconnects every Qt signal subscription and drops the callbacks and the
-// C++ pointers.  Safe to call more than once; every method is a no-op after.
+// Cancels a pending console connect (its retry timer and discovery sweep),
+// disconnects every Qt signal subscription (console ones included) and drops
+// the callbacks and the C++ pointers.  Safe to call more than once; every
+// method is a no-op after (reads return their defaults).  The Observatory
+// calls it on QCoreApplication::aboutToQuit.
 - (void)invalidate;
 
 @end
@@ -312,10 +315,12 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (LyraLinkReading *)consoleLink;
 
 // Connects the active rig through MainWindow::beginConnect.  Waits for the
-// radio layer (up to 20 s), closes a running stream that never got data, then
-// finds a P1 radio with a P1-only discovery sweep: the HL2 with the rig's MAC,
-// else the first HL2 found, else the active rig's last IP / radio/lastIp.
-// P2 rigs skip the sweep and open the saved address.
+// radio layer (up to 20 s).  Does nothing while a session is live: a running
+// P2 session, or a P1 stream with data (datagramsPerSec > 0).  Closes a P1
+// stream that is running without data (a dead or stalled attempt), then finds
+// a P1 radio with a P1-only discovery sweep: the HL2 with the rig's MAC, else
+// the first HL2 found, else the active rig's last IP / radio/lastIp.  P2 rigs
+// skip the sweep and open the saved address.
 - (void)connectRadio;
 // Closes a live P2 session, else the P1 stream.
 - (void)disconnectRadio;
