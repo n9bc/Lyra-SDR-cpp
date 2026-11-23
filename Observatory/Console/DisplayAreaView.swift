@@ -76,20 +76,27 @@ struct DisplayAreaLayout: Equatable {
     }
 }
 
-/// Centre display panel: toolbar, Metal spectrum with overlays, frequency scale,
-/// sample waterfall and audio terrain. Reads `SpectrumBridge` from the environment (via
-/// `NeonSpectrumView`). Sample imagery only in Milestone 1.
+/// Centre display panel: toolbar, the Main (and, when on, Sub) display stack and the audio
+/// terrain, sized by `DisplayAreaLayout.compute`. Reads `SpectrumBridge` from the environment
+/// for Main; the Sub stack injects its own bridge. Sample imagery only in Milestone 1.
 struct DisplayAreaView: View {
     let display: DisplaySnapshot
     let main: ReceiverSnapshot
+    let sub: ReceiverSnapshot
+    let focused: ReceiverID
+    let store: DisplayStore
     /// Shows the "Sample" marker on the spectrum (see `showsSampleMarker`).
     let sampleSpectrum: Bool
-    let store: DisplayStore
+    /// One bridge per Metal view: a second view on the main bridge would bind the wrong source.
+    @State private var subSpectrum = SpectrumBridge.mock()
 
-    init(display: DisplaySnapshot, main: ReceiverSnapshot, sampleSpectrum: Bool, store: DisplayStore) {
-        self.store = store
+    init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot, focused: ReceiverID,
+         store: DisplayStore, sampleSpectrum: Bool) {
         self.display = display
         self.main = main
+        self.sub = sub
+        self.focused = focused
+        self.store = store
         self.sampleSpectrum = sampleSpectrum
     }
 
@@ -101,73 +108,30 @@ struct DisplayAreaView: View {
         capabilities.status(.spectrum) == .mocked
     }
 
-    private var sampleMarker: some View {
-        Text("Sample")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(LyraDS.Palette.yellow)
-            .lineLimit(1)
-            .frame(width: Self.sampleMarkerWidth, height: SpectrumOverlays.bandPlanHeight)
-            .background(Capsule().fill(LyraDS.Palette.void.opacity(0.85)))
-            .background(Capsule().fill(LyraDS.Palette.yellow.opacity(0.08)))
-            .overlay(Capsule().strokeBorder(LyraDS.Palette.yellow, lineWidth: 1))
-            .allowsHitTesting(false)
-            .accessibilityElement()
-            .accessibilityLabel("Sample spectrum")
-    }
-
-    private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
-        VStack(spacing: 0) {
-            ForEach(labels.indices, id: \.self) { i in
-                Text(labels[i]).font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(LyraDS.Palette.chipDimText).lineLimit(1).minimumScaleFactor(0.6)
-                if i < labels.count - 1 { Spacer(minLength: 0) }
-            }
-        }
-        .padding(padding)
-        .frame(width: DisplayAreaLayout.gutter, alignment: .trailing)
-        .accessibilityHidden(true)
-    }
-
     var body: some View {
         GeometryReader { geo in
-            let lay = DisplayAreaLayout.compute(height: geo.size.height)
-            let w = max(geo.size.width - DisplayAreaLayout.gutter, 0)
-            let axis = FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: w)
+            let lay = DisplayAreaLayout.compute(height: geo.size.height, layout: store.layout,
+                                                subVisible: sub.enabled, terrainExpanded: store.terrainExpanded)
             VStack(spacing: 0) {
                 DisplayToolbarView(display: display)
-                HStack(spacing: 0) {
-                    // dB labels come from NeonSpectrumView itself; keep the gutter so rows stay aligned.
-                    Color.clear.frame(width: DisplayAreaLayout.gutter)
-                    ZStack(alignment: .topLeading) {
-                        NeonSpectrumView()
-                        SpectrumOverlays(display: display, main: main, axis: axis,
-                                         bandPlanTrailingInset: sampleSpectrum ? Self.sampleMarkerWidth + 4 : 0)
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        if sampleSpectrum { sampleMarker.padding(.trailing, 2) }
-                    }
-                    .frame(width: w, height: lay.spectrum)
-                    .clipped()
+                ReceiverDisplayStack(display: display, receiver: main, label: sub.enabled ? "MAIN" : nil,
+                                     labelHighlighted: focused == .main,
+                                     spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
+                                     sampleSpectrum: sampleSpectrum)
+                    .frame(height: lay.spectrum + lay.waterfall + DisplayAreaLayout.scaleHeight)
+                if sub.enabled {
+                    ReceiverDisplayStack(display: display.view(for: .sub), receiver: sub, label: "SUB",
+                                         labelHighlighted: focused == .sub,
+                                         spectrumHeight: lay.subSpectrum, waterfallHeight: lay.subWaterfall,
+                                         sampleSpectrum: sampleSpectrum)
+                        .environment(subSpectrum)
+                        .frame(height: lay.subSpectrum + lay.subWaterfall + DisplayAreaLayout.scaleHeight)
                 }
-                .frame(height: lay.spectrum)
-                frequencyScale(axis)
-                HStack(spacing: 0) {
-                    gutterLabels([":25", ":15", ":05"], padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
-                    ZStack(alignment: .topLeading) {
-                        SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
-                                             signals: display.spots.map(\.frequencyHz) + [main.frequencyHz])
-                        Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
-                            .frame(width: 1).offset(x: axis.x(for: main.frequencyHz))
-                    }
-                    .frame(width: w, height: lay.waterfall)
-                    .clipped()
-                }
-                .frame(height: lay.waterfall)
                 HStack(spacing: 0) {
                     Color.clear.frame(width: DisplayAreaLayout.gutter)
-                    AudioTerrainView(store: store)
+                    AudioTerrainView(store: store, focused: focused)
                 }
-                .frame(height: lay.terrain + 32)
+                .frame(height: lay.terrain + DisplayAreaLayout.terrainHeaderHeight)
             }
         }
         .background(LyraDS.Palette.surface)
@@ -177,36 +141,26 @@ struct DisplayAreaView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Display")
     }
-
-    private func frequencyScale(_ axis: FrequencyAxis) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(axis.ticks(every: 20_000).filter { $0.x > 18 && $0.x < axis.width - 18 }, id: \.hz) { tick in
-                Text(String(format: "%.3f", Double(tick.hz) / 1_000_000))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1).fixedSize()
-                    .position(x: tick.x, y: DisplayAreaLayout.scaleHeight / 2)
-            }
-        }
-        .frame(width: axis.width, height: DisplayAreaLayout.scaleHeight, alignment: .topLeading)
-        .background(LyraDS.Palette.barFill)
-        .overlay(alignment: .top) { Rectangle().fill(LyraDS.Palette.border).frame(height: 1) }
-        .overlay(alignment: .bottom) { Rectangle().fill(LyraDS.Palette.border).frame(height: 1) }
-        .padding(.leading, DisplayAreaLayout.gutter)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityHidden(true)
-    }
 }
 
-#Preview("Display 940x620") {
-    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main, sampleSpectrum: true, store: DisplayStore())
+#if DEBUG
+@MainActor private func previewArea(width: CGFloat, height: CGFloat, subOn: Bool = false,
+                         layout: DisplayLayout = .spectrumAndWaterfall, terrain: Bool = true) -> some View {
+    let store = DisplayStore(defaults: UserDefaults(suiteName: "lyra.preview.display") ?? .standard)
+    store.layout = layout
+    store.terrainExpanded = terrain
+    var snap = RadioSnapshot.sample
+    snap.sub.enabled = subOn
+    return DisplayAreaView(display: snap.display, main: snap.main, sub: snap.sub, focused: .main,
+                           store: store, sampleSpectrum: true)
         .environment(SpectrumBridge.mock())
-        .frame(width: 940, height: 620)
+        .frame(width: width, height: height)
         .padding(8).background(LyraDS.Palette.void)
 }
 
-#Preview("Display 648x330") {
-    DisplayAreaView(display: RadioSnapshot.sample.display, main: RadioSnapshot.sample.main, sampleSpectrum: true, store: DisplayStore())
-        .environment(SpectrumBridge.mock())
-        .frame(width: 648, height: 330)
-        .padding(8).background(LyraDS.Palette.void)
-}
+#Preview("Sub on 940x620") { previewArea(width: 940, height: 620, subOn: true) }
+#Preview("Spectrum only 940x620") { previewArea(width: 940, height: 620, layout: .spectrumOnly) }
+#Preview("Waterfall only 940x620") { previewArea(width: 940, height: 620, layout: .waterfallOnly) }
+#Preview("Terrain hidden 940x620") { previewArea(width: 940, height: 620, terrain: false) }
+#Preview("Sub on 648x346") { previewArea(width: 648, height: 346, subOn: true) }
+#endif

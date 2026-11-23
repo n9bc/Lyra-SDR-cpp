@@ -26,4 +26,9 @@ final class ConsoleClockAndMarkerTests: XCTestCase {
         XCTAssertFalse(DisplayAreaView.showsSampleMarker(
             BackendCapabilities(statuses: [.spectrum: .unavailable("No stream")], fallback: .available)))
     }
+
+    func testTerrainDetailFollowsFocus() {
+        XCTAssertEqual(AudioTerrainView.detailText(focused: .main), "received audio \u{00B7} MAIN \u{00B7} 0\u{2013}3 kHz \u{00B7} last 4 s")
+        XCTAssertEqual(AudioTerrainView.detailText(focused: .sub), "received audio \u{00B7} SUB \u{00B7} 0\u{2013}3 kHz \u{00B7} last 4 s")
+    }
 }

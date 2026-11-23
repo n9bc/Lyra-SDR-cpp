@@ -40,9 +40,9 @@ struct ConsoleView: View {
 
             HStack(spacing: gap) {
                 ReceiverColumnView(snapshot: snapshot)
-                DisplayAreaView(display: snapshot.display, main: snapshot.main,
-                                sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
-                                store: displayStore)
+                DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
+                                focused: snapshot.session.focused, store: displayStore,
+                                sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 BandModeColumnView(snapshot: snapshot)
             }
