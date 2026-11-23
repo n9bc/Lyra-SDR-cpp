@@ -5,10 +5,13 @@ import SwiftUI
 struct VFOPanelView: View {
     let receiver: ReceiverSnapshot
     let title: String
+    /// Drives the TX tag: filled only while on air (spec §5.2).
+    let transmitState: TransmitState
 
-    init(receiver: ReceiverSnapshot, title: String) {
+    init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState) {
         self.receiver = receiver
         self.title = title
+        self.transmitState = transmitState
     }
 
     private var on: Bool { receiver.enabled }
@@ -57,7 +60,7 @@ struct VFOPanelView: View {
         HStack(spacing: 6) {
             chip(receiver.isTxVFO ? "TX" : "RX",
                  receiver.isTxVFO ? "Transmit VFO" : "Receive-only VFO",
-                 receiver.isTxVFO ? .tx : .plain)
+                 VFOChipStyle.txTag(isTxVFO: receiver.isTxVFO, state: transmitState))
             chip(receiver.antenna, "Select antenna input")
             chip("BW \(filterText.uppercased())", "Set filter bandwidth")
             chip("STEP \(receiver.stepHz)", "Set tuning step")
@@ -193,19 +196,25 @@ struct VFOPanelView: View {
 }
 
 #Preview("Main VFO") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M")
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Sub VFO (disabled)") {
-    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M")
+    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle)
+        .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
+        .padding(8).background(LyraDS.Palette.void)
+}
+
+#Preview("Main VFO on air") {
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO at minimum window") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M")
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle)
         .frame(width: 529, height: 212)
         .background(LyraDS.Palette.void)
 }

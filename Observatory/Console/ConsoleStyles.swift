@@ -73,7 +73,15 @@ struct ConsoleChipButtonStyle: ButtonStyle {
 // MARK: - VFO chip buttons
 
 enum VFOChipStyle: CaseIterable {
-    case plain, active, cyan, tx
+    /// `.txDesignated` marks the transmit VFO outline-only; `.tx` (filled, glowing) means on air.
+    case plain, active, cyan, txDesignated, tx
+
+    /// Style of a VFO's RX/TX tag. Spec §5.2: TX tags light only when the radio reports on air,
+    /// so the transmit VFO is outline-only in every other state.
+    nonisolated static func txTag(isTxVFO: Bool, state: TransmitState) -> VFOChipStyle {
+        guard isTxVFO else { return .plain }
+        return MOXPresentation(state: state).isLit ? .tx : .txDesignated
+    }
 }
 
 /// Compact monospaced chip used inside the VFO panels: 22 pt high, radius 5.
@@ -91,6 +99,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         case .plain: LyraDS.Palette.chipText
         case .active: LyraDS.Palette.yellow
         case .cyan: LyraDS.Palette.cyan
+        case .txDesignated: LyraDS.Palette.pink
         case .tx: LyraDS.Palette.txText
         }
     }
@@ -100,7 +109,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         case .plain: LyraDS.Palette.vchipBorder
         case .active: LyraDS.Palette.yellow
         case .cyan: LyraDS.Palette.cyan
-        case .tx: LyraDS.Palette.pink
+        case .txDesignated, .tx: LyraDS.Palette.pink
         }
     }
 
@@ -109,6 +118,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         case .plain: LyraDS.Palette.vchipFill
         case .active: LyraDS.Palette.yellow.opacity(0.08)
         case .cyan: LyraDS.Palette.cyan.opacity(0.10)
+        case .txDesignated: LyraDS.Palette.vchipFill
         case .tx: LyraDS.Palette.txFill
         }
     }
