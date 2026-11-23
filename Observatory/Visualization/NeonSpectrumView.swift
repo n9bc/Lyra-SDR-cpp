@@ -20,6 +20,33 @@ struct NeonSpectrumView: View {
         return max(1, Int((minSpacing / perStep).rounded(.up)))
     }
 
+    /// Half the height of a 9 pt grid label, used to centre it beside its line.
+    nonisolated static let labelHalfHeight: CGFloat = 7.5
+
+    /// dB labels to draw, with `y` the vertical CENTRE of each label as finally drawn.
+    /// Stride is counted from the top grid line down so the ceiling label is kept; a label
+    /// near the top edge sits below its line, others sit above. Any label whose centre is
+    /// within `minSpacing` of the previously kept one is dropped.
+    nonisolated static func labelPositions(height: CGFloat, floor: Double, ceiling: Double,
+                                           step: Double, minSpacing: CGFloat = 14)
+        -> [(db: Double, y: CGFloat)] {
+        guard height > 0, ceiling > floor, step > 0 else { return [] }
+        let range = ceiling - floor
+        let every = labelStride(height: height, range: range, step: step, minSpacing: minSpacing)
+        var result: [(db: Double, y: CGFloat)] = []
+        var db = (ceiling / step).rounded(.down) * step
+        var index = 0
+        while db >= floor {
+            defer { db -= step; index += 1 }
+            guard index % every == 0 else { continue }
+            let line = ((1 - (db - floor) / range) * Double(height)).rounded() + 0.5
+            let centre = line < 12 ? line + labelHalfHeight : line - labelHalfHeight
+            if let last = result.last, abs(centre - last.y) < minSpacing { continue }
+            result.append((db, centre))
+        }
+        return result
+    }
+
     var body: some View {
         ZStack {
             LyraDS.Palette.void
@@ -55,8 +82,6 @@ struct NeonSpectrumView: View {
             let range = ceiling - floor
             let line = GraphicsContext.Shading.color(LyraDS.Palette.border)
 
-            let labelEvery = Self.labelStride(height: size.height, range: range, step: Self.dbStep)
-            var index = 0
             var db = (floor / Self.dbStep).rounded(.up) * Self.dbStep
             while db <= ceiling {
                 let y = ((1 - (db - floor) / range) * size.height).rounded() + 0.5
@@ -64,15 +89,15 @@ struct NeonSpectrumView: View {
                 path.move(to: CGPoint(x: 0, y: y))
                 path.addLine(to: CGPoint(x: size.width, y: y))
                 ctx.stroke(path, with: line, lineWidth: 1)
+                db += Self.dbStep
+            }
 
-                defer { db += Self.dbStep; index += 1 }
-                guard index % labelEvery == 0 else { continue }
-                let label = Text("\(Int(db))")
+            for label in Self.labelPositions(height: size.height, floor: floor, ceiling: ceiling,
+                                             step: Self.dbStep) {
+                let text = Text("\(Int(label.db))")
                     .font(LyraDS.Font.label(size: 9))
                     .foregroundStyle(LyraDS.Palette.textDim)
-                // Keep the top label inside the view.
-                let anchor: UnitPoint = y < 12 ? .topLeading : .bottomLeading
-                ctx.draw(label, at: CGPoint(x: 4, y: anchor == .topLeading ? y + 2 : y - 2), anchor: anchor)
+                ctx.draw(text, at: CGPoint(x: 4, y: label.y), anchor: .leading)
             }
 
             for i in 1...Self.verticalDivisions {
