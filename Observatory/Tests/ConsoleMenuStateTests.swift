@@ -33,7 +33,10 @@ import AppKit
     }
     func testPerformSendsEngineStateAndSetsDisplayState() {
         let backend = MockRadioBackend()
-        let display = DisplayStore(defaults: UserDefaults(suiteName: "lyra-test-\(UUID().uuidString)")!)
+        let suiteName = "lyra-test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let display = DisplayStore(defaults: defaults)
         let shell = ConsoleShell(backend: backend, display: display)
         shell.perform(.toggleSub); XCTAssertTrue(backend.snapshot.sub.enabled)
         shell.perform(.focus(.sub)); XCTAssertEqual(backend.snapshot.session.focused, .sub)

@@ -42,7 +42,9 @@ struct ConsoleView: View {
                 ReceiverColumnView(snapshot: snapshot)
                 DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
                                 focused: snapshot.session.focused, store: displayStore,
-                                sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities))
+                                sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
+                                sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
+                                sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 BandModeColumnView(snapshot: snapshot)
             }

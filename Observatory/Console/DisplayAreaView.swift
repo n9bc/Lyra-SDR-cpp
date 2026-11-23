@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Vertical budget for the display panel. Panes: main spectrum, main waterfall, Sub spectrum,
 /// Sub waterfall (each only when its layout and stack are visible) and the audio terrain (only
-/// when expanded). The terrain never drops below 120 pt while it is shown; all panes shrink
-/// proportionally to their minimums when the panel is short.
+/// when expanded). Panes keep their minimums while there is room; below that, every pane (the
+/// terrain included) shrinks in proportion to its minimum, so the terrain can drop under 120 pt
+/// (about 88 pt at 1280x800 with Sub on).
 struct DisplayAreaLayout: Equatable {
     var spectrum: CGFloat
     var waterfall: CGFloat
@@ -85,27 +86,33 @@ struct DisplayAreaView: View {
     let sub: ReceiverSnapshot
     let focused: ReceiverID
     let store: DisplayStore
-    /// Shows the "Sample" marker on the spectrum (see `showsSampleMarker`).
+    /// Shows the "Sample" marker on the spectrum, waterfall and audio terrain (see `showsSampleMarker`).
     let sampleSpectrum: Bool
+    let sampleWaterfall: Bool
+    let sampleTerrain: Bool
     /// One bridge per Metal view: a second view on the main bridge would bind the wrong source.
     @State private var subSpectrum = SpectrumBridge.mock()
 
     init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot, focused: ReceiverID,
-         store: DisplayStore, sampleSpectrum: Bool) {
+         store: DisplayStore, sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool) {
         self.display = display
         self.main = main
         self.sub = sub
         self.focused = focused
         self.store = store
         self.sampleSpectrum = sampleSpectrum
+        self.sampleWaterfall = sampleWaterfall
+        self.sampleTerrain = sampleTerrain
     }
 
     /// Width of the "Sample" marker; the band plan stops short of it so the two never overlap.
     static let sampleMarkerWidth: CGFloat = 56
 
-    /// Truthfulness: the spectrum is marked as sample whenever the backend mocks it.
-    nonisolated static func showsSampleMarker(_ capabilities: BackendCapabilities) -> Bool {
-        capabilities.status(.spectrum) == .mocked
+    /// Truthfulness: a display feature (spectrum, waterfall, audio terrain) is marked as sample
+    /// whenever the backend mocks it.
+    nonisolated static func showsSampleMarker(_ capabilities: BackendCapabilities,
+                                              for feature: BackendFeature = .spectrum) -> Bool {
+        capabilities.status(feature) == .mocked
     }
 
     var body: some View {
@@ -117,19 +124,19 @@ struct DisplayAreaView: View {
                 ReceiverDisplayStack(display: display, receiver: main, label: sub.enabled ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
-                                     sampleSpectrum: sampleSpectrum)
+                                     sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall)
                     .frame(height: lay.spectrum + lay.waterfall + DisplayAreaLayout.scaleHeight)
                 if sub.enabled {
                     ReceiverDisplayStack(display: display.view(for: .sub), receiver: sub, label: "SUB",
                                          labelHighlighted: focused == .sub,
                                          spectrumHeight: lay.subSpectrum, waterfallHeight: lay.subWaterfall,
-                                         sampleSpectrum: sampleSpectrum)
+                                         sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall)
                         .environment(subSpectrum)
                         .frame(height: lay.subSpectrum + lay.subWaterfall + DisplayAreaLayout.scaleHeight)
                 }
                 HStack(spacing: 0) {
                     Color.clear.frame(width: DisplayAreaLayout.gutter)
-                    AudioTerrainView(store: store, focused: focused)
+                    AudioTerrainView(store: store, focused: focused, sample: sampleTerrain)
                 }
                 .frame(height: lay.terrain + DisplayAreaLayout.terrainHeaderHeight)
             }
@@ -152,7 +159,7 @@ struct DisplayAreaView: View {
     var snap = RadioSnapshot.sample
     snap.sub.enabled = subOn
     return DisplayAreaView(display: snap.display, main: snap.main, sub: snap.sub, focused: .main,
-                           store: store, sampleSpectrum: true)
+                           store: store, sampleSpectrum: true, sampleWaterfall: true, sampleTerrain: true)
         .environment(SpectrumBridge.mock())
         .frame(width: width, height: height)
         .padding(8).background(LyraDS.Palette.void)

@@ -32,14 +32,17 @@ struct SampleWaterfallImage: View {
 struct AudioTerrainView: View {
     @Bindable var store: DisplayStore
     let focused: ReceiverID
+    /// Shows the "Sample" marker in the terrain's top-right corner (see `DisplayAreaView.showsSampleMarker`).
+    let sample: Bool
 
     nonisolated static let rows = 30
     nonisolated static let points = 201
     nonisolated static let audioLabels = ["0", "500", "1 k", "1.5 k", "2 k", "2.5 k", "3 k Hz"]
 
-    init(store: DisplayStore, focused: ReceiverID) {
+    init(store: DisplayStore, focused: ReceiverID, sample: Bool) {
         self.store = store
         self.focused = focused
+        self.sample = sample
     }
 
     nonisolated static func detailText(focused: ReceiverID) -> String {
@@ -111,6 +114,9 @@ struct AudioTerrainView: View {
                     }
                     .padding(.horizontal, 8).padding(.bottom, 2)
                     .accessibilityHidden(true)
+                }
+                .overlay(alignment: .topTrailing) {
+                    if sample { SampleMarker(accessibilityName: "Sample audio terrain").padding(.top, 4).padding(.trailing, 8) }
                 }
                 .clipped()
             }

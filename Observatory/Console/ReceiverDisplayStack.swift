@@ -12,22 +12,11 @@ struct ReceiverDisplayStack: View {
     let labelHighlighted: Bool
     let spectrumHeight: CGFloat
     let waterfallHeight: CGFloat
-    /// Shows the "Sample" marker on the spectrum (see `DisplayAreaView.showsSampleMarker`).
+    /// Shows the "Sample" marker on the spectrum / waterfall (see `DisplayAreaView.showsSampleMarker`).
     let sampleSpectrum: Bool
+    let sampleWaterfall: Bool
 
-    private var sampleMarker: some View {
-        Text("Sample")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(LyraDS.Palette.yellow)
-            .lineLimit(1)
-            .frame(width: DisplayAreaView.sampleMarkerWidth, height: SpectrumOverlays.bandPlanHeight)
-            .background(Capsule().fill(LyraDS.Palette.void.opacity(0.85)))
-            .background(Capsule().fill(LyraDS.Palette.yellow.opacity(0.08)))
-            .overlay(Capsule().strokeBorder(LyraDS.Palette.yellow, lineWidth: 1))
-            .allowsHitTesting(false)
-            .accessibilityElement()
-            .accessibilityLabel("Sample spectrum")
-    }
+    private var sampleMarker: some View { SampleMarker(accessibilityName: "Sample spectrum") }
 
     private func tag(_ text: String) -> some View {
         Text(text)
@@ -114,6 +103,9 @@ struct ReceiverDisplayStack: View {
             .overlay(alignment: .topLeading) {
                 if let label, spectrumHeight <= 0 { tag(label) }
             }
+            .overlay(alignment: .topTrailing) {
+                if sampleWaterfall { SampleMarker(accessibilityName: "Sample waterfall").padding(.trailing, 2) }
+            }
             .frame(width: w, height: waterfallHeight)
             .clipped()
         }
@@ -136,5 +128,24 @@ struct ReceiverDisplayStack: View {
         .padding(.leading, DisplayAreaLayout.gutter)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityHidden(true)
+    }
+}
+
+/// The yellow "Sample" capsule shown on any display pane served from sample data.
+struct SampleMarker: View {
+    let accessibilityName: String
+
+    var body: some View {
+        Text("Sample")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(LyraDS.Palette.yellow)
+            .lineLimit(1)
+            .frame(width: DisplayAreaView.sampleMarkerWidth, height: SpectrumOverlays.bandPlanHeight)
+            .background(Capsule().fill(LyraDS.Palette.void.opacity(0.85)))
+            .background(Capsule().fill(LyraDS.Palette.yellow.opacity(0.08)))
+            .overlay(Capsule().strokeBorder(LyraDS.Palette.yellow, lineWidth: 1))
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel(accessibilityName)
     }
 }

@@ -8,9 +8,11 @@ struct ReceiverColumnView: View {
     init(snapshot: RadioSnapshot) { self.snapshot = snapshot }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical, showsIndicators: true) {
             ReceiverColumnContent(snapshot: snapshot)
         }
+        // Both columns overflow at 1280x800: show the scroller and flash it once so the cut-off reads as scrollable.
+        .scrollIndicatorsFlash(onAppear: true)
         .frame(width: ConsoleLayout.sideColumnWidth)
     }
 }

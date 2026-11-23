@@ -54,19 +54,31 @@ struct ConsoleChipButtonStyle: ButtonStyle {
     }
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-        configuration.label
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(text)
-            .lineLimit(1)
-            .padding(.horizontal, 9)
-            .frame(maxWidth: fullWidth ? .infinity : nil)
-            .frame(height: height)
-            .background(shape.fill(fill))
-            .overlay(shape.strokeBorder(border, lineWidth: 1))
-            .shadow(color: kind == .on ? LyraDS.Palette.cyan.opacity(0.22) : .clear, radius: 6)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .contentShape(shape)
+        ChipBody(style: self, configuration: configuration)
+    }
+
+    /// Reads `isEnabled`, which a `ButtonStyle` cannot see directly: a disabled chip dims its text,
+    /// border and glow and drops to 45% opacity.
+    private struct ChipBody: View {
+        let style: ConsoleChipButtonStyle
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+            configuration.label
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isEnabled ? style.text : LyraDS.Palette.chipDimText)
+                .lineLimit(1)
+                .padding(.horizontal, 9)
+                .frame(maxWidth: style.fullWidth ? .infinity : nil)
+                .frame(height: style.height)
+                .background(shape.fill(isEnabled ? style.fill : LyraDS.Palette.chipDimFill))
+                .overlay(shape.strokeBorder(isEnabled ? style.border : LyraDS.Palette.chipBorder, lineWidth: 1))
+                .shadow(color: isEnabled && style.kind == .on ? LyraDS.Palette.cyan.opacity(0.22) : .clear, radius: 6)
+                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
+                .contentShape(shape)
+        }
     }
 }
 
@@ -132,20 +144,33 @@ struct VFOChipButtonStyle: ButtonStyle {
     }
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-        configuration.label
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
-            .tracking(0.55)
-            .foregroundStyle(text)
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: fullWidth ? .infinity : nil)
-            .frame(height: 22)
-            .background(shape.fill(fill))
-            .overlay(shape.strokeBorder(border, lineWidth: 1))
-            .shadow(color: glow?.color ?? .clear, radius: glow?.radius ?? 0)
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .contentShape(shape)
+        ChipBody(style: self, configuration: configuration)
+    }
+
+    /// Reads `isEnabled`, which a `ButtonStyle` cannot see directly: a disabled chip dims its text,
+    /// border and glow and drops to 45% opacity.
+    private struct ChipBody: View {
+        let style: VFOChipButtonStyle
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+            let glow = isEnabled ? style.glow : nil
+            configuration.label
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .tracking(0.55)
+                .foregroundStyle(isEnabled ? style.text : LyraDS.Palette.chipDimText)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: style.fullWidth ? .infinity : nil)
+                .frame(height: 22)
+                .background(shape.fill(isEnabled ? style.fill : LyraDS.Palette.vchipFill))
+                .overlay(shape.strokeBorder(isEnabled ? style.border : LyraDS.Palette.vchipBorder, lineWidth: 1))
+                .shadow(color: glow?.color ?? .clear, radius: glow?.radius ?? 0)
+                .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
+                .contentShape(shape)
+        }
     }
 }
 

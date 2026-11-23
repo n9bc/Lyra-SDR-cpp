@@ -2,7 +2,17 @@ import XCTest
 @testable import Observatory
 
 @MainActor final class DisplayStoreTests: XCTestCase {
-    private func suite() -> UserDefaults { UserDefaults(suiteName: "lyra-test-\(UUID().uuidString)")! }
+    private var suiteNames: [String] = []
+    private func suite() -> UserDefaults {
+        let name = "lyra-test-\(UUID().uuidString)"
+        suiteNames.append(name)
+        return UserDefaults(suiteName: name)!
+    }
+    override func tearDown() {
+        for name in suiteNames { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
+        suiteNames = []
+        super.tearDown()
+    }
     func testDefaults() {
         let s = DisplayStore(defaults: suite())
         XCTAssertEqual(s.layout, .spectrumAndWaterfall); XCTAssertTrue(s.terrainExpanded)
