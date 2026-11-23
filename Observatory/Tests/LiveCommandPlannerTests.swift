@@ -116,11 +116,28 @@ final class LiveCommandPlannerTests: XCTestCase {
             .setVfoBHz(7_100_000), .setRx1Hz(7_105_000)])
     }
 
-    func testSubCarrierIncludesRx2Marker() {
+    func testJumpGuardsUseDialFrequenciesNotMarkerCarrier() {
         var e = state(sub: true)
         e.radio.markerOffsetHzRx2 = 600
         XCTAssertEqual(plan(.copyAToB, e).first,
-                       .requireJumpAllowed(fromHz: 14_200_600, toHz: 7_100_000))
+                       .requireJumpAllowed(fromHz: 14_200_000, toHz: 7_100_000))
+        XCTAssertEqual(plan(.swapAB, e)[1],
+                       .requireJumpAllowed(fromHz: 14_200_000, toHz: 7_100_000))
+    }
+
+    func testSplitWinsOverSubForTargetButModesStillCopy() {
+        let e = state(sub: true, split: true)
+        XCTAssertEqual(plan(.copyAToB, e), [
+            .requireJumpAllowed(fromHz: 7_105_000, toHz: 7_100_000), .setRptActive(false),
+            .setVfoBHz(7_100_000), .setModeRx2("USB"), .setRx2Bandwidth(2700)])
+        XCTAssertEqual(plan(.copyBToA, e), [
+            .requireJumpAllowed(fromHz: 7_100_000, toHz: 7_105_000), .setRptActive(false),
+            .setRx1Hz(7_105_000), .setMode("CWU"), .setRxBandwidth(500)])
+        XCTAssertEqual(plan(.swapAB, e), [
+            .requireJumpAllowed(fromHz: 7_100_000, toHz: 7_105_000),
+            .requireJumpAllowed(fromHz: 7_105_000, toHz: 7_100_000),
+            .setRptActive(false), .setVfoBHz(7_100_000), .setRx1Hz(7_105_000),
+            .setMode("CWU"), .setModeRx2("USB"), .setRxBandwidth(500), .setRx2Bandwidth(2700)])
     }
 
     func testCopyAbortsWhenJumpBlocked() {

@@ -70,16 +70,8 @@ enum LiveCommandPlanner {
 
     // MARK: - A/B rules
 
-    /// VFO B's live carrier (QML `bFromHz`): RX2 plus its marker offset under Sub without split,
-    /// else VFO B.
-    private nonisolated static func bCarrier(_ r: EngineState.Radio) -> UInt32 {
-        if r.subEnabled && !r.splitEnabled {
-            return clamp(Int64(r.rx2Hz) + Int64(r.markerOffsetHzRx2))
-        }
-        return r.vfoBHz
-    }
-
-    /// The value B holds as a dial frequency: RX2 under Sub without split, else VFO B.
+    /// VFO B's dial frequency (QML `bFromHz`): RX2 under Sub without split, else VFO B. The jump
+    /// guards compare dial frequencies; the CW marker offset is display-only.
     private nonisolated static func bDial(_ r: EngineState.Radio) -> UInt32 {
         r.subEnabled && !r.splitEnabled ? r.rx2Hz : r.vfoBHz
     }
@@ -92,7 +84,7 @@ enum LiveCommandPlanner {
     private nonisolated static func copyAToB(_ e: EngineState) -> [EngineCall] {
         let r = e.radio
         var plan: [EngineCall] = []
-        if bIsLive(r) { plan.append(.requireJumpAllowed(fromHz: bCarrier(r), toHz: r.rx1Hz)) }
+        if bIsLive(r) { plan.append(.requireJumpAllowed(fromHz: bDial(r), toHz: r.rx1Hz)) }
         if r.splitEnabled { plan.append(.setRptActive(false)) }
         plan.append(r.subEnabled && !r.splitEnabled ? .setRx2Hz(r.rx1Hz) : .setVfoBHz(r.rx1Hz))
         if r.subEnabled {
@@ -117,7 +109,7 @@ enum LiveCommandPlanner {
         let r = e.radio
         let a = r.rx1Hz, b = bDial(r)
         var plan: [EngineCall] = [.requireJumpAllowed(fromHz: a, toHz: b)]
-        if bIsLive(r) { plan.append(.requireJumpAllowed(fromHz: bCarrier(r), toHz: a)) }
+        if bIsLive(r) { plan.append(.requireJumpAllowed(fromHz: bDial(r), toHz: a)) }
         if r.splitEnabled { plan.append(.setRptActive(false)) }
         plan.append(r.subEnabled && !r.splitEnabled ? .setRx2Hz(a) : .setVfoBHz(a))
         plan.append(.setRx1Hz(b))
