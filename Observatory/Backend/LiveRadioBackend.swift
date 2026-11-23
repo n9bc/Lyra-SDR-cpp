@@ -80,7 +80,7 @@ final class LiveRadioBackend: RadioBackend {
         let t = now()
         let before = tracker.phase
         feedTracker(at: t)
-        let clockMoved = Int(t.timeIntervalSince1970) != Int(snapshot.telemetry.utc.timeIntervalSince1970)
+        let clockMoved = Self.wholeSecond(t) != snapshot.telemetry.utc
         let meterDue = meterPending && t.timeIntervalSince(lastApply) >= Self.meterInterval
         if meterDue || tracker.phase != before || clockMoved { refresh(at: t) }
     }
@@ -133,8 +133,14 @@ final class LiveRadioBackend: RadioBackend {
 
     private static func render(_ e: EngineState, phase: ConnectionPhase, vfoLocked: Bool,
                                now: Date) -> RadioSnapshot {
-        LiveSnapshotMapper.snapshot(from: e, phase: phase, vfoLocked: vfoLocked, now: now,
-                                    timeZone: .current)
+        // The clock shows whole seconds; truncating keeps an identical engine state equal
+        // between refreshes inside one second, so the snapshot is not reassigned for nothing.
+        LiveSnapshotMapper.snapshot(from: e, phase: phase, vfoLocked: vfoLocked,
+                                    now: wholeSecond(now), timeZone: .current)
+    }
+
+    private static func wholeSecond(_ d: Date) -> Date {
+        Date(timeIntervalSince1970: d.timeIntervalSince1970.rounded(.down))
     }
 }
 

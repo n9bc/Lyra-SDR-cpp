@@ -148,4 +148,13 @@ final class ConnectionTrackerTests: XCTestCase {
         }
         XCTAssertEqual(tracker.phase, .stalled)
     }
+
+    func testTimeoutWithoutAddressHasNoSuffix() {
+        for ip in ["", "  "] {
+            var tracker = ConnectionTracker()
+            tracker.requestConnect(ip: ip, at: t0)
+            tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(8))
+            XCTAssertEqual(tracker.phase, .error("No radio answered"))
+        }
+    }
 }

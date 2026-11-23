@@ -103,6 +103,44 @@ final class LiveRadioBackendTests: XCTestCase {
         XCTAssertTrue(fired.value)
     }
 
+    func testIdenticalStateWithinOneSecondDoesNotReassign() {
+        clock = Date(timeIntervalSince1970: 1_000_000.1)
+        let backend = make()
+        let fired = Flag()
+        withObservationTracking { _ = backend.snapshot } onChange: { fired.set() }
+        advance(0.5)
+        facade.fire(.radio)
+        backend.tick()
+        XCTAssertFalse(fired.value)
+    }
+
+    func testTickAcrossSecondReassignsOnlyTheClock() {
+        clock = Date(timeIntervalSince1970: 1_000_000.1)
+        let backend = make()
+        let before = backend.snapshot
+        let fired = Flag()
+        withObservationTracking { _ = backend.snapshot } onChange: { fired.set() }
+        advance(0.5)
+        backend.tick()
+        XCTAssertFalse(fired.value)
+        advance(0.5)
+        backend.tick()
+        XCTAssertTrue(fired.value)
+        var expected = before
+        expected.telemetry.utc = Date(timeIntervalSince1970: 1_000_001)
+        XCTAssertEqual(backend.snapshot, expected)
+    }
+
+    func testConnectWithoutSavedAddressStillPerformsAndTimesOutWithoutSuffix() {
+        facade.state.link.savedIp = "  "
+        let backend = make()
+        backend.send(.connect)
+        XCTAssertEqual(facade.performed, [[.connect]])
+        advance(8)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase, .error("No radio answered"))
+    }
+
     func testMeterUpdatesAreCoalesced() {
         let backend = make()
         facade.state.meters.sMeterDbm = -90

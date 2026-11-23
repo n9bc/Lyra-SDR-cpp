@@ -84,7 +84,7 @@ struct ConnectionTracker: Equatable, Sendable {
         if !hadData, let at = connectRequestedAt {
             if timedOut || now.timeIntervalSince(at) >= Self.connectTimeout {
                 timedOut = true
-                phase = .error("No radio answered at \(requestedIP ?? "the radio")")
+                phase = .error(noAnswerMessage)
                 return
             }
         }
@@ -109,8 +109,14 @@ struct ConnectionTracker: Equatable, Sendable {
         } else if phase == .connecting, let at = connectRequestedAt,
                   now.timeIntervalSince(at) >= Self.connectTimeout {
             connectRequestedAt = nil
-            phase = .error("No radio answered at \(requestedIP ?? "the radio")")
+            phase = .error(noAnswerMessage)
         }
+    }
+
+    /// With no known address (discovery) the text carries no " at ..." suffix.
+    private var noAnswerMessage: String {
+        let ip = (requestedIP ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return ip.isEmpty ? "No radio answered" : "No radio answered at \(ip)"
     }
 
     private mutating func clearSession() {
