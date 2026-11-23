@@ -5,10 +5,11 @@ import SwiftUI
 #endif
 struct ObservatoryApp: App {
     @State private var backend = MockRadioBackend()
+    @State private var displayStore = DisplayStore()
 
     var body: some Scene {
         WindowGroup {
-            ConsoleView(backend: backend)
+            ConsoleView(backend: backend, displayStore: displayStore)
         }
     }
 }
