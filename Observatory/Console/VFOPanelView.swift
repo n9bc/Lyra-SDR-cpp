@@ -7,11 +7,14 @@ struct VFOPanelView: View {
     let title: String
     /// Drives the TX tag: filled only while on air (spec §5.2).
     let transmitState: TransmitState
+    /// True when this receiver has the session focus; drives the highlighted border and glow.
+    let focused: Bool
 
-    init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState) {
+    init(receiver: ReceiverSnapshot, title: String, transmitState: TransmitState, focused: Bool) {
         self.receiver = receiver
         self.title = title
         self.transmitState = transmitState
+        self.focused = focused
     }
 
     private var on: Bool { receiver.enabled }
@@ -71,7 +74,7 @@ struct VFOPanelView: View {
             .frame(maxHeight: .infinity)
             toggleRow
         }
-        .vfoPanel(highlighted: isMain)
+        .vfoPanel(highlighted: focused)
     }
 
     private var header: some View {
@@ -255,25 +258,25 @@ struct VFOPanelView: View {
 }
 
 #Preview("Main VFO") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Sub VFO (disabled)") {
-    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle)
+    VFOPanelView(receiver: RadioSnapshot.sample.sub, title: "SUB \u{00B7} 20M", transmitState: .idle, focused: false)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO on air") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .onAir, focused: true)
         .frame(width: 640, height: ConsoleLayout.vfoRowHeight)
         .padding(8).background(LyraDS.Palette.void)
 }
 
 #Preview("Main VFO at minimum window") {
-    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle)
+    VFOPanelView(receiver: RadioSnapshot.sample.main, title: "MAIN \u{00B7} 40M", transmitState: .idle, focused: true)
         .frame(width: 529, height: 212)
         .background(LyraDS.Palette.void)
 }

@@ -110,8 +110,9 @@ struct ReceiverColumnContent: View {
     private var agcSection: some View {
         let threshold = Double(snapshot.dsp.agcThresholdDbfs)
         return VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("AGC", detail: "Gain \(snapshot.dsp.agcGainDb) dB")
-            LyraSegmentedControl("AGC mode", selection: .constant(snapshot.main.agc), options: AGCMode.allCases,
+            ConsoleSectionHeader("AGC", detail: ConsoleFormat.focusDetail("Gain \(snapshot.dsp.agcGainDb) dB",
+                                                                         focused: snapshot.session.focused))
+            LyraSegmentedControl("AGC mode", selection: .constant(snapshot.focusedReceiver.agc), options: AGCMode.allCases,
                                  title: { $0.rawValue }, accent: LyraDS.Palette.cyan)
             ConsoleSliderRow(label: "Thresh", help: "AGC threshold", value: .constant(threshold), range: -140...0,
                              step: 1, readout: Self.signed(threshold, "dBFS"))

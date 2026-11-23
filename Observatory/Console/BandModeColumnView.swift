@@ -73,10 +73,11 @@ struct BandModeColumnContent: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("Mode", detail: snapshot.main.mode.rawValue)
+            ConsoleSectionHeader("Mode", detail: ConsoleFormat.focusDetail(snapshot.focusedReceiver.mode.rawValue,
+                                                                        focused: snapshot.session.focused))
             LazyVGrid(columns: consoleColumns(5), spacing: 5) {
                 ForEach(RadioMode.allCases, id: \.self) { m in
-                    ConsoleChip(title: m.rawValue, help: "Mode \(m.rawValue)", kind: snapshot.main.mode == m ? .on : .plain,
+                    ConsoleChip(title: m.rawValue, help: "Mode \(m.rawValue)", kind: snapshot.focusedReceiver.mode == m ? .on : .plain,
                                 fullWidth: true)
                 }
             }
@@ -106,7 +107,9 @@ struct BandModeColumnContent: View {
 
     private var filterSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ConsoleSectionHeader("Filter", detail: String(format: "RX %.1f kHz", Double(snapshot.main.filterHz) / 1000))
+            ConsoleSectionHeader("Filter", detail: ConsoleFormat.focusDetail(
+                String(format: "RX %.1f kHz", Double(snapshot.focusedReceiver.filterHz) / 1000),
+                focused: snapshot.session.focused))
             LazyVGrid(columns: consoleColumns(4), spacing: 5) {
                 ForEach(snapshot.filter.presets, id: \.self) { name in
                     ConsoleChip(title: name, help: "Filter \(name)", kind: snapshot.filter.selectedPreset == name ? .on : .plain,

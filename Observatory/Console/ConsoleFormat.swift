@@ -44,6 +44,11 @@ enum ConsoleFormat {
         return (r < 0 ? minus : "+") + "\(abs(r)) dB"
     }
 
+    /// Header detail for sections that follow the focused receiver: Sub is prefixed so it is never mistaken for Main.
+    nonisolated static func focusDetail(_ detail: String, focused: ReceiverID) -> String {
+        focused == .sub ? "SUB \u{00B7} " + detail : detail
+    }
+
     nonisolated static func telemetry(volts: Double?) -> String {
         guard let volts else { return "not reported" }
         return String(format: "%.1f V", volts)

@@ -21,14 +21,17 @@ struct ConsoleView: View {
 
             HStack(spacing: gap) {
                 VFOPanelView(receiver: snapshot.main, title: "MAIN \u{00B7} \(snapshot.main.bandName)",
-                             transmitState: snapshot.transmit.state)
+                             transmitState: snapshot.transmit.state,
+                             focused: snapshot.session.focused == snapshot.main.id)
                     .frame(maxHeight: .infinity)
                 VFOCenterColumn(session: snapshot.session, sub: snapshot.sub,
-                                splitTx: snapshot.main.splitTx || snapshot.sub.splitTx)
+                                splitTx: snapshot.main.splitTx || snapshot.sub.splitTx,
+                                send: backend.send)
                     .frame(width: ConsoleLayout.vfoCenterWidth)
                     .frame(maxHeight: .infinity)
                 VFOPanelView(receiver: snapshot.sub, title: "SUB \u{00B7} \(snapshot.sub.bandName)",
-                             transmitState: snapshot.transmit.state)
+                             transmitState: snapshot.transmit.state,
+                             focused: snapshot.session.focused == snapshot.sub.id)
                     .frame(maxHeight: .infinity)
             }
             .frame(height: ConsoleLayout.vfoRowHeight)

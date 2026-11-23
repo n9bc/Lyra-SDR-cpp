@@ -54,4 +54,8 @@ final class ConsoleFormatTests: XCTestCase {
         XCTAssertEqual(m.litCount(fraction: -.infinity), 0)
         XCTAssertEqual(m.litCount(fraction: .nan), 0)
     }
+    func testFocusDetail() {
+        XCTAssertEqual(ConsoleFormat.focusDetail("LSB", focused: .main), "LSB")
+        XCTAssertEqual(ConsoleFormat.focusDetail("USB", focused: .sub), "SUB \u{00B7} USB")
+    }
 }
