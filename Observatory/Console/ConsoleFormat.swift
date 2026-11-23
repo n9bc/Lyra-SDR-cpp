@@ -56,7 +56,10 @@ enum ConsoleFormat {
     }
 
     /// AGC header: the AGC settings are shared by both receivers, so no focus prefix.
-    nonisolated static func agcGainDetail(_ gainDb: Int) -> String { "Gain \(gainDb) dB" }
+    /// "Gain —" when the engine has not reported a gain.
+    nonisolated static func agcGainDetail(_ gainDb: Int?) -> String {
+        gainDb.map { "Gain \($0) dB" } ?? "Gain \u{2014}"
+    }
 
     nonisolated static func telemetry(volts: Double?) -> String {
         guard let volts else { return "not reported" }

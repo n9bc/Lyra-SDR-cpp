@@ -14,6 +14,9 @@ struct ConnectionTracker: Equatable, Sendable {
     private(set) var phase: ConnectionPhase = .disconnected
 
     private var requestedIP: String?
+    /// The address the engine reported while up for the current request. The connect sweep can
+    /// open an address other than the requested one; the no-answer text names this one.
+    private var openedIP: String?
     private var connectRequestedAt: Date?
     private var disconnectRequested = false
     private var wasUp = false
@@ -28,6 +31,7 @@ struct ConnectionTracker: Equatable, Sendable {
 
     mutating func requestConnect(ip: String, at: Date) {
         requestedIP = ip
+        openedIP = nil
         connectRequestedAt = at
         disconnectRequested = false
         hadData = false
@@ -54,7 +58,9 @@ struct ConnectionTracker: Equatable, Sendable {
         }
     }
 
-    mutating func update(running: Bool, p2Running: Bool, datagramsPerSec: Double, now: Date) {
+    /// `targetIp` is the address the engine has open; empty when it does not report one.
+    mutating func update(running: Bool, p2Running: Bool, datagramsPerSec: Double,
+                         targetIp: String = "", now: Date) {
         let isUp = running || p2Running
         defer { wasUp = isUp }
 
@@ -62,6 +68,8 @@ struct ConnectionTracker: Equatable, Sendable {
             updateDown(now: now)
             return
         }
+        let target = targetIp.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !target.isEmpty { openedIP = target }
 
         if !wasUp {
             openedAt = now
@@ -113,9 +121,10 @@ struct ConnectionTracker: Equatable, Sendable {
         }
     }
 
-    /// With no known address (discovery) the text carries no " at ..." suffix.
+    /// Names the address the engine opened, else the one requested; with neither (discovery)
+    /// the text carries no " at ..." suffix.
     private var noAnswerMessage: String {
-        let ip = (requestedIP ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let ip = (openedIP ?? requestedIP ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return ip.isEmpty ? "No radio answered" : "No radio answered at \(ip)"
     }
 

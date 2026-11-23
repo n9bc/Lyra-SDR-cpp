@@ -422,8 +422,8 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     if (WdspEngine *we = [self engineDsp]) {
         m.spanHz = we->spanHz();
         m.iqRateHz = we->iqRateHz();
-        m.sampleRateHz = we->sampleRate();
     }
+    // The configured rate, known while disconnected; the console shows it in the top bar.
     if (Prefs *pr = [self enginePrefs])
         m.sampleRateHz = pr->sampleRate();
     return m;

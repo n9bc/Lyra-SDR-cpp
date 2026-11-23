@@ -214,4 +214,152 @@ final class LiveSnapshotMapperTests: XCTestCase {
         e.link.firmware = nil
         XCTAssertEqual(map(e).connection.radioName, "Hermes Lite 2")
     }
+
+    // MARK: - Readings need a streaming radio (final review, Important 1 and 2)
+
+    /// Every live reading set to a plausible value, so a nil proves the mapper dropped it.
+    private func reportingState() -> EngineState {
+        var e = EngineState.idle
+        e.meters.sMeterDbm = -90
+        e.meters.sMeterDbmRx2 = -100
+        e.meters.snrDb = 20
+        e.telemetry.tempC = 31.4
+        e.telemetry.supplyV = 13.8
+        e.telemetry.paCurrentA = 0.5
+        e.transmit.fwdPowerW = 5
+        e.transmit.swr = 1.2
+        e.transmit.alcDb = -10
+        e.transmit.micLevelDb = -20
+        e.transmit.psArmed = true
+        e.transmit.psFeedback = 150
+        e.frontEnd.adcOverload = true
+        return e
+    }
+
+    func testReadingsPresentWhileStreaming() {
+        let s = map(reportingState(), phase: .streaming)
+        XCTAssertEqual(s.main.signalDbm, -90)
+        XCTAssertEqual(s.sub.signalDbm, -100)
+        XCTAssertEqual(s.main.snrDb, 20)
+        XCTAssertEqual(s.telemetry.temperatureC, 31.4)
+        XCTAssertEqual(s.telemetry.supplyV, 13.8)
+        XCTAssertEqual(s.telemetry.paCurrentA, 0.5)
+        XCTAssertEqual(s.transmit.fwdPowerW, 5)
+        XCTAssertEqual(s.transmit.swr, 1.2)
+        XCTAssertEqual(s.transmit.alcDb, -10)
+        XCTAssertEqual(s.transmit.micLevelDb, -20)
+        XCTAssertEqual(s.transmit.psFeedback, 150)
+        XCTAssertEqual(s.frontEnd.overload, true)
+    }
+
+    /// Before the first frame, after a disconnect and during a stall the engine still holds
+    /// values (the -140 floor, PA current 0, the last telemetry). None of them may show.
+    func testReadingsAbsentUnlessStreaming() {
+        let phases: [ConnectionPhase] = [.disconnected, .discovering, .connecting, .socketOpen,
+                                         .stalled, .error("Connection closed")]
+        for phase in phases {
+            let s = map(reportingState(), phase: phase)
+            XCTAssertNil(s.main.signalDbm, "\(phase)")
+            XCTAssertNil(s.sub.signalDbm, "\(phase)")
+            XCTAssertNil(s.main.snrDb, "\(phase)")
+            XCTAssertNil(s.telemetry.temperatureC, "\(phase)")
+            XCTAssertNil(s.telemetry.supplyV, "\(phase)")
+            XCTAssertNil(s.telemetry.paCurrentA, "\(phase)")
+            XCTAssertNil(s.transmit.fwdPowerW, "\(phase)")
+            XCTAssertNil(s.transmit.swr, "\(phase)")
+            XCTAssertNil(s.transmit.alcDb, "\(phase)")
+            XCTAssertNil(s.transmit.micLevelDb, "\(phase)")
+            XCTAssertNil(s.transmit.psFeedback, "\(phase)")
+            XCTAssertNil(s.frontEnd.overload, "\(phase)")
+        }
+    }
+
+    func testPaCurrentZeroBeforeFirstFrameIsNotShown() {
+        var e = EngineState.idle
+        e.telemetry.paCurrentA = 0
+        e.telemetry.tempC = -50
+        let s = map(e, phase: .disconnected)
+        XCTAssertNil(s.telemetry.paCurrentA)
+        XCTAssertNil(s.telemetry.temperatureC)
+    }
+
+    func testSMeterFloorsBecomeNil() {
+        var e = EngineState.idle
+        for floor in [-140.0, -200.0, -.infinity, .nan] {
+            e.meters.sMeterDbm = floor
+            e.meters.sMeterDbmRx2 = floor
+            let s = map(e)
+            XCTAssertNil(s.main.signalDbm, "\(floor)")
+            XCTAssertNil(s.sub.signalDbm, "\(floor)")
+        }
+        e.meters.sMeterDbm = -139.5
+        XCTAssertEqual(map(e).main.signalDbm, -139.5)
+    }
+
+    /// The engine reports NaN for the AGC gain whenever WDSP is not running. The mapper must
+    /// neither trap on it nor turn it into a number, whatever the facade passes through.
+    func testAgcLevelsNaNBecomeNilWithoutTrapping() {
+        var e = EngineState.idle
+        e.dsp.agcMaxGainDb = .nan
+        e.dsp.agcThreshDb = .nan
+        e.dsp.nbStrength = .nan
+        for phase: ConnectionPhase in [.streaming, .disconnected] {
+            let d = map(e, phase: phase).dsp
+            XCTAssertNil(d.agcGainDb)
+            XCTAssertNil(d.agcThresholdDbfs)
+            XCTAssertNil(d.nbLevel)
+        }
+        e.dsp.agcMaxGainDb = .infinity
+        e.dsp.agcThreshDb = -.infinity
+        XCTAssertNil(map(e).dsp.agcGainDb)
+        XCTAssertNil(map(e).dsp.agcThresholdDbfs)
+    }
+
+    func testAgcLevelsReported() {
+        var e = EngineState.idle
+        e.dsp.agcMaxGainDb = 88.4
+        e.dsp.agcThreshDb = -92.2
+        e.dsp.nbStrength = 0.3
+        let d = map(e).dsp
+        XCTAssertEqual(d.agcGainDb, 88)
+        XCTAssertEqual(d.agcThresholdDbfs, -92)
+        XCTAssertEqual(d.nbLevel, 30)
+    }
+
+    func testIdleEngineReportsNoAgcGain() {
+        XCTAssertNil(map(.idle).dsp.agcGainDb)
+    }
+
+    // MARK: - Band highlight follows the focused receiver (final review, Minor 1)
+
+    func testSelectedBandFollowsFocusedReceiver() {
+        var e = EngineState.idle
+        e.bands = [
+            EngineBand(name: "40m", lowHz: 7_000_000, highHz: 7_300_000, defaultHz: 7_074_000),
+            EngineBand(name: "20m", lowHz: 14_000_000, highHz: 14_350_000, defaultHz: 14_074_000),
+        ]
+        e.radio.rx1Hz = 7_100_000
+        e.radio.rx2Hz = 14_200_000
+        e.radio.subEnabled = true
+        e.radio.focusedRx = 2
+        XCTAssertEqual(map(e).band.selectedBand, "20")
+        e.radio.focusedRx = 1
+        XCTAssertEqual(map(e).band.selectedBand, "40")
+        // Focus 2 without Sub shows Main focused, so the highlight is Main's band.
+        e.radio.focusedRx = 2
+        e.radio.subEnabled = false
+        XCTAssertEqual(map(e).band.selectedBand, "40")
+    }
+
+    /// The chip uses the carrier the panel title uses: near a band edge in CW the marker
+    /// offset decides the band.
+    func testSelectedBandUsesTheCarrier() {
+        var e = EngineState.idle
+        e.bands = [EngineBand(name: "40m", lowHz: 7_000_000, highHz: 7_300_000, defaultHz: 7_074_000)]
+        e.radio.rx1Hz = 6_999_500
+        e.radio.markerOffsetHz = 600
+        let s = map(e)
+        XCTAssertEqual(s.main.bandName, "40")
+        XCTAssertEqual(s.band.selectedBand, "40")
+    }
 }

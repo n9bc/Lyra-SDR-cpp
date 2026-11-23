@@ -78,12 +78,25 @@ struct VFOPanelView: View {
 
     private var filterText: String { String(format: "%.1fk", Double(receiver.filterHz) / 1000) }
 
-    private var readout: String {
-        guard on else { return "Sub receiver off" }
-        var s = String(format: "%.1f", receiver.signalDbm).replacingOccurrences(of: "-", with: "\u{2212}")
+    /// The line under the meter: dBm and SNR, or why there is no reading.
+    nonisolated static func readoutText(signalDbm: Double?, snrDb: Double?, enabled: Bool) -> String {
+        guard enabled else { return "Sub receiver off" }
+        guard let dbm = signalDbm, dbm.isFinite else { return "S-meter not reported" }
+        var s = String(format: "%.1f", dbm).replacingOccurrences(of: "-", with: "\u{2212}")
         s += " dBm"
-        if let snr = ConsoleFormat.snr(receiver.snrDb) { s += " \u{00B7} " + snr }
+        if let snr = ConsoleFormat.snr(snrDb) { s += " \u{00B7} " + snr }
         return s
+    }
+
+    /// The S-unit box: "S—" when the radio has not reported a reading.
+    nonisolated static func sUnitText(signalDbm: Double?, enabled: Bool) -> String {
+        guard enabled else { return "S0" }
+        guard let dbm = signalDbm, dbm.isFinite else { return "S\u{2014}" }
+        return ConsoleFormat.sUnits(dbm: dbm)
+    }
+
+    private var readout: String {
+        Self.readoutText(signalDbm: receiver.signalDbm, snrDb: receiver.snrDb, enabled: on)
     }
 
     var body: some View {
@@ -219,7 +232,7 @@ struct VFOPanelView: View {
                         send(.setSplit(!receiver.splitTx))
                     }
                 }
-                Text(on ? ConsoleFormat.sUnits(dbm: receiver.signalDbm) : "S0")
+                Text(Self.sUnitText(signalDbm: receiver.signalDbm, enabled: on))
                     .font(mono(15)).lineLimit(1)
                     .foregroundStyle(on ? LyraDS.Palette.yellow : LyraDS.Palette.chipDimText)
                     .shadow(color: on ? LyraDS.Palette.yellow.opacity(0.45) : .clear, radius: 4)

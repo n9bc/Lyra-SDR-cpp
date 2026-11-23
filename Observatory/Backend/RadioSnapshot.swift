@@ -84,7 +84,8 @@ struct ReceiverSnapshot: Equatable, Sendable {
     var stepHz: Int
     var bandName: String
     var antenna: String
-    var signalDbm: Double
+    /// nil when the radio has not reported a reading (not streaming, or the meter's floor).
+    var signalDbm: Double?
     var snrDb: Double?
     var agc: AGCMode
     var ritEnabled: Bool
@@ -100,7 +101,8 @@ struct FrontEndSnapshot: Equatable, Sendable {
     var lnaDb: Int
     var lnaRange: ClosedRange<Int>
     var autoLna: Bool
-    var overload: Bool
+    /// nil when the radio has not reported (not streaming).
+    var overload: Bool?
     var inputs: [String]
     var selectedInput: String
 }
@@ -121,9 +123,10 @@ struct DSPSnapshot: Equatable, Sendable {
     var toggles: [QuickToggle]
     var nrMode: Int
     var anfLevel: Int
-    var nbLevel: Int
-    var agcThresholdDbfs: Int
-    var agcGainDb: Int
+    /// The engine's AGC and noise-blanker levels; nil when it has not reported them (NaN).
+    var nbLevel: Int?
+    var agcThresholdDbfs: Int?
+    var agcGainDb: Int?
     var notchCount: Int
     var squelchOn: Bool
 }

@@ -128,13 +128,14 @@ enum LiveCommandPlanner {
         guard let band = e.bands.first(where: { LiveSnapshotMapper.bandLabel($0.name) == label })
         else { return [] }
         let r = e.radio
-        if r.focusedRx == 2 && r.subEnabled {
+        if LiveSnapshotMapper.focusedReceiver(r) == .sub {
             return [.recallBand(name: band.name, defaultHz: band.defaultHz, rx2: true)]
         }
-        // Focus on VFO B under split without Sub has no recall path in the engine call set
-        // (QML recalls into VFO B); refuse rather than retune RX1 by mistake.
-        if r.focusedRx == 2 && r.splitEnabled { return [] }
-        return [.recallBand(name: band.name, defaultHz: band.defaultHz, rx2: false)]
+        // The console shows Main focused, so the click acts on Main. Engine focus left on VFO B
+        // (split kept it when Sub went off) is brought back to RX1 so the layers agree and the
+        // hardware wheel tunes what the console shows focused.
+        let refocus: [EngineCall] = r.focusedRx == 2 ? [.setFocusedRx(1)] : []
+        return refocus + [.recallBand(name: band.name, defaultHz: band.defaultHz, rx2: false)]
     }
 
     // MARK: - Arithmetic

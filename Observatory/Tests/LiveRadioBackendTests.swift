@@ -145,6 +145,8 @@ final class LiveRadioBackendTests: XCTestCase {
     }
 
     func testMeterUpdatesAreCoalesced() {
+        facade.state.link.running = true
+        facade.state.link.datagramsPerSec = 380
         let backend = make()
         facade.state.meters.sMeterDbm = -90
         facade.fire(.meters)
@@ -329,5 +331,63 @@ final class LiveRadioBackendTests: XCTestCase {
         let p2 = BackendCapabilities.live(nnrAvailable: true, isP2: true)
         XCTAssertEqual(p2.control(.dsp(.nnr)), .available)
         XCTAssertEqual(p2.control(.attenuator), .unavailable("Arrives in Milestone 5"))
+    }
+
+    /// Final review, Important 1: readings show only while the radio streams, and clear when the
+    /// stream stalls or the radio disconnects, though the engine still holds the last values.
+    func testReadingsClearOnStallAndDisconnect() {
+        facade.state.link.savedIp = "169.254.19.221"
+        facade.state.meters.sMeterDbm = -90
+        facade.state.telemetry.tempC = 31
+        facade.state.telemetry.paCurrentA = 0.4
+        let backend = make()
+        XCTAssertNil(backend.snapshot.main.signalDbm)
+        XCTAssertNil(backend.snapshot.telemetry.temperatureC)
+        XCTAssertNil(backend.snapshot.telemetry.paCurrentA)
+
+        backend.send(.connect)
+        facade.state.link.running = true
+        facade.state.link.datagramsPerSec = 380
+        facade.fire(.stats)
+        XCTAssertEqual(backend.snapshot.connection.phase, .streaming)
+        XCTAssertEqual(backend.snapshot.main.signalDbm, -90)
+        XCTAssertEqual(backend.snapshot.telemetry.temperatureC, 31)
+        XCTAssertEqual(backend.snapshot.telemetry.paCurrentA, 0.4)
+
+        facade.state.link.datagramsPerSec = 0
+        facade.fire(.stats)
+        advance(2)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase, .stalled)
+        XCTAssertNil(backend.snapshot.main.signalDbm)
+        XCTAssertNil(backend.snapshot.telemetry.temperatureC)
+        XCTAssertNil(backend.snapshot.telemetry.paCurrentA)
+
+        facade.state.link.datagramsPerSec = 380
+        facade.fire(.stats)
+        XCTAssertEqual(backend.snapshot.telemetry.temperatureC, 31)
+        backend.send(.disconnect)
+        facade.state.link.running = false
+        facade.state.link.datagramsPerSec = 0
+        facade.fire(.stats)
+        XCTAssertEqual(backend.snapshot.connection.phase, .disconnected)
+        XCTAssertNil(backend.snapshot.main.signalDbm)
+        XCTAssertNil(backend.snapshot.telemetry.temperatureC)
+        XCTAssertNil(backend.snapshot.telemetry.paCurrentA)
+    }
+
+    /// Final review, Minor 2: the connect sweep can open an address other than the saved one;
+    /// the no-answer text names the address the engine actually opened.
+    func testNoAnswerNamesTheAddressTheEngineOpened() {
+        facade.state.link.savedIp = "169.254.19.221"
+        let backend = make()
+        backend.send(.connect)
+        advance(2)
+        facade.state.link.running = true
+        facade.state.link.targetIp = "192.168.1.40"
+        facade.fire(.stats)
+        advance(6)
+        backend.tick()
+        XCTAssertEqual(backend.snapshot.connection.phase, .error("No radio answered at 192.168.1.40"))
     }
 }

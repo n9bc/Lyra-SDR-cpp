@@ -34,21 +34,32 @@ struct PowerChipModel: Equatable, Sendable {
 }
 
 /// Top bar (46 pt): power, radio, profile, DSP chips, tools, apps, REC, spot, clocks, settings.
-/// Actions are empty in Milestone 1 (static console). Narrow widths degrade in three levels:
-/// everything inline, Tools in a menu, then Tools and the TX DSP / RX chips in menus.
+/// Power sends connect/disconnect and the gear opens the engine's Settings; the profile, DSP,
+/// tools and apps controls have no engine path yet and are gated on their `ConsoleControl`.
+/// Narrow widths degrade in three levels: everything inline, Tools in a menu, then Tools and the
+/// TX DSP / RX chips in menus.
 struct TopBarView: View {
     let snapshot: RadioSnapshot
     let capabilities: BackendCapabilities
     let send: (RadioCommand) -> Void
+    /// Opens the engine's Settings window; nil (previews, tests) leaves the gear disabled.
+    let openSettings: (@MainActor () -> Void)?
     /// Fixed time for previews and tests only; nil (the app) shows the current time.
     let clockOverride: Date?
 
     init(snapshot: RadioSnapshot, capabilities: BackendCapabilities,
-         send: @escaping (RadioCommand) -> Void, clockOverride: Date? = nil) {
+         send: @escaping (RadioCommand) -> Void, openSettings: (@MainActor () -> Void)? = nil,
+         clockOverride: Date? = nil) {
         self.snapshot = snapshot
         self.capabilities = capabilities
         self.send = send
+        self.openSettings = openSettings
         self.clockOverride = clockOverride
+    }
+
+    /// The gear is usable only when it has a Settings action to run.
+    nonisolated static func settingsStatus(hasAction: Bool) -> CapabilityStatus {
+        hasAction ? .available : .unavailable("Settings need the radio engine")
     }
 
     private static let txDSP = ["Speech", "EQ", "Combinator", "Plating"]
@@ -101,11 +112,12 @@ struct TopBarView: View {
         Text(text).font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted).fixedSize()
     }
 
-    private func chip(_ title: String, _ style: ConsoleChipStyle = .plain, help: String) -> some View {
+    private func chip(_ title: String, _ style: ConsoleChipStyle = .plain, help: String,
+                      status: CapabilityStatus) -> some View {
         Button(title) {}
             .buttonStyle(ConsoleChipButtonStyle(style))
             .accessibilityLabel(help)
-            .help(help)
+            .consoleAvailability(status, help: help)
     }
 
     private func menuLabel(_ title: String) -> some View {
@@ -124,7 +136,8 @@ struct TopBarView: View {
     }
 
     private func menu(
-        _ title: String, help: String, items: [String], isOn: @escaping (String) -> Bool = { _ in false }
+        _ title: String, help: String, items: [String], status: CapabilityStatus,
+        isOn: @escaping (String) -> Bool = { _ in false }
     ) -> some View {
         Menu {
             ForEach(items, id: \.self) { item in
@@ -139,48 +152,55 @@ struct TopBarView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel(help)
-        .help(help)
+        .consoleAvailability(status, help: help)
     }
 
     private var profile: some View {
-        HStack(spacing: 8) {
+        let status = capabilities.control(.profile)
+        return HStack(spacing: 8) {
             label("Profile")
             menu(session.profileName, help: "Operating profile", items: [session.profileName],
-                 isOn: { _ in true })
+                 status: status, isOn: { _ in true })
             Circle()
                 .fill(session.profileModified ? LyraDS.Palette.yellow : LyraDS.Palette.textDim)
                 .frame(width: 7, height: 7)
                 .shadow(color: session.profileModified ? LyraDS.Palette.yellow : .clear, radius: 3)
                 .help(session.profileModified ? "Profile modified" : "Profile unchanged")
                 .accessibilityLabel(session.profileModified ? "Profile modified" : "Profile unchanged")
-            chip("Save", help: "Save the profile")
+            chip("Save", help: "Save the profile", status: status)
         }
     }
 
     private func dspOn(_ name: String) -> Bool { session.txDSPOn[name] ?? false }
 
     @ViewBuilder private func dsp(collapsed: Bool) -> some View {
+        let tx = capabilities.control(.txDSP)
         if collapsed {
-            menu("DSP", help: "TX DSP and RX equaliser", items: Self.txDSP + ["RX EQ"], isOn: dspOn)
+            // One menu holds both; it is usable when either part is.
+            let rx = capabilities.control(.rxEqualizer)
+            menu("DSP", help: "TX DSP and RX equaliser", items: Self.txDSP + ["RX EQ"],
+                 status: ConsoleAvailability.isDisabled(tx) ? rx : tx, isOn: dspOn)
         } else {
             HStack(spacing: 8) {
                 label("TX DSP")
                 ForEach(Self.txDSP, id: \.self) {
-                    chip($0, dspOn($0) ? .on : .plain, help: "Toggle TX \($0)")
+                    chip($0, dspOn($0) ? .on : .plain, help: "Toggle TX \($0)", status: tx)
                 }
                 label("RX").padding(.leading, 4)
-                chip("RX EQ", dspOn("RX EQ") ? .on : .plain, help: "Toggle the receive equaliser")
+                chip("RX EQ", dspOn("RX EQ") ? .on : .plain, help: "Toggle the receive equaliser",
+                     status: capabilities.control(.rxEqualizer))
             }
         }
     }
 
     @ViewBuilder private func tools(collapsed: Bool) -> some View {
+        let status = capabilities.control(.tools)
         if collapsed {
-            menu("Tools", help: "Tools", items: session.tools)
+            menu("Tools", help: "Tools", items: session.tools, status: status)
         } else {
             HStack(spacing: 8) {
                 label("Tools")
-                ForEach(session.tools, id: \.self) { chip($0, help: "Open \($0)") }
+                ForEach(session.tools, id: \.self) { chip($0, help: "Open \($0)", status: status) }
             }
         }
     }
@@ -225,12 +245,12 @@ struct TopBarView: View {
                     .help("Last spot: \(spot)")
             }
             clocks
-            Button {} label: {
+            Button { openSettings?() } label: {
                 Image(systemName: "gearshape").font(.system(size: 14)).frame(width: 12)
             }
             .buttonStyle(ConsoleChipButtonStyle(.plain, height: 30))
             .accessibilityLabel("Settings")
-            .help("Settings")
+            .consoleAvailability(Self.settingsStatus(hasAction: openSettings != nil), help: "Settings")
         }
     }
 
@@ -251,7 +271,7 @@ struct TopBarView: View {
             dsp(collapsed: dspCollapsed)
             sep
             tools(collapsed: toolsCollapsed)
-            menu("Apps", help: "Apps", items: ["No apps configured"])
+            menu("Apps", help: "Apps", items: ["No apps configured"], status: capabilities.control(.tools))
             Spacer(minLength: 0)
             trailing
         }

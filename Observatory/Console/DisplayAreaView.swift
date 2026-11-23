@@ -84,6 +84,8 @@ struct DisplayAreaView: View {
     let display: DisplaySnapshot
     let main: ReceiverSnapshot
     let sub: ReceiverSnapshot
+    /// Gates the toolbar's controls.
+    let capabilities: BackendCapabilities
     let focused: ReceiverID
     let store: DisplayStore
     /// Shows the "Sample" marker on the spectrum, waterfall and audio terrain (see `showsSampleMarker`).
@@ -93,11 +95,13 @@ struct DisplayAreaView: View {
     /// One bridge per Metal view: a second view on the main bridge would bind the wrong source.
     @State private var subSpectrum = SpectrumBridge.mock()
 
-    init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot, focused: ReceiverID,
+    init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot,
+         capabilities: BackendCapabilities, focused: ReceiverID,
          store: DisplayStore, sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool) {
         self.display = display
         self.main = main
         self.sub = sub
+        self.capabilities = capabilities
         self.focused = focused
         self.store = store
         self.sampleSpectrum = sampleSpectrum
@@ -120,7 +124,7 @@ struct DisplayAreaView: View {
             let lay = DisplayAreaLayout.compute(height: geo.size.height, layout: store.layout,
                                                 subVisible: sub.enabled, terrainExpanded: store.terrainExpanded)
             VStack(spacing: 0) {
-                DisplayToolbarView(display: display)
+                DisplayToolbarView(display: display, capabilities: capabilities)
                 ReceiverDisplayStack(display: display, receiver: main, label: sub.enabled ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
@@ -158,7 +162,8 @@ struct DisplayAreaView: View {
     store.terrainExpanded = terrain
     var snap = RadioSnapshot.sample
     snap.sub.enabled = subOn
-    return DisplayAreaView(display: snap.display, main: snap.main, sub: snap.sub, focused: .main,
+    return DisplayAreaView(display: snap.display, main: snap.main, sub: snap.sub,
+                           capabilities: .allMocked, focused: .main,
                            store: store, sampleSpectrum: true, sampleWaterfall: true, sampleTerrain: true)
         .environment(SpectrumBridge.mock())
         .frame(width: width, height: height)

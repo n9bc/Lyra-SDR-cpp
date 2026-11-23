@@ -157,4 +157,26 @@ final class ConnectionTrackerTests: XCTestCase {
             XCTAssertEqual(tracker.phase, .error("No radio answered"))
         }
     }
+
+    func testNoAnswerNamesTheAddressTheEngineOpened() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0,
+                       targetIp: "192.168.1.40", now: at(2))
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0,
+                       targetIp: "192.168.1.40", now: at(8))
+        XCTAssertEqual(tracker.phase, .error("No radio answered at 192.168.1.40"))
+    }
+
+    /// A new request forgets the address an earlier attempt opened.
+    func testOpenedAddressIsPerRequest() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0,
+                       targetIp: "192.168.1.40", now: at(1))
+        tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(2))
+        tracker.requestConnect(ip: "169.254.19.221", at: at(3))
+        tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(11))
+        XCTAssertEqual(tracker.phase, .error("No radio answered at 169.254.19.221"))
+    }
 }

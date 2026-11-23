@@ -115,7 +115,8 @@ final class LiveRadioBackend: RadioBackend {
 
     private func feedTracker(at t: Date) {
         tracker.update(running: state.link.running, p2Running: state.link.p2Running,
-                       datagramsPerSec: state.link.datagramsPerSec, now: t)
+                       datagramsPerSec: state.link.datagramsPerSec, targetIp: state.link.targetIp,
+                       now: t)
     }
 
     private func updateCapabilities() {
@@ -190,6 +191,7 @@ extension BackendCapabilities {
         controls[.attenuator] = isP2 ? m5 : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
         controls[.transmit] = tx
         controls[.txDSP] = tx
+        controls[.rxEqualizer] = .unavailable("The receive equaliser arrives in Milestone 5")
         controls[.profile] = later
         controls[.tools] = later
         controls[.displaySettings] = .unavailable("Display settings arrive in Milestone 4")

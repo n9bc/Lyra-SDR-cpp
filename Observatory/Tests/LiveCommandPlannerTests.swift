@@ -185,11 +185,50 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.selectBand("99"), e), [])
     }
 
-    func testBandWithFocusOnVfoBUnderSplitIsRefused() {
+    /// Focus on VFO B under split without Sub: the console shows Main focused, so a band click
+    /// acts on Main and brings the engine's focus back to RX1 to match.
+    func testBandWithFocusOnVfoBUnderSplitActsOnMain() {
         var e = bandState()
         e.radio.splitEnabled = true
         e.radio.focusedRx = 2
-        XCTAssertEqual(plan(.selectBand("40"), e), [])
+        XCTAssertEqual(plan(.selectBand("40"), e),
+                       [.setFocusedRx(1), .recallBand(name: "40m", defaultHz: 7_074_000, rx2: false)])
+    }
+
+    /// Applies the calls these console steps produce, as the engine does. `setSubEnabled(false)`
+    /// keeps VFO-B focus under split (`HL2Stream::setSubEnabled`).
+    private func apply(_ calls: [EngineCall], to e: inout EngineState) {
+        for call in calls {
+            switch call {
+            case .setSubEnabled(let on):
+                e.radio.subEnabled = on
+                if !on && !e.radio.splitEnabled { e.radio.focusedRx = 1 }
+            case .setFocusedRx(let rx): e.radio.focusedRx = rx
+            case .setSplitEnabled(let on): e.radio.splitEnabled = on
+            case .setVfoBHz(let hz): e.radio.vfoBHz = hz
+            default: break
+            }
+        }
+    }
+
+    /// Final review, Important 3: SUB RX on, focus Sub, SPLIT on, SUB RX off. The console then
+    /// shows Main focused; band clicks and arrows must act on Main, not be refused.
+    func testBandClickAfterSubOffUnderSplitActsOnMain() {
+        var e = bandState()
+        for command: RadioCommand in [.setSubEnabled(true), .focus(.sub), .setSplit(true),
+                                      .setSubEnabled(false)] {
+            apply(plan(command, e), to: &e)
+        }
+        XCTAssertEqual(e.radio.focusedRx, 2)
+        XCTAssertTrue(e.radio.splitEnabled)
+        XCTAssertFalse(e.radio.subEnabled)
+        let shown = LiveSnapshotMapper.snapshot(from: e, phase: .streaming, vfoLocked: false,
+                                                now: Date(timeIntervalSince1970: 0), timeZone: .gmt)
+        XCTAssertEqual(shown.session.focused, .main)
+
+        XCTAssertEqual(plan(.selectBand("40"), e),
+                       [.setFocusedRx(1), .recallBand(name: "40m", defaultHz: 7_074_000, rx2: false)])
+        XCTAssertEqual(plan(.tune(shown.session.focused, deltaHz: 1000), e), [.setRx1Hz(7_101_000)])
     }
 
     func testAgcAndDsp() {

@@ -10,7 +10,10 @@ struct EngineBand: Equatable, Sendable {
 
 /// Plain values mirroring the radio engine, read in one pass on the main thread. Field meanings,
 /// units and sentinels are in `.superpowers/sdd/m3-engine-api-map.md` A1-A10. Unreported
-/// readings are NaN (or -1 for `swr`); the mapper turns them into nil.
+/// readings are NaN (or -1 for `swr`, or the -140 dBm S-meter floor); the mapper turns them into
+/// nil. The engine keeps its last readings after the link goes down, so the mapper also drops
+/// every reading unless the connection is streaming. Fields may be NaN wherever the engine can
+/// return NaN; the mapper never converts a NaN to an integer.
 struct EngineState: Equatable, Sendable {
     struct Radio: Equatable, Sendable {
         var rx1Hz: UInt32 = 0
@@ -47,7 +50,8 @@ struct EngineState: Equatable, Sendable {
         /// Lowercase: "off", "fast", "med", "slow". Shared by both receivers.
         var agcMode = "off"
         var agcThreshDb = 0.0
-        var agcMaxGainDb = 0.0
+        /// NaN whenever WDSP is not running (`WdspEngine::agcMaxGainDb`).
+        var agcMaxGainDb = Double.nan
         var nbEnabled = false
         /// 0...1
         var nbStrength = 0.0

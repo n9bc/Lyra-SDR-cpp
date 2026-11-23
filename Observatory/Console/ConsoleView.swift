@@ -5,20 +5,25 @@ import SwiftUI
 struct ConsoleView: View {
     let backend: any RadioBackend
     let displayStore: DisplayStore
+    /// The top bar's gear runs this; nil leaves the gear disabled with its reason.
+    let openSettings: (@MainActor () -> Void)?
     /// Held for the view's lifetime: `NeonSpectrumView`'s renderer binds to the first bridge it sees,
     /// so creating one per body evaluation would leave it reading a stale instance.
     @State private var spectrum = SpectrumBridge.mock()
 
-    init(backend: any RadioBackend, displayStore: DisplayStore = DisplayStore()) {
+    init(backend: any RadioBackend, displayStore: DisplayStore = DisplayStore(),
+         openSettings: (@MainActor () -> Void)? = nil) {
         self.backend = backend
         self.displayStore = displayStore
+        self.openSettings = openSettings
     }
 
     var body: some View {
         let snapshot = backend.snapshot
         let gap = ConsoleLayout.gap
         VStack(spacing: gap) {
-            TopBarView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
+            TopBarView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send,
+                       openSettings: openSettings)
                 .frame(height: ConsoleLayout.topBarHeight)
 
             HStack(spacing: gap) {
@@ -43,6 +48,7 @@ struct ConsoleView: View {
             HStack(spacing: gap) {
                 ReceiverColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
                 DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
+                                capabilities: backend.capabilities,
                                 focused: snapshot.session.focused, store: displayStore,
                                 sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),

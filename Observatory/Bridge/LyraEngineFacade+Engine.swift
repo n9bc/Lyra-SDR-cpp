@@ -25,12 +25,11 @@ extension LyraEngineFacade: EngineFacade {
             txBandwidthHz: f.txBandwidthHz, bwLocked: f.bwLocked)
 
         let d = consoleDsp()
-        // The mapper converts these three to Int, which traps on NaN; agcMaxGainDb is NaN
-        // whenever the engine is not running. 0 is the mapper's "nothing to show".
+        // Passed through as reported: agcMaxGainDb is NaN whenever the engine is not running,
+        // and the mapper turns NaN into "not reported" itself.
         e.dsp = EngineState.DSP(
-            agcMode: d.agcMode, agcThreshDb: Self.finiteOrZero(d.agcThreshDb),
-            agcMaxGainDb: Self.finiteOrZero(d.agcMaxGainDb),
-            nbEnabled: d.nbEnabled, nbStrength: Self.finiteOrZero(d.nbStrength),
+            agcMode: d.agcMode, agcThreshDb: d.agcThreshDb, agcMaxGainDb: d.agcMaxGainDb,
+            nbEnabled: d.nbEnabled, nbStrength: d.nbStrength,
             binEnabled: d.binEnabled,
             nrEnabled: d.nrEnabled, nrMode: d.nrMode, nnrEnabled: d.nnrEnabled,
             nnrAvailable: d.nnrAvailable, anfEnabled: d.anfEnabled, lmsEnabled: d.lmsEnabled,
@@ -118,8 +117,6 @@ extension LyraEngineFacade: EngineFacade {
             }
         }
     }
-
-    private nonisolated static func finiteOrZero(_ v: Double) -> Double { v.isFinite ? v : 0 }
 
     /// One `-amateurBands` entry, or nil if a key is missing.
     private nonisolated static func band(from d: [String: Any]) -> EngineBand? {

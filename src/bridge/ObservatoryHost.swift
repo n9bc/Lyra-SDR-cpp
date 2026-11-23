@@ -28,10 +28,11 @@ import AppKit
             // and the connect goes through it.
             DispatchQueue.main.async { live.connectOnLaunchIfEnabled() }
         }
-        let shell = ConsoleShell(backend: backend, display: DisplayStore(),
-                                 openSettings: { Self.facade?.openSettings() })
+        let openSettings: @MainActor () -> Void = { Self.facade?.openSettings() }
+        let shell = ConsoleShell(backend: backend, display: DisplayStore(), openSettings: openSettings)
         Self.shell = shell
-        return NSHostingView(rootView: ConsoleView(backend: shell.backend, displayStore: shell.display)
+        return NSHostingView(rootView: ConsoleView(backend: shell.backend, displayStore: shell.display,
+                                                   openSettings: openSettings)
             .background(ConsoleWindowAttachment { window in
                 shell.attach(window)
                 Self.quitWhenClosed(window)

@@ -2,19 +2,20 @@ import SwiftUI
 
 /// Segmented S-meter bar for the VFO panels: cyan segments, magenta in the over-S9 zone.
 /// Segments share the available width (up to 262 pt) so the meter shrinks with its column.
+/// A nil reading (not reported by the radio) lights nothing.
 struct SegmentMeterView: View {
-    let dbm: Double
+    let dbm: Double?
     let enabled: Bool
     let count: Int
 
-    init(dbm: Double, enabled: Bool, count: Int = 44) {
+    init(dbm: Double?, enabled: Bool, count: Int = 44) {
         self.dbm = dbm
         self.enabled = enabled
         self.count = max(count, 1)
     }
 
     private var lit: Int {
-        guard enabled else { return 0 }
+        guard enabled, let dbm else { return 0 }
         return SegmentMeterModel(count: count).litCount(fraction: ConsoleFormat.meterFraction(dbm: dbm))
     }
 
@@ -38,7 +39,7 @@ struct SegmentMeterView: View {
         .frame(maxWidth: 262)
         .accessibilityElement()
         .accessibilityLabel("Signal strength")
-        .accessibilityValue(enabled ? ConsoleFormat.sUnits(dbm: dbm) : "Receiver off")
+        .accessibilityValue(!enabled ? "Receiver off" : dbm.map { ConsoleFormat.sUnits(dbm: $0) } ?? "Not reported")
     }
 }
 

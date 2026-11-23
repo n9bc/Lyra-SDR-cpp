@@ -43,7 +43,7 @@ struct TransmitDeckView: View {
     /// One fallback level. Internal so tests can measure the narrowest level's ideal width.
     func deck(showCaption: Bool, protectionMenu: Bool) -> some View {
         HStack(spacing: 10) {
-            MOXButton(presentation: mox)
+            MOXButton(presentation: mox, status: txStatus)
             VStack(spacing: 5) {
                 ConsoleChip(title: "Tune", help: "Tune carrier", fullWidth: true, status: txStatus)
                 ConsoleChip(title: "2-Tone", help: "Two-tone test", fullWidth: true, status: txStatus)
@@ -95,9 +95,18 @@ struct TransmitDeckView: View {
 }
 
 /// 92 x 92 MOX key. Lit (filled, glowing) only when the presentation says so.
-/// The action is empty in Milestone 1; shortcuts are bound elsewhere.
+/// The action is empty until Milestone 5, so the key is gated on `.transmit`: the live console
+/// disables it with the Milestone 5 reason as its only tooltip.
 struct MOXButton: View {
     let presentation: MOXPresentation
+    let status: CapabilityStatus
+
+    nonisolated static let normalHelp = "Transmit (Space) \u{2014} keys only after the radio confirms"
+
+    /// The key's one tooltip: the unavailability reason while disabled, else how to key.
+    nonisolated static func help(_ status: CapabilityStatus) -> String {
+        ConsoleAvailability.help(status, normal: normalHelp)
+    }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -121,7 +130,8 @@ struct MOXButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(presentation.label)
         .accessibilityValue(presentation.headerDetail)
-        .help("Transmit (Space) \u{2014} keys only after the radio confirms")
+        .disabled(ConsoleAvailability.isDisabled(status))
+        .help(Self.help(status))
     }
 }
 

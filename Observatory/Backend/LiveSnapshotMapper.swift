@@ -1,18 +1,26 @@
 import Foundation
 
 /// Turns engine state into the console's `RadioSnapshot`. Pure: no engine access, no clock.
-/// Nothing the engine has not reported is shown; unreported readings become nil. What the engine
-/// has no source for (propagation, keyer, tools) is copied from the sample and gated elsewhere.
+/// Nothing the engine has not reported is shown; unreported readings become nil. Readings (meters,
+/// telemetry, TX levels) count as reported only while the connection is streaming: the engine
+/// keeps its floors and last values before the first frame, after a disconnect and during a
+/// stall. What the engine has no source for (propagation, keyer, tools) is copied from the sample
+/// and gated elsewhere.
 enum LiveSnapshotMapper {
     /// Below this the HL2 temperature is "not reported" (about -50 C right after open).
     private nonisolated static let minPlausibleTempC = -40.0
+    /// `MeterModel`'s S-meter floor: at or below it the meter has no reading (WDSP not running).
+    private nonisolated static let sMeterFloorDbm = -140.0
 
     nonisolated static func snapshot(from e: EngineState, phase: ConnectionPhase, vfoLocked: Bool,
                                      now: Date, timeZone: TimeZone) -> RadioSnapshot {
         let sample = RadioSnapshot.sample
         let r = e.radio
         let subOn = r.subEnabled
-        let focused: ReceiverID = (r.focusedRx == 2 && subOn) ? .sub : .main
+        // The radio confirms a reading only while it streams to us.
+        let live = phase == .streaming
+        func reading(_ v: Double) -> Double? { live ? finite(v) : nil }
+        let focused = focusedReceiver(r)
         let mainHz = Int64(r.rx1Hz) + Int64(r.markerOffsetHz)
         let subHz: Int64 = (r.splitEnabled || !subOn)
             ? Int64(r.vfoBHz) : Int64(r.rx2Hz) + Int64(r.markerOffsetHzRx2)
@@ -23,7 +31,8 @@ enum LiveSnapshotMapper {
             id: .main, enabled: true, frequencyHz: mainHz, mode: radioMode(e.filter.mode),
             filterHz: e.filter.rxBandwidth, stepHz: e.filter.stepHz,
             bandName: bandName(forHz: UInt32(clamping: mainHz), in: e.bands),
-            antenna: port, signalDbm: e.meters.sMeterDbm, snrDb: finite(e.meters.snrDb), agc: agc,
+            antenna: port, signalDbm: live ? sMeter(e.meters.sMeterDbm) : nil,
+            snrDb: reading(e.meters.snrDb), agc: agc,
             ritEnabled: r.ritEnabled, ritOffsetHz: r.ritEnabled ? r.ritHz : 0,
             xitEnabled: r.xitEnabled, xitOffsetHz: r.xitEnabled ? r.xitHz : 0,
             splitTx: r.splitEnabled, isTxVFO: !r.splitEnabled,
@@ -32,7 +41,7 @@ enum LiveSnapshotMapper {
             id: .sub, enabled: subOn, frequencyHz: subHz, mode: radioMode(e.filter.modeRx2),
             filterHz: e.filter.rx2Bandwidth, stepHz: e.filter.stepHzRx2,
             bandName: bandName(forHz: UInt32(clamping: subHz), in: e.bands),
-            antenna: port, signalDbm: e.meters.sMeterDbmRx2, snrDb: nil, agc: agc,
+            antenna: port, signalDbm: live ? sMeter(e.meters.sMeterDbmRx2) : nil, snrDb: nil, agc: agc,
             ritEnabled: false, ritOffsetHz: 0, xitEnabled: false, xitOffsetHz: 0,
             splitTx: r.splitEnabled, isTxVFO: r.splitEnabled,
             quickToggles: quickToggles(e, includeAutoAndBin: false))
@@ -45,7 +54,10 @@ enum LiveSnapshotMapper {
         let zoom = e.meters.spanHz > 0 ? Double(e.meters.iqRateHz) / Double(e.meters.spanHz) : 1
 
         let visibleBands = e.bands.filter { e.link.isP2Rig || $0.name != "6m" }
-        let selected = bandName(forHz: r.rx1Hz, in: visibleBands)
+        // A band click recalls into the focused receiver, so its carrier (what its panel title
+        // shows) picks the highlighted chip.
+        let selected = bandName(forHz: UInt32(clamping: focused == .sub ? subHz : mainHz),
+                                in: visibleBands)
 
         let t = e.transmit
         let txState: TransmitState = (t.moxActive || t.txDisplayActive)
@@ -62,7 +74,7 @@ enum LiveSnapshotMapper {
             main: main, sub: sub,
             frontEnd: FrontEndSnapshot(
                 lnaDb: e.frontEnd.lnaDb, lnaRange: e.link.isP2Rig ? 0...31 : -12...48,
-                autoLna: e.frontEnd.autoLna, overload: e.frontEnd.adcOverload,
+                autoLna: e.frontEnd.autoLna, overload: live ? e.frontEnd.adcOverload : nil,
                 inputs: ["RF1", "Alt"], selectedInput: port),
             audio: AudioSnapshot(
                 afGainDb: e.audio.afGainDb, volume: e.audio.volume, muted: e.audio.muted,
@@ -74,9 +86,9 @@ enum LiveSnapshotMapper {
                     QuickToggle(id: f.rawValue, label: dspLabel(f, e), isOn: dspOn(f, e.dsp))
                 },
                 nrMode: e.dsp.nrMode, anfLevel: sample.dsp.anfLevel,
-                nbLevel: Int((e.dsp.nbStrength * 100).rounded()),
-                agcThresholdDbfs: Int(e.dsp.agcThreshDb.rounded()),
-                agcGainDb: Int(e.dsp.agcMaxGainDb.rounded()),
+                nbLevel: wholeNumber(e.dsp.nbStrength * 100),
+                agcThresholdDbfs: wholeNumber(e.dsp.agcThreshDb),
+                agcGainDb: wholeNumber(e.dsp.agcMaxGainDb),
                 notchCount: e.dsp.notchCount, squelchOn: e.dsp.squelchEnabled),
             band: BandSnapshot(
                 tabs: sample.band.tabs, selectedTab: sample.band.selectedTab,
@@ -95,21 +107,27 @@ enum LiveSnapshotMapper {
                 state: txState, drivePct: Int((Double(t.driveRaw) * 100 / 255).rounded()),
                 tunePct: t.tuneDrivePct, micGainDb: t.micGainDb, monitorLevel: e.audio.monVolume,
                 voxEnabled: t.vox, attOnTx: t.attOnTx, swrProtectArmed: t.swrProtect,
-                paCapture: false, psEnabled: t.psArmed, psFeedback: t.psArmed ? t.psFeedback : nil,
-                fwdPowerW: finite(t.fwdPowerW), swr: t.swr >= 0 ? t.swr : nil,
-                alcDb: finite(t.alcDb),
-                micLevelDb: finite(t.micLevelDb)),
+                paCapture: false, psEnabled: t.psArmed,
+                psFeedback: live && t.psArmed ? t.psFeedback : nil,
+                fwdPowerW: reading(t.fwdPowerW), swr: t.swr >= 0 ? reading(t.swr) : nil,
+                alcDb: reading(t.alcDb),
+                micLevelDb: reading(t.micLevelDb)),
             keyer: sample.keyer,
             telemetry: TelemetrySnapshot(
-                temperatureC: e.telemetry.tempC.isFinite && e.telemetry.tempC >= minPlausibleTempC
-                    ? e.telemetry.tempC : nil,
-                supplyV: finite(e.telemetry.supplyV), paCurrentA: finite(e.telemetry.paCurrentA),
+                temperatureC: reading(e.telemetry.tempC).flatMap { $0 >= minPlausibleTempC ? $0 : nil },
+                supplyV: reading(e.telemetry.supplyV), paCurrentA: reading(e.telemetry.paCurrentA),
                 cpuPct: nil, tciClients: nil, utc: now, timeZone: timeZone, graphics: nil),
             session: SessionSnapshot(
                 profileName: e.session.profileName, profileModified: e.session.profileModified,
                 recordingElapsed: nil, lastSpot: nil, txDSPOn: [:], tools: sample.session.tools,
                 statusMessage: e.session.statusMessage, ctunEnabled: r.ctuneEnabled,
                 vfoLocked: vfoLocked, focused: focused))
+    }
+
+    /// The receiver the console treats as focused: Sub only while it is on. Focus 2 without Sub
+    /// (VFO B under split) shows, and acts on, Main. The planner uses the same rule.
+    nonisolated static func focusedReceiver(_ r: EngineState.Radio) -> ReceiverID {
+        r.focusedRx == 2 && r.subEnabled ? .sub : .main
     }
 
     /// "40m" -> "40", "bc_49m" -> "49m", "" -> "".
@@ -125,6 +143,17 @@ enum LiveSnapshotMapper {
     // MARK: - Helpers
 
     private nonisolated static func finite(_ v: Double) -> Double? { v.isFinite ? v : nil }
+
+    /// The S-meter reading, or nil at the meter's floor (the engine has no reading).
+    private nonisolated static func sMeter(_ dbm: Double) -> Double? {
+        finite(dbm).flatMap { $0 > sMeterFloorDbm ? $0 : nil }
+    }
+
+    /// Rounded to a whole number; nil for NaN or infinity, which `Int(_:)` would trap on.
+    private nonisolated static func wholeNumber(_ v: Double) -> Int? {
+        guard v.isFinite, abs(v) < 1e9 else { return nil }
+        return Int(v.rounded())
+    }
 
     private nonisolated static func radioMode(_ s: String) -> RadioMode {
         RadioMode(rawValue: s.uppercased()) ?? .usb

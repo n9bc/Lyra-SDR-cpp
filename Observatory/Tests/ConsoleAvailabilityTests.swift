@@ -57,6 +57,10 @@ final class ConsoleAvailabilityTests: XCTestCase {
         XCTAssertEqual(ConsoleFormat.agcGainDetail(88), "Gain 88 dB")
     }
 
+    func testAGCHeaderWithoutAReportedGain() {
+        XCTAssertEqual(ConsoleFormat.agcGainDetail(nil), "Gain \u{2014}")
+    }
+
     func testQuickToggleIdsAreStable() {
         let ids = RadioSnapshot.sample.main.quickToggles.map(\.id)
         XCTAssertEqual(ids, ["ATT", "LNA", "AUTO", "NB", "NR", "ANF", "NOTCH", "SQ", "APF", "BIN"])
@@ -113,5 +117,69 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         XCTAssertEqual(m.items.map(\.kind), [.telemetry])
         let full = StatusBarModel(snapshot: .sample, capabilities: BackendCapabilities(fallback: .available))
         XCTAssertEqual(full.items.count, 4)
+    }
+
+    // MARK: - Controls with no engine path (final review, Important 4, T1-7, T2-1)
+
+    /// Every control the live console has no engine path for, with the reason it shows.
+    private let noEnginePath: [ConsoleControl: String] = [
+        .frontEnd: "Arrives in Milestone 5",
+        .audio: "Arrives in Milestone 5",
+        .agcLevels: "DSP levels arrive in Milestone 5",
+        .dspLevels: "DSP levels arrive in Milestone 5",
+        .noiseCapture: "DSP levels arrive in Milestone 5",
+        .rxEqualizer: "The receive equaliser arrives in Milestone 5",
+        .tools: "Arrives in a later milestone",
+        .txDSP: "Transmit arrives in Milestone 5",
+        .transmit: "Transmit arrives in Milestone 5",
+        .profile: "Arrives in a later milestone",
+        .displaySettings: "Display settings arrive in Milestone 4",
+    ]
+
+    func testLiveCapabilitiesDisableControlsWithoutAnEnginePath() {
+        for isP2 in [false, true] {
+            let caps = BackendCapabilities.live(nnrAvailable: true, isP2: isP2)
+            for (control, reason) in noEnginePath {
+                let status = caps.control(control)
+                XCTAssertEqual(status, .unavailable(reason), "\(control)")
+                XCTAssertTrue(ConsoleAvailability.isDisabled(status), "\(control)")
+                // The one tooltip a disabled control shows is its reason, never its normal help.
+                XCTAssertEqual(ConsoleAvailability.help(status, normal: "Normal help"), reason,
+                               "\(control)")
+            }
+        }
+    }
+
+    /// Sample mode keeps these controls usable; the Sample badge marks the data instead.
+    func testSampleModeKeepsThoseControlsEnabled() {
+        for control in noEnginePath.keys {
+            let status = BackendCapabilities.allMocked.control(control)
+            XCTAssertFalse(ConsoleAvailability.isDisabled(status), "\(control)")
+            XCTAssertEqual(ConsoleAvailability.help(status, normal: "Normal help"), "Normal help")
+        }
+    }
+
+    func testLiveSpotsChipIsUnavailable() {
+        let caps = BackendCapabilities.live(nnrAvailable: false, isP2: false)
+        XCTAssertTrue(ConsoleAvailability.isDisabled(caps.status(.spots)))
+        XCTAssertEqual(ConsoleAvailability.help(caps.status(.spots), normal: "Show spots"),
+                       "Spots arrive in Milestone 4")
+    }
+
+    func testMOXKeyIsDisabledWithTheMilestoneFiveReasonOnLive() {
+        let live = BackendCapabilities.live(nnrAvailable: false, isP2: false).control(.transmit)
+        XCTAssertTrue(ConsoleAvailability.isDisabled(live))
+        XCTAssertEqual(MOXButton.help(live), "Transmit arrives in Milestone 5")
+        XCTAssertFalse(MOXButton.help(live).contains("Transmit (Space)"))
+        XCTAssertEqual(MOXButton.help(.mocked), MOXButton.normalHelp)
+        XCTAssertTrue(MOXButton.normalHelp.hasPrefix("Transmit (Space)"))
+    }
+
+    func testSettingsGearNeedsAnAction() {
+        XCTAssertEqual(TopBarView.settingsStatus(hasAction: true), .available)
+        let none = TopBarView.settingsStatus(hasAction: false)
+        XCTAssertTrue(ConsoleAvailability.isDisabled(none))
+        XCTAssertEqual(ConsoleAvailability.help(none, normal: "Settings"),
+                       "Settings need the radio engine")
     }
 }

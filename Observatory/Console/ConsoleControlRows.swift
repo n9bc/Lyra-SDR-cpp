@@ -11,6 +11,8 @@ struct ConsoleSliderRow: View {
     let readout: String
     var tint: Color = LyraDS.Palette.cyan
     var dimmed: Bool = false
+    /// Backend availability; an unavailable slider is disabled and its one tooltip is the reason.
+    var status: CapabilityStatus = .available
 
     var body: some View {
         HStack(spacing: 8) {
@@ -24,7 +26,8 @@ struct ConsoleSliderRow: View {
                 .tint(dimmed ? LyraDS.Palette.textDim : tint)
                 .accessibilityLabel(help)
                 .accessibilityValue(readout)
-                .help(help)
+                .disabled(ConsoleAvailability.isDisabled(status))
+                .help(ConsoleAvailability.help(status, normal: help))
             Text(readout)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(dimmed ? LyraDS.Palette.chipDimText : LyraDS.Palette.textPrimary)
