@@ -3,6 +3,7 @@ import AppKit
 
 /// Where the console window opens and how a remembered frame is brought back on screen.
 enum WindowFrameRules {
+    /// Defaults key holding the console window's last frame (`NSStringFromRect`).
     nonisolated static let autosaveName = "LyraConsoleWindow"
     nonisolated static let defaultContentSize = CGSize(width: 1600, height: 1100)
 
@@ -11,6 +12,19 @@ enum WindowFrameRules {
         let minimum = ConsoleLayout.minWindow
         return CGSize(width: max(minimum.width, min(defaultContentSize.width, visible.width)),
                       height: max(minimum.height, min(defaultContentSize.height, visible.height)))
+    }
+
+    /// The screen (index into `visibles`) holding the largest part of `frame`, or nil when the
+    /// frame is on no current screen (its display was disconnected).
+    nonisolated static func screenIndex(for frame: CGRect, among visibles: [CGRect]) -> Int? {
+        var best: (index: Int, area: CGFloat)?
+        for (i, visible) in visibles.enumerated() {
+            let overlap = frame.intersection(visible)
+            guard !overlap.isNull else { continue }
+            let area = overlap.width * overlap.height
+            if area > 0, area > (best?.area ?? 0) { best = (i, area) }
+        }
+        return best?.index
     }
 
     /// `frame` sized to fit `visible` (but never below `minSize`) and moved inside it. A window

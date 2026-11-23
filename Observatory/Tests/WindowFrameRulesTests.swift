@@ -32,4 +32,13 @@ final class WindowFrameRulesTests: XCTestCase {
         XCTAssertEqual(WindowFrameRules.initialContentSize(visible: CGSize(width: 1470, height: 900)), CGSize(width: 1470, height: 900))
         XCTAssertEqual(WindowFrameRules.initialContentSize(visible: CGSize(width: 1000, height: 700)), CGSize(width: 1280, height: 800))
     }
+    func testSavedFrameReturnsToItsOwnScreen() {
+        let screens = [CGRect(x: 0, y: 67, width: 3440, height: 1342), CGRect(x: 3440, y: -956, width: 3840, height: 2129)]
+        XCTAssertEqual(WindowFrameRules.screenIndex(for: CGRect(x: 4600, y: 90, width: 1400, height: 900), among: screens), 1)
+        XCTAssertEqual(WindowFrameRules.screenIndex(for: CGRect(x: 100, y: 100, width: 1400, height: 900), among: screens), 0)
+        // Straddling: the screen holding most of the window wins.
+        XCTAssertEqual(WindowFrameRules.screenIndex(for: CGRect(x: 3000, y: 100, width: 1400, height: 900), among: screens), 1)
+        // Saved on a display that is gone: no screen claims it.
+        XCTAssertNil(WindowFrameRules.screenIndex(for: CGRect(x: 9000, y: 100, width: 1400, height: 900), among: screens))
+    }
 }

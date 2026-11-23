@@ -80,16 +80,18 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         init(_ action: ConsoleMenuAction) { self.action = action }
     }
 
-    /// Windows already attached, so each gets one frame restore and one key observer.
+    /// Windows already attached, so each gets one frame restore and one set of observers.
     private let attachedWindows = NSHashTable<NSWindow>.weakObjects()
-    private var keyObservers: [NSObjectProtocol] = []
+    private var windowObservers: [NSObjectProtocol] = []
+    private let defaults: UserDefaults
     /// The Window menu we made `NSApp.windowsMenu`, so a later rebuild can replace our own
     /// stale one without ever taking over a Window menu someone else installed.
     private weak var ownWindowsMenu: NSMenu?
 
-    init(backend: any RadioBackend, display: DisplayStore) {
+    init(backend: any RadioBackend, display: DisplayStore, defaults: UserDefaults = .standard) {
         self.backend = backend
         self.display = display
+        self.defaults = defaults
     }
 
     private var state: ConsoleMenuState {
@@ -120,31 +122,57 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
             guard let self, let window else { return }
             self.restoreFrame(of: window)
             self.installMenus()
+            let center = NotificationCenter.default
             // Qt rebuilds the main menu when its own windows (such as Settings) take focus.
-            let token = NotificationCenter.default.addObserver(
+            self.windowObservers.append(center.addObserver(
                 forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.installMenus() }
+            })
+            // Registered after the restore, so the creator's initial placement is never saved.
+            for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+                self.windowObservers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self, weak window] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, let window else { return }
+                        self.saveFrame(of: window)
+                    }
+                })
             }
-            self.keyObservers.append(token)
         }
     }
 
+    /// AppKit's frame autosave is not used: `setFrameUsingName` maps a frame saved on a second
+    /// display proportionally onto whichever screen the window is on at the time, so the window
+    /// would reopen on the wrong display. The frame is saved and placed here instead.
+    private func saveFrame(of window: NSWindow) {
+        guard !window.styleMask.contains(.fullScreen), !window.isMiniaturized else { return }
+        defaults.set(NSStringFromRect(window.frame), forKey: WindowFrameRules.autosaveName)
+    }
+
+    /// Puts the window back where it was saved, on the screen holding most of it, or on the
+    /// window's own screen when that display is gone; first launch gets the default size,
+    /// centred. Either way the frame is then clamped onto that screen.
     private func restoreFrame(of window: NSWindow) {
-        let name = WindowFrameRules.autosaveName
-        if !window.setFrameUsingName(name),
-           let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-            window.setContentSize(WindowFrameRules.initialContentSize(visible: visible.size))
-            window.center()
+        let screens = NSScreen.screens
+        let frame: CGRect
+        let screen: NSScreen?
+        if let string = defaults.string(forKey: WindowFrameRules.autosaveName),
+           case let saved = NSRectFromString(string), saved.width > 0, saved.height > 0 {
+            frame = saved
+            screen = WindowFrameRules.screenIndex(for: saved, among: screens.map(\.visibleFrame)).map { screens[$0] }
+                ?? window.screen ?? NSScreen.main
+        } else {
+            screen = window.screen ?? NSScreen.main
+            if let visible = screen?.visibleFrame {
+                window.setContentSize(WindowFrameRules.initialContentSize(visible: visible.size))
+                window.center()
+            }
+            frame = window.frame
         }
-        // Named before clamping: setting the autosave name re-applies the saved frame, which
-        // would undo the clamp. Once named, the clamped frame below is saved automatically.
-        window.setFrameAutosaveName(name)
-        // Re-read the screen: a restored frame may have moved the window to another display.
-        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-            let minFrame = window.frameRect(forContentRect: CGRect(origin: .zero, size: ConsoleLayout.minWindow)).size
-            window.setFrame(WindowFrameRules.clamp(window.frame, into: visible, minSize: minFrame), display: true)
-        }
+        guard let visible = screen?.visibleFrame else { return }
+        let minFrame = window.frameRect(forContentRect: CGRect(origin: .zero, size: ConsoleLayout.minWindow)).size
+        window.setFrame(WindowFrameRules.clamp(frame, into: visible, minSize: minFrame), display: true)
+        saveFrame(of: window)
     }
 
     // MARK: - Menus
