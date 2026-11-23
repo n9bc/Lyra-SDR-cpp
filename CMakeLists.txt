@@ -885,6 +885,8 @@ if(APPLE)
         file(GLOB OBSERVATORY_SWIFT_CONTROLS Observatory/Controls/*.swift)
         file(GLOB OBSERVATORY_SWIFT_VISUALIZATION Observatory/Visualization/*.swift)
         file(GLOB OBSERVATORY_SWIFT_METAL    Observatory/Visualization/Metal/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_BACKEND  Observatory/Backend/*.swift)
+        file(GLOB OBSERVATORY_SWIFT_CONSOLE  Observatory/Console/*.swift)
         set(OBSERVATORY_SWIFT_SOURCES
             ${OBSERVATORY_SWIFT_BRIDGE}
             ${OBSERVATORY_SWIFT_SHELL}
@@ -894,6 +896,8 @@ if(APPLE)
             ${OBSERVATORY_SWIFT_CONTROLS}
             ${OBSERVATORY_SWIFT_VISUALIZATION}
             ${OBSERVATORY_SWIFT_METAL}
+            ${OBSERVATORY_SWIFT_BACKEND}
+            ${OBSERVATORY_SWIFT_CONSOLE}
             Observatory/ContentView.swift
             Observatory/ObservatoryApp.swift
             src/bridge/ObservatoryHost.swift
