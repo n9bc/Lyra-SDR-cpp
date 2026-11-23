@@ -30,19 +30,15 @@ struct SampleWaterfallImage: View {
 
 /// "Audio terrain" header and body: ridges (3D), a sample waterfall of the audio band, or both.
 struct AudioTerrainView: View {
-    let display: DisplaySnapshot
-    @State private var view: TerrainView
-    @State private var mix: Double
+    @Bindable var store: DisplayStore
 
     static let headerHeight: CGFloat = 32
     nonisolated static let rows = 30
     nonisolated static let points = 201
     nonisolated static let audioLabels = ["0", "500", "1 k", "1.5 k", "2 k", "2.5 k", "3 k Hz"]
 
-    init(display: DisplaySnapshot) {
-        self.display = display
-        _view = State(initialValue: display.terrainView)
-        _mix = State(initialValue: display.terrainMix)
+    init(store: DisplayStore) {
+        self.store = store
     }
 
     private func header(showDetail: Bool) -> some View {
@@ -55,10 +51,10 @@ struct AudioTerrainView: View {
                     .font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
             }
             Spacer(minLength: 6)
-            LyraSegmentedControl("Terrain view", selection: $view, options: TerrainView.allCases,
+            LyraSegmentedControl("Terrain view", selection: $store.terrainView, options: TerrainView.allCases,
                                  title: { $0.rawValue }, accent: LyraDS.Palette.cyan)
             Text("Mix").font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
-            Slider(value: $mix, in: 0...1).controlSize(.small).tint(LyraDS.Palette.purple).frame(width: 80)
+            Slider(value: $store.terrainMix, in: 0...1).controlSize(.small).tint(LyraDS.Palette.purple).frame(width: 80)
                 .accessibilityLabel("Combined opacity").help("Combined opacity")
             ConsoleChip(title: "Orbit", help: "Orbit the terrain view")
         }
@@ -79,11 +75,11 @@ struct AudioTerrainView: View {
             .frame(height: Self.headerHeight)
             ZStack(alignment: .bottom) {
                 LyraDS.Palette.void
-                if view != .threeD {
+                if store.terrainView != .threeD {
                     SampleWaterfallImage(axis: audioAxis, signals: [520, 1500, 2450], traceWidthHz: 70)
-                        .opacity(view == .both ? mix : 1)
+                        .opacity(store.terrainView == .both ? store.terrainMix : 1)
                 }
-                if view != .waterfall { ridgeCanvas }
+                if store.terrainView != .waterfall { ridgeCanvas }
                 HStack {
                     ForEach(Self.audioLabels, id: \.self) { l in
                         Text(l).font(.system(size: 11, design: .monospaced))

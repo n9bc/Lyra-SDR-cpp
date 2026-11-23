@@ -147,8 +147,6 @@ struct DisplaySnapshot: Equatable, Sendable {
     var bandPlanVisible: Bool
     var bandPlan: [BandPlanSegment]
     var spots: [Spot]
-    var terrainView: TerrainView
-    var terrainMix: Double
 
     /// The display as seen by one receiver. Sub gets its own span, and the band plan and
     /// spots (which are for the Main receiver's band) are dropped.
@@ -316,8 +314,7 @@ extension RadioSnapshot {
                 Spot(call: "MM7CEH", frequencyHz: 7_163_000, kind: .dx),
                 Spot(call: "G0AKH/P", frequencyHz: 7_176_000, kind: .dx),
                 Spot(call: "S52DC", frequencyHz: 7_188_000, kind: .dx),
-            ],
-            terrainView: .threeD, terrainMix: 0.6),
+            ]),
         propagation: PropagationSnapshot(
             sfi: 142, aIndex: 8, kIndex: 2,
             bands: [
