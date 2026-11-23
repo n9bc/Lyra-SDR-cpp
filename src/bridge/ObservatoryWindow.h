@@ -19,17 +19,22 @@ extern "C" {
 
 #ifdef __OBJC__
 /// Creates the Obj-C++ facade from raw C++ pointers (HL2Stream*, WdspEngine*,
-/// MeterModel*).  The facade does not own them.
+/// MeterModel*, Prefs*, HL2Discovery*, ProfileManager*).  The facade does not
+/// own them.
 LyraEngineFacade * _Nonnull lyra_create_engine_facade(
     void * _Nonnull stream,
     void * _Nonnull dsp,
-    void * _Nonnull meter);
+    void * _Nonnull meter,
+    void * _Nonnull prefs,
+    void * _Nonnull discovery,
+    void * _Nonnull profiles);
 
 /// Creates, shows and returns (retained) the Observatory NSWindow.
 NSWindow * _Nonnull lyra_show_observatory_window(
     LyraEngineFacade * _Nonnull facade);
 
-/// Stores the hidden MainWindow pointer so the bridge can open its dialogs.
+/// Stores the hidden MainWindow pointer so the bridge can open its dialogs,
+/// and attaches it to the facade (-attachHostWindow:).
 void lyra_set_observatory_host(void * _Nonnull mainWindow);
 
 /// Raises and focuses the Observatory window (e.g. for single-instance).
@@ -39,7 +44,8 @@ void lyra_raise_observatory_window(void);
 void lyra_observatory_show_settings(void);
 #else
 // C++ callers see opaque pointers.
-void *lyra_create_engine_facade(void *stream, void *dsp, void *meter);
+void *lyra_create_engine_facade(void *stream, void *dsp, void *meter,
+                                void *prefs, void *discovery, void *profiles);
 void *lyra_show_observatory_window(void *facade);
 void lyra_set_observatory_host(void *mainWindow);
 void lyra_raise_observatory_window(void);

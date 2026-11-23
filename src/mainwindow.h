@@ -132,6 +132,7 @@ public:
 
     // Transient status-bar bus (QML `Status` + C++ advisories).
     StatusBus *statusBus() const { return statusBus_; }
+    BandMemory *bandMemory() const { return bandMemory_; }
 
     // Share JUST the panel layout as a small .lyralayout file (driven from
     // Settings → Backup & Restore → "Share a layout").  Arrangement only —
@@ -325,7 +326,7 @@ private:
     void exportSettings();
     void importSettings();
     void ensureSettingsDialog();   // construct settingsDlg_ if needed (no show)
-    void openSettings();
+    Q_INVOKABLE void openSettings();
     void showQrvPanel();
     void tuneQrvSpot(qint64 hz, const QString &mode);
     // Per-panel "?" badge targets (driven by the Help bridge).

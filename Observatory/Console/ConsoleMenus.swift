@@ -68,8 +68,9 @@ struct ConsoleMenuState {
     }
 }
 
-/// Owns the console's View, Radio and Window menus and the window's size rules. Engine-owned state
-/// changes only through `backend.send(_:)`; screen-only state goes to `display`.
+/// Owns the console's View, Radio and Window menus, the app menu's Settings item, and the window's
+/// size rules. Engine-owned state changes only through `backend.send(_:)`; screen-only state goes
+/// to `display`.
 @MainActor
 final class ConsoleShell: NSObject, NSMenuItemValidation {
     let backend: any RadioBackend
@@ -78,6 +79,8 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
     private static let viewMenuID = NSUserInterfaceItemIdentifier("lyra.console.view")
     private static let radioMenuID = NSUserInterfaceItemIdentifier("lyra.console.radio")
     private static let windowMenuID = NSUserInterfaceItemIdentifier("lyra.console.window")
+    private static let settingsItemID = NSUserInterfaceItemIdentifier("lyra.console.settings")
+    private static let settingsSeparatorID = NSUserInterfaceItemIdentifier("lyra.console.settings.separator")
 
     /// Carries a `ConsoleMenuAction` on an `NSMenuItem` (`representedObject` needs an object).
     private final class ActionBox: NSObject {
@@ -92,11 +95,15 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
     /// The Window menu we made `NSApp.windowsMenu`, so a later rebuild can replace our own
     /// stale one without ever taking over a Window menu someone else installed.
     private weak var ownWindowsMenu: NSMenu?
+    /// Opens the engine's settings; nil leaves the app menu alone.
+    private let openSettings: (@MainActor () -> Void)?
 
-    init(backend: any RadioBackend, display: DisplayStore, defaults: UserDefaults = .standard) {
+    init(backend: any RadioBackend, display: DisplayStore, defaults: UserDefaults = .standard,
+         openSettings: (@MainActor () -> Void)? = nil) {
         self.backend = backend
         self.display = display
         self.defaults = defaults
+        self.openSettings = openSettings
     }
 
     private var state: ConsoleMenuState {
@@ -183,10 +190,12 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
 
     // MARK: - Menus
 
-    /// Inserts the View menu after the app menu, then Radio and Window, replacing only
-    /// items this method inserted earlier; everything else in the main menu belongs to Qt.
+    /// Inserts the View menu after the app menu, then Radio and Window, and Settings… ⌘, in the
+    /// app menu, replacing only items this method inserted earlier; everything else in the main
+    /// menu belongs to Qt.
     func installMenus() {
         guard let mainMenu = NSApp.mainMenu else { return }
+        installSettingsItem(in: mainMenu)
         let ours = [Self.viewMenuID, Self.radioMenuID, Self.windowMenuID]
         for item in mainMenu.items where item.identifier.map(ours.contains) ?? false {
             mainMenu.removeItem(item)
@@ -216,6 +225,31 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
             NSApp.windowsMenu = windowMenu
             ownWindowsMenu = windowMenu
         }
+    }
+
+    /// Settings… ⌘, below the app menu's first item (About). Qt can rebuild the menu bar, so this
+    /// runs with every menu install.
+    private func installSettingsItem(in mainMenu: NSMenu) {
+        guard openSettings != nil, let appMenu = mainMenu.items.first?.submenu else { return }
+        let ours = [Self.settingsItemID, Self.settingsSeparatorID]
+        for item in appMenu.items where item.identifier.map(ours.contains) ?? false {
+            appMenu.removeItem(item)
+        }
+        let settings = NSMenuItem(title: "Settings…", action: #selector(performOpenSettings(_:)),
+                                  keyEquivalent: ",")
+        settings.keyEquivalentModifierMask = [.command]
+        settings.target = self
+        settings.identifier = Self.settingsItemID
+        settings.setAccessibilityLabel("Settings")
+        let separator = NSMenuItem.separator()
+        separator.identifier = Self.settingsSeparatorID
+        let index = min(1, appMenu.numberOfItems)
+        appMenu.insertItem(settings, at: index)
+        appMenu.insertItem(separator, at: index + 1)
+    }
+
+    @objc private func performOpenSettings(_ sender: NSMenuItem) {
+        openSettings?()
     }
 
     private func makeViewMenu() -> NSMenu {

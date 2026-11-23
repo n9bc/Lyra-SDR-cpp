@@ -2,6 +2,7 @@
 // LyraEngineFacade.h.  Compiled with ARC (see CMakeLists.txt).
 
 #import "bridge/LyraEngineFacade.h"
+#import "bridge/LyraEngineFacade+Internal.h"
 
 #include "bands.h"
 #include "hl2_stream.h"
@@ -18,14 +19,26 @@
 #include <vector>
 
 using lyra::dsp::WdspEngine;
+using lyra::ipc::HL2Discovery;
 using lyra::ipc::HL2Stream;
+using lyra::profile::ProfileManager;
+using lyra::ui::BandMemory;
+using lyra::ui::MainWindow;
 using lyra::ui::MeterModel;
+using lyra::ui::Prefs;
 
 @interface LyraEngineFacade () {
     HL2Stream *_stream;
     WdspEngine *_dsp;
     MeterModel *_meter;
+    Prefs *_prefs;
+    HL2Discovery *_discovery;
+    ProfileManager *_profiles;
+    MainWindow *_host;
+    BandMemory *_bandMemory;
+    QString _lastStatusText;
     std::vector<QMetaObject::Connection> _connections;
+    LyraEngineChangeCallback _consoleChangeCallback;
 
     LyraRadioCallback _radioCallback;
     LyraDspCallback _dspCallback;
@@ -42,20 +55,42 @@ using lyra::ui::MeterModel;
 
 + (instancetype)facadeWithStream:(void *)stream dsp:(void *)dsp meter:(void *)meter
 {
+    return [self facadeWithStream:stream dsp:dsp meter:meter
+                            prefs:nullptr discovery:nullptr profiles:nullptr];
+}
+
++ (instancetype)facadeWithStream:(void *)stream
+                             dsp:(void *)dsp
+                           meter:(void *)meter
+                           prefs:(void *)prefs
+                       discovery:(void *)discovery
+                        profiles:(void *)profiles
+{
     return [[self alloc] initWithStream:static_cast<HL2Stream *>(stream)
                                     dsp:static_cast<WdspEngine *>(dsp)
-                                  meter:static_cast<MeterModel *>(meter)];
+                                  meter:static_cast<MeterModel *>(meter)
+                                  prefs:static_cast<Prefs *>(prefs)
+                              discovery:static_cast<HL2Discovery *>(discovery)
+                               profiles:static_cast<ProfileManager *>(profiles)];
 }
 
 - (instancetype)initWithStream:(HL2Stream *)stream
                            dsp:(WdspEngine *)dsp
                          meter:(MeterModel *)meter
+                         prefs:(Prefs *)prefs
+                     discovery:(HL2Discovery *)discovery
+                      profiles:(ProfileManager *)profiles
 {
     self = [super init];
     if (!self) return nil;
     _stream = stream;
     _dsp = dsp;
     _meter = meter;
+    _prefs = prefs;
+    _discovery = discovery;
+    _profiles = profiles;
+    _host = nullptr;
+    _bandMemory = nullptr;
     _mode = @"";
     _agcMode = @"";
     _meterText = @"";
@@ -67,6 +102,7 @@ using lyra::ui::MeterModel;
     [self readAudio];
     [self readMeter];
     [self connectSignals];
+    [self connectConsoleSignals];
     return self;
 }
 
@@ -198,7 +234,7 @@ using lyra::ui::MeterModel;
 
 - (void)startWithIp:(NSString *)ip
 {
-    if (_stream) _stream->open(QString::fromNSString(ip));
+    [self beginConnectToIp:ip];
 }
 
 - (void)startSavedRadio
@@ -291,9 +327,45 @@ using lyra::ui::MeterModel;
     _dspCallback = nil;
     _audioCallback = nil;
     _meterCallback = nil;
+    _consoleChangeCallback = nil;
     _stream = nullptr;
     _dsp = nullptr;
     _meter = nullptr;
+    _prefs = nullptr;
+    _discovery = nullptr;
+    _profiles = nullptr;
+    _host = nullptr;
+    _bandMemory = nullptr;
+}
+
+@end
+
+#pragma mark - Internal (see LyraEngineFacade+Internal.h)
+
+@implementation LyraEngineFacade (Internal)
+
+- (HL2Stream *)engineStream { return _stream; }
+- (WdspEngine *)engineDsp { return _dsp; }
+- (MeterModel *)engineMeter { return _meter; }
+- (Prefs *)enginePrefs { return _prefs; }
+- (HL2Discovery *)engineDiscovery { return _discovery; }
+- (ProfileManager *)engineProfiles { return _profiles; }
+- (MainWindow *)engineHost { return _host; }
+- (void)setEngineHost:(MainWindow *)host { _host = host; }
+- (BandMemory *)engineBandMemory { return _bandMemory; }
+- (void)setEngineBandMemory:(BandMemory *)bandMemory { _bandMemory = bandMemory; }
+- (QString)lastStatusText { return _lastStatusText; }
+- (void)setLastStatusText:(const QString &)text { _lastStatusText = text; }
+- (LyraEngineChangeCallback)consoleChangeCallback { return _consoleChangeCallback; }
+
+- (void)setEngineChangeCallback:(LyraEngineChangeCallback)callback
+{
+    _consoleChangeCallback = [callback copy];
+}
+
+- (void)addEngineConnection:(const QMetaObject::Connection &)connection
+{
+    _connections.push_back(connection);
 }
 
 @end

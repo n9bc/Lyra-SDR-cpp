@@ -1506,7 +1506,8 @@ int main(int argc, char *argv[])
     auto *obsMeterModel = new lyra::ui::MeterModel(stream, wdspEngine, &app);
     void *obsFacade = lyra_create_engine_facade(
         static_cast<void *>(stream), static_cast<void *>(wdspEngine),
-        static_cast<void *>(obsMeterModel));
+        static_cast<void *>(obsMeterModel), static_cast<void *>(prefs),
+        static_cast<void *>(discovery), static_cast<void *>(profiles));
 #endif
     auto *hidVfo = new lyra::ui::HidVfoWheel(&app);
     auto *win = new lyra::ui::MainWindow(discovery, stream, wdsp,

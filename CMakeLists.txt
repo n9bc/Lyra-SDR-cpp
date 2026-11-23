@@ -846,9 +846,14 @@ if(APPLE)
     # Obj-C++ facade that exposes HL2Stream / WdspEngine / MeterModel to the
     # SwiftUI Observatory UI.  Qt-signal lambdas capture self weakly, so it
     # builds with ARC (the app_activity_mac.mm above is manual retain/release).
-    target_sources(lyra PRIVATE src/bridge/LyraEngineFacade.mm)
+    # LyraEngineFacadeConsole.mm is its Console category (native console reads
+    # and calls), built the same way.
+    target_sources(lyra PRIVATE
+        src/bridge/LyraEngineFacade.mm
+        src/bridge/LyraEngineFacadeConsole.mm)
     set_source_files_properties(
         src/bridge/LyraEngineFacade.mm
+        src/bridge/LyraEngineFacadeConsole.mm
         PROPERTIES SKIP_AUTOMOC ON COMPILE_OPTIONS -fobjc-arc
     )
 
