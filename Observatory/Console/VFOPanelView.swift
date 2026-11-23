@@ -45,9 +45,10 @@ struct VFOPanelView: View {
             header
             GeometryReader { geo in
                 let left = min(290, max(230, geo.size.width - 350))
+                let digits = geo.size.width - left - 14 - Self.mhzReserve
                 HStack(alignment: .top, spacing: 14) {
                     leftColumn.frame(width: left)
-                    rightColumn
+                    rightColumn(fontSize: Self.frequencyFontSize(width: digits))
                 }
             }
             .frame(maxHeight: .infinity)
@@ -133,7 +134,7 @@ struct VFOPanelView: View {
         .help(help)
     }
 
-    private var rightColumn: some View {
+    private func rightColumn(fontSize: CGFloat) -> some View {
         VStack(alignment: .trailing, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(spacing: 2) {
@@ -155,7 +156,7 @@ struct VFOPanelView: View {
             }
             Spacer(minLength: 0)
             HStack(alignment: .lastTextBaseline, spacing: 7) {
-                frequency
+                frequency(fontSize: fontSize)
                 Text("MHz").font(mono(12)).foregroundStyle(LyraDS.Palette.textMuted)
                     .fixedSize().layoutPriority(1)
             }
@@ -163,24 +164,49 @@ struct VFOPanelView: View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    private var frequency: some View {
+    // MARK: Frequency sizing
+
+    /// SF Mono digit (and dot) advance, in ems (measured: 0.618).
+    nonisolated static let digitAdvanceEm: CGFloat = 0.618
+    /// Tracking in ems (-1.24 pt at 62 pt).
+    nonisolated static let trackingEm: CGFloat = -0.02
+    /// The widest readout the panel must hold (up to 999.999.999, i.e. below 1 GHz).
+    nonisolated static let frequencyTemplate = "000.000.000"
+    nonisolated static let maxFrequencyFontSize: CGFloat = 62
+    nonisolated static let minFrequencyFontSize: CGFloat = 31
+    /// "MHz" label (12 pt mono, about 22 pt) plus the 7 pt gap before it.
+    nonisolated static let mhzReserve: CGFloat = 30
+
+    /// Width the 11-character template occupies at `fontSize`.
+    nonisolated static func frequencyTemplateWidth(fontSize: CGFloat) -> CGFloat {
+        CGFloat(frequencyTemplate.count) * fontSize * (digitAdvanceEm + trackingEm)
+    }
+
+    /// One font size per available width, sized for the 11-character template so every
+    /// frequency (Main, Sub, any band) renders at the same digit size and never jumps when it
+    /// crosses 10 or 100 MHz. Capped at 62 pt, floored at 31 pt.
+    nonisolated static func frequencyFontSize(width: CGFloat) -> CGFloat {
+        guard width.isFinite, width > 0 else { return minFrequencyFontSize }
+        let fit = width / frequencyTemplateWidth(fontSize: 1)
+        return min(max(fit, minFrequencyFontSize), maxFrequencyFontSize)
+    }
+
+    private func frequency(fontSize: CGFloat) -> some View {
         let text = ConsoleFormat.frequency(receiver.frequencyHz)
-        // Hidden template of the same digit count keeps the frame steady as digits change.
-        let template = String(text.map { $0 == "." ? "." : "0" })
-        let font = Font.system(size: 62, weight: .light, design: .monospaced)
-        return ZStack(alignment: .trailing) {
-            Text(template).hidden()
-            Text(text)
-                .foregroundStyle(on ? LyraDS.Palette.freqGlow : LyraDS.Palette.freqSub)
-                .shadow(color: on ? LyraDS.Palette.cyan.opacity(0.55) : LyraDS.Palette.purple.opacity(0.25),
-                        radius: on ? 9 : 6)
-                .shadow(color: on ? LyraDS.Palette.freqGlow.opacity(0.8) : .clear, radius: 1)
-        }
-        .font(font).tracking(-1.24)
-        .lineLimit(1).minimumScaleFactor(0.5)
-        .accessibilityElement()
-        .accessibilityLabel("Frequency")
-        .accessibilityValue("\(text) megahertz")
+        // Size comes from the panel width alone (see `frequencyFontSize`), not from the digits,
+        // so no scale factor: Main and Sub always match.
+        return Text(text)
+            .font(.system(size: fontSize, weight: .light, design: .monospaced))
+            .tracking(fontSize * Self.trackingEm)
+            .lineLimit(1)
+            .fixedSize()
+            .foregroundStyle(on ? LyraDS.Palette.freqGlow : LyraDS.Palette.freqSub)
+            .shadow(color: on ? LyraDS.Palette.cyan.opacity(0.55) : LyraDS.Palette.purple.opacity(0.25),
+                    radius: on ? 9 : 6)
+            .shadow(color: on ? LyraDS.Palette.freqGlow.opacity(0.8) : .clear, radius: 1)
+            .accessibilityElement()
+            .accessibilityLabel("Frequency")
+            .accessibilityValue("\(text) megahertz")
     }
 
     private var toggleRow: some View {
