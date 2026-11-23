@@ -137,6 +137,9 @@ struct Spot: Identifiable, Equatable, Sendable {
 struct DisplaySnapshot: Equatable, Sendable {
     var spanLowHz: Int64
     var spanHighHz: Int64
+    /// The Sub receiver's own span; the engine tracks one per receiver.
+    var subSpanLowHz: Int64
+    var subSpanHighHz: Int64
     var zoom: Double
     var wheelStepHz: Int
     var peakHold: String
@@ -146,6 +149,18 @@ struct DisplaySnapshot: Equatable, Sendable {
     var spots: [Spot]
     var terrainView: TerrainView
     var terrainMix: Double
+
+    /// The display as seen by one receiver. Sub gets its own span, and the band plan and
+    /// spots (which are for the Main receiver's band) are dropped.
+    func view(for id: ReceiverID) -> DisplaySnapshot {
+        guard id == .sub else { return self }
+        var v = self
+        v.spanLowHz = subSpanLowHz
+        v.spanHighHz = subSpanHighHz
+        v.bandPlan = []
+        v.spots = []
+        return v
+    }
 }
 
 struct BandCondition: Equatable, Sendable {
@@ -231,6 +246,9 @@ struct RadioSnapshot: Equatable, Sendable {
     var keyer: KeyerSnapshot
     var telemetry: TelemetrySnapshot
     var session: SessionSnapshot
+
+    func receiver(_ id: ReceiverID) -> ReceiverSnapshot { id == .main ? main : sub }
+    var focusedReceiver: ReceiverSnapshot { receiver(session.focused) }
 }
 
 // MARK: - Sample data (approved mockup values)
@@ -280,7 +298,8 @@ extension RadioSnapshot {
             selectedPreset: "2.7k", rxLowHz: 100, txLowHz: 100, bwLocked: true,
             txBandwidthLabel: "2.7 kHz"),
         display: DisplaySnapshot(
-            spanLowHz: 7_060_000, spanHighHz: 7_200_000, zoom: 2.0, wheelStepHz: 500,
+            spanLowHz: 7_060_000, spanHighHz: 7_200_000,
+            subSpanLowHz: 14_125_000, subSpanHighHz: 14_265_000, zoom: 2.0, wheelStepHz: 500,
             peakHold: "2 s", averaging: true, bandPlanVisible: true,
             bandPlan: [
                 BandPlanSegment(lowHz: 7_060_000, highHz: 7_074_000, label: "Digital", kind: .digital),
