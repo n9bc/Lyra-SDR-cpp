@@ -27,6 +27,26 @@ enum LyraDS {
 
         static let border = Color.white.opacity(0.08)
 
+        // Console tokens (native console mockup).
+        static let vfoTop = Color(hex: "#0F1427")
+        static let vfoBottom = Color(hex: "#080A14")
+        static let vfoBorder = Color(hex: "#78A0FF").opacity(0.16)
+        static let chipFill = surfaceElevated
+        static let segmentOff = Color(hex: "#1A1E33")
+        static let freqGlow = Color(hex: "#E4FCFF")
+        static let freqSub = Color(hex: "#A3ACC8")
+        static let txFill = Color(hex: "#E8335F")
+        static let txText = Color.white
+
+        static let panelBorder = Color.white.opacity(0.07)
+        static let chipBorder = Color.white.opacity(0.09)
+        static let chipText = Color(hex: "#B7C0DE")
+        static let chipSubText = Color(hex: "#C4B0FF")
+        static let chipDimText = Color(hex: "#5E6688")
+        static let chipDimFill = Color(hex: "#0F1220")
+        static let vchipFill = Color(hex: "#0B0E1B")
+        static let vchipBorder = Color.white.opacity(0.13)
+
         private static func stop(_ position: Float, _ hex: UInt32) -> GradientStop {
             GradientStop(
                 position: position,
