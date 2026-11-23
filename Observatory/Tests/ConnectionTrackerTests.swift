@@ -114,4 +114,38 @@ final class ConnectionTrackerTests: XCTestCase {
         }
         XCTAssertEqual(tracker.phase, .stalled)
     }
+
+    func testDisconnectFromTimeoutError() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(8))
+        XCTAssertEqual(tracker.phase, .error("No radio answered at 169.254.19.221"))
+        tracker.requestDisconnect()
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(8.5))
+        tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(9))
+        XCTAssertEqual(tracker.phase, .disconnected)
+    }
+
+    func testDisconnectFromErrorWithEngineDownIsImmediate() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(8))
+        tracker.requestDisconnect()
+        XCTAssertEqual(tracker.phase, .disconnected)
+    }
+
+    func testLaterExternalConnectDoesNotReuseOldRequest() {
+        var tracker = ConnectionTracker()
+        tracker.requestConnect(ip: "169.254.19.221", at: t0)
+        tracker.update(running: true, p2Running: false, datagramsPerSec: 380, now: at(1))
+        tracker.requestDisconnect()
+        tracker.update(running: false, p2Running: false, datagramsPerSec: 0, now: at(2))
+        XCTAssertEqual(tracker.phase, .disconnected)
+        for s in stride(from: 20.0, through: 30.0, by: 0.5) {
+            tracker.update(running: true, p2Running: false, datagramsPerSec: 0, now: at(s))
+            XCTAssertNotEqual(tracker.phase, .error("No radio answered at 169.254.19.221"))
+        }
+        XCTAssertEqual(tracker.phase, .stalled)
+    }
 }

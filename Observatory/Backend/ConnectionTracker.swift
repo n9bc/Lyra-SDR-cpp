@@ -39,8 +39,16 @@ struct ConnectionTracker: Equatable, Sendable {
     /// Records that the user asked to disconnect, so the next drop is not reported as an error.
     mutating func requestDisconnect() {
         switch phase {
-        case .disconnected, .error:
+        case .disconnected:
             return
+        case .error:
+            if wasUp {
+                // The error can show while the engine is still up (connect timeout).
+                disconnectRequested = true
+            } else {
+                clearSession()
+                phase = .disconnected
+            }
         default:
             disconnectRequested = true
         }
@@ -66,6 +74,7 @@ struct ConnectionTracker: Equatable, Sendable {
             lastDataAt = now
             hadData = true
             timedOut = false
+            connectRequestedAt = nil
             phase = .streaming
             return
         }
@@ -99,6 +108,7 @@ struct ConnectionTracker: Equatable, Sendable {
             phase = .error("Connection closed")
         } else if phase == .connecting, let at = connectRequestedAt,
                   now.timeIntervalSince(at) >= Self.connectTimeout {
+            connectRequestedAt = nil
             phase = .error("No radio answered at \(requestedIP ?? "the radio")")
         }
     }
@@ -108,5 +118,6 @@ struct ConnectionTracker: Equatable, Sendable {
         lastDataAt = nil
         hadData = false
         timedOut = false
+        connectRequestedAt = nil
     }
 }
