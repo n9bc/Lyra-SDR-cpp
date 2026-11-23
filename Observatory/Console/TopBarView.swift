@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// Label, style and help for the top bar's power chip. Keyed on the connection capability alone:
+/// another mocked feature must not hide a real connection, and a mocked connection never reads
+/// as a running radio.
+struct PowerChipModel: Equatable, Sendable {
+    nonisolated let label: String
+    nonisolated let style: ConsoleChipStyle
+    nonisolated let help: String
+
+    nonisolated static func phaseName(_ phase: ConnectionPhase) -> String {
+        switch phase {
+        case .disconnected: "Disconnected"
+        case .discovering: "Discovering"
+        case .connecting: "Connecting"
+        case .socketOpen: "Socket open"
+        case .streaming: "Running"
+        case .stalled: "Stalled"
+        case .error: "Error"
+        }
+    }
+
+    nonisolated init(phase: ConnectionPhase, connectionStatus: CapabilityStatus) {
+        let name = Self.phaseName(phase)
+        switch connectionStatus {
+        case .mocked:
+            label = "Sample data"; style = .warn; help = "Sample data: no radio is connected"
+        case .available:
+            label = name; style = phase == .streaming ? .armed : .plain; help = "Radio connection: \(name)"
+        case .unavailable(let reason):
+            label = name; style = .plain; help = "Radio connection unavailable: \(reason)"
+        }
+    }
+}
+
 /// Top bar (46 pt): power, radio, profile, DSP chips, tools, apps, REC, spot, clocks, settings.
 /// Actions are empty in Milestone 1 (static console). Narrow widths degrade in three levels:
 /// everything inline, Tools in a menu, then Tools and the TX DSP / RX chips in menus.
@@ -18,39 +51,22 @@ struct TopBarView: View {
 
     // MARK: Power
 
-    private var phaseName: String {
-        switch snapshot.connection.phase {
-        case .disconnected: "Disconnected"
-        case .discovering: "Discovering"
-        case .connecting: "Connecting"
-        case .socketOpen: "Socket open"
-        case .streaming: "Running"
-        case .stalled: "Stalled"
-        case .error: "Error"
-        }
-    }
-
-    /// Truthfulness: sample data never reads as a running radio.
-    private var powerLabel: String { capabilities.isSampleData ? "Sample data" : phaseName }
-
-    private var powerStyle: ConsoleChipStyle {
-        if capabilities.isSampleData { return .warn }
-        return snapshot.connection.phase == .streaming ? .armed : .plain
+    private var powerChip: PowerChipModel {
+        PowerChipModel(phase: snapshot.connection.phase, connectionStatus: capabilities.status(.connection))
     }
 
     private var power: some View {
-        let help = capabilities.isSampleData
-            ? "Sample data: no radio is connected" : "Radio connection: \(phaseName)"
+        let chip = powerChip
         return Button {} label: {
             HStack(spacing: 5) {
                 Image(systemName: "power").font(.system(size: 12, weight: .semibold))
-                Text(powerLabel)
+                Text(chip.label)
             }
             .padding(.horizontal, 3)
         }
-        .buttonStyle(ConsoleChipButtonStyle(powerStyle, height: 30))
-        .accessibilityLabel("Radio power, \(powerLabel)")
-        .help(help)
+        .buttonStyle(ConsoleChipButtonStyle(chip.style, height: 30))
+        .accessibilityLabel("Radio power, \(chip.label)")
+        .help(chip.help)
     }
 
     private var radio: some View {
