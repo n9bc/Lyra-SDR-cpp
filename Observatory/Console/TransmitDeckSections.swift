@@ -113,9 +113,9 @@ struct TransmitMeters: View {
             row("SWR", fraction: ((transmit.swr ?? 1) - 1) / 2,
                 readout: transmit.swr.map { String(format: "%.2f", $0) },
                 fill: AnyShapeStyle(LyraDS.Palette.green))
-            row("ALC", fraction: (transmit.alcDb + 30) / 30, readout: Optional(ConsoleFormat.signedDb(transmit.alcDb)),
+            row("ALC", fraction: ((transmit.alcDb ?? -30) + 30) / 30, readout: transmit.alcDb.map(ConsoleFormat.signedDb),
                 fill: AnyShapeStyle(LyraDS.Palette.yellow))
-            row("Mic", fraction: (transmit.micLevelDb + 60) / 60, readout: Optional(ConsoleFormat.signedDb(transmit.micLevelDb)),
+            row("Mic", fraction: ((transmit.micLevelDb ?? -60) + 60) / 60, readout: transmit.micLevelDb.map(ConsoleFormat.signedDb),
                 fill: AnyShapeStyle(LinearGradient(
                     colors: [LyraDS.Palette.electricBlue, LyraDS.Palette.cyan],
                     startPoint: .leading, endPoint: .trailing)))

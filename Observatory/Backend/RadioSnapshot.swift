@@ -209,8 +209,8 @@ struct TransmitSnapshot: Equatable, Sendable {
     var psFeedback: Int?
     var fwdPowerW: Double?
     var swr: Double?
-    var alcDb: Double
-    var micLevelDb: Double
+    var alcDb: Double?
+    var micLevelDb: Double?
 }
 
 struct KeyerClip: Identifiable, Equatable, Sendable {

@@ -127,6 +127,8 @@ final class LiveSnapshotMapperTests: XCTestCase {
         e.telemetry.paCurrentA = .nan
         e.transmit.fwdPowerW = .nan
         e.transmit.swr = -1
+        e.transmit.alcDb = .nan
+        e.transmit.micLevelDb = .nan
         var s = map(e)
         XCTAssertNil(s.main.snrDb)
         XCTAssertNil(s.telemetry.temperatureC)
@@ -134,14 +136,20 @@ final class LiveSnapshotMapperTests: XCTestCase {
         XCTAssertNil(s.telemetry.paCurrentA)
         XCTAssertNil(s.transmit.fwdPowerW)
         XCTAssertNil(s.transmit.swr)
+        XCTAssertNil(s.transmit.alcDb)
+        XCTAssertNil(s.transmit.micLevelDb)
         XCTAssertNil(s.telemetry.cpuPct)
         XCTAssertNil(s.telemetry.tciClients)
         XCTAssertNil(s.telemetry.graphics)
         e.telemetry.tempC = 31.4
         e.meters.snrDb = 24
+        e.transmit.alcDb = -8
+        e.transmit.micLevelDb = -14
         s = map(e)
         XCTAssertEqual(s.telemetry.temperatureC, 31.4)
         XCTAssertEqual(s.main.snrDb, 24)
+        XCTAssertEqual(s.transmit.alcDb, -8)
+        XCTAssertEqual(s.transmit.micLevelDb, -14)
     }
 
     func testTransmitFromEngineOnly() {

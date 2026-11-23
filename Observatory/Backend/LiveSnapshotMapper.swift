@@ -97,8 +97,8 @@ enum LiveSnapshotMapper {
                 voxEnabled: t.vox, attOnTx: t.attOnTx, swrProtectArmed: t.swrProtect,
                 paCapture: false, psEnabled: t.psArmed, psFeedback: t.psArmed ? t.psFeedback : nil,
                 fwdPowerW: finite(t.fwdPowerW), swr: t.swr >= 0 ? t.swr : nil,
-                alcDb: t.alcDb.isFinite ? t.alcDb : meterFloorDb,
-                micLevelDb: t.micLevelDb.isFinite ? t.micLevelDb : meterFloorDb),
+                alcDb: finite(t.alcDb),
+                micLevelDb: finite(t.micLevelDb)),
             keyer: sample.keyer,
             telemetry: TelemetrySnapshot(
                 temperatureC: e.telemetry.tempC.isFinite && e.telemetry.tempC >= minPlausibleTempC
@@ -123,9 +123,6 @@ enum LiveSnapshotMapper {
     }
 
     // MARK: - Helpers
-
-    /// The meter floor shown when the engine reports no TX level (the meters' own scale bottom).
-    private nonisolated static let meterFloorDb = -60.0
 
     private nonisolated static func finite(_ v: Double) -> Double? { v.isFinite ? v : nil }
 
