@@ -40,6 +40,7 @@ struct VFOCenterColumn: View {
             row(chip("CTUN", "Toggle click-to-tune", session.ctunEnabled ? .cyan : .plain),
                 chip("LOCK", "Toggle VFO lock", session.vfoLocked ? .cyan : .plain))
         }
+        .frame(maxHeight: .infinity)
         .vfoPanel(highlighted: false)
     }
 }
