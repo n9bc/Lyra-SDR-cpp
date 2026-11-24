@@ -30,6 +30,17 @@ import XCTest
         let s = DisplayStore(defaults: d)
         XCTAssertEqual(s.layout, .spectrumAndWaterfall)
     }
+    func testTerrainSmoothingDefaultsPersistsAndFallsBack() {
+        let d = suite()
+        let a = DisplayStore(defaults: d)
+        XCTAssertEqual(a.terrainSmoothing, 0.5)
+        a.terrainSmoothing = 0.8
+        XCTAssertEqual(DisplayStore(defaults: d).terrainSmoothing, 0.8, accuracy: 1e-9)
+        for bad: Any in ["smooth", 1.5, -0.1, Double.nan] {
+            d.set(bad, forKey: "console.display.terrainSmoothing")
+            XCTAssertEqual(DisplayStore(defaults: d).terrainSmoothing, 0.5, "\(bad)")
+        }
+    }
     func testRetiredTerrainKeysAreLeftAlone() {
         // The terrain view and mix are gone; values a user already stored are neither read nor deleted.
         let d = suite()

@@ -81,6 +81,25 @@ struct AudioTerrainView: View {
         .accessibilityLabel(title).help(title)
     }
 
+    /// The Smooth control: how strongly the terrain is smoothed across frequency and over time.
+    private var smoothControl: some View {
+        HStack(spacing: 4) {
+            Text("Smooth").font(.system(size: 11)).foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
+            Slider(value: $store.terrainSmoothing, in: 0...1)
+                .controlSize(.mini)
+                .tint(LyraDS.Palette.cyan)
+                .frame(width: 80)
+                .accessibilityLabel("Terrain smoothing")
+                .accessibilityValue(Self.smoothingReadout(store.terrainSmoothing))
+        }
+        .help("Terrain smoothing: left is sharper, right is smoother")
+    }
+
+    /// The Smooth control's value as a percentage.
+    nonisolated static func smoothingReadout(_ amount: Double) -> String {
+        "\(Int((min(max(amount, 0), 1) * 100).rounded())) %"
+    }
+
     private func header(showDetail: Bool) -> some View {
         HStack(spacing: 6) {
             chevron
@@ -93,6 +112,7 @@ struct AudioTerrainView: View {
             }
             Spacer(minLength: 6)
             if store.terrainExpanded {
+                smoothControl
                 ConsoleChip(title: "Orbit", help: "Orbit the terrain view")
             }
         }
@@ -152,6 +172,7 @@ struct AudioTerrainView: View {
         }
         .accessibilityHidden(true)
         .onAppear(perform: makeRendererIfNeeded)
+        .onChange(of: store.terrainSmoothing) { applyShaping() }
         .onChange(of: liveFeed.map(ObjectIdentifier.init)) { applySource() }
         .onChange(of: liveFeed?.isLive) { renderer?.wake() }
         .onChange(of: liveFeed?.grid.count) { renderer?.wake() }
@@ -164,7 +185,12 @@ struct AudioTerrainView: View {
             return
         }
         renderer = r
+        applyShaping()
         applySource()
+    }
+
+    private func applyShaping() {
+        renderer?.shaping = TerrainShaping.forSmoothing(store.terrainSmoothing)
     }
 
     private func applySource() {

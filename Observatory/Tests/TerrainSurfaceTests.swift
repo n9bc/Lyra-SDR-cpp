@@ -28,14 +28,14 @@ final class TerrainSurfaceTests: XCTestCase {
     }
 
     func testAutoRangeLiftsSignalAboveFloor() {
-        // The brief's case: noise at -40 dBFS, one bin at -10. The peak is 30 dB above the floor,
-        // so the 40 dB minimum span holds the ceiling at floor + 40 and the peak sits at 30/40.
-        let r = steadyState(grid(noise: -40, peak: -10))
+        // Noise at -40 dBFS, one bin at -30. The peak is 10 dB above the floor, so the 15 dB
+        // minimum span holds the ceiling at floor + 15 and the peak sits at 10/15.
+        let r = steadyState(grid(noise: -40, peak: -30))
         XCTAssertEqual(r.floorDb, -40, accuracy: 0.01)
-        XCTAssertEqual(r.ceilingDb, 0, accuracy: 0.01)
+        XCTAssertEqual(r.ceilingDb, -25, accuracy: 0.01)
         XCTAssertLessThanOrEqual(r.level(-40), 0.3)
-        XCTAssertEqual(r.level(-10), 0.75, accuracy: 0.01)
-        XCTAssertLessThan(r.level(-10), 1)
+        XCTAssertEqual(r.level(-30), 10.0 / 15, accuracy: 0.01)
+        XCTAssertLessThan(r.level(-30), 1)
 
         // When the span is not clamped, the peak sits just below the top: max + 3 dB headroom.
         let wide = steadyState(grid(noise: -40, peak: 5))
@@ -77,6 +77,102 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertLessThan(drawnPeakLevel(steadyState(g)), 0.85)
     }
 
+    /// Post-AGC SSB voice, as the live feed showed it: in-band noise scattering about -35 +- 6 dBFS,
+    /// the filter's low edge in stopband, and speech harmonics 15-25 dB over the noise coming and
+    /// going. The noise lay on a raw-percentile floor 5 dB under it, and a 40 dB minimum span put
+    /// the ceiling near 0 dBFS, so speech drew at 0.2-0.5 of the height over a raised plateau.
+    /// The ceiling keeps 3 dB of headroom over the strongest syllable, so the top is about 0.8.
+    func testSidebandSpeechRisesOutOfTheNoise() {
+        var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func rand() -> Float {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Float(seed >> 40) / Float(1 << 24)
+        }
+        func row(speech: Bool) -> [Float] {
+            var r = (0..<201).map { _ in -35 + 12 * (rand() - 0.5) }
+            for p in 0..<8 { r[p] = -90 }                          // below the filter's low edge
+            if speech {
+                for h in stride(from: 20, through: 150, by: 10) {  // voice harmonics
+                    let db: Float = -12 - 8 * rand()
+                    r[h] = db; r[h - 1] = db - 6; r[h + 1] = db - 6
+                }
+            }
+            return r
+        }
+        var drawn = TerrainAutoRange()
+        var g: [[Float]] = []
+        var ref: Float = 0
+        for i in 0..<300 {                                         // 40 s of rows
+            g.insert(row(speech: (i / 4) % 3 != 0), at: 0)         // syllables and pauses
+            if g.count > 30 { g.removeLast() }
+            ref = min(drawn.floorDb, drawn.targetFloorDb) - TerrainAutoRange.fallDbPerSecond
+            drawn.retarget(drawnGrid: g, referenceDb: ref)
+            drawn.advance(dt: 4.0 / 30)
+        }
+        ref = min(drawn.floorDb, drawn.targetFloorDb) - TerrainAutoRange.fallDbPerSecond
+        let heights = TerrainSurface.heightRows(grid: g, referenceDb: ref)
+        let levels = heights.flatMap { $0[10...190].map { drawn.level($0 + ref) } }
+        let peak = levels.max()!
+        XCTAssertGreaterThanOrEqual(peak, 0.8, "speech reaches near the top")
+        XCTAssertLessThan(peak, 1)
+        // Row 8 is the fourth row of a pause (rows 8...11 are i = 288...291): noise only.
+        XCTAssertEqual((299 - 8) / 4 % 3, 0)
+        let pause = heights[8][10...190].map { drawn.level($0 + ref) }.sorted()
+        XCTAssertLessThanOrEqual(pause[pause.count / 2], 0.2, "the noise lies low, not on a plateau")
+    }
+
+    /// The Smooth control: 0.5 is the standard look, the ends are the sharp and smooth anchors,
+    /// and more smoothing widens both kernels and carries more of the previous row.
+    func testSmoothingControlMapsOntoTheShaping() {
+        XCTAssertEqual(TerrainShaping.forSmoothing(0.5), .standard)
+        XCTAssertEqual(TerrainShaping.forSmoothing(0), .sharp)
+        XCTAssertEqual(TerrainShaping.forSmoothing(1), .smooth)
+        XCTAssertEqual(TerrainShaping.forSmoothing(-3), .sharp)
+        XCTAssertEqual(TerrainShaping.forSmoothing(7), .smooth)
+        XCTAssertEqual(TerrainShaping.forSmoothing(.nan), .standard)
+        XCTAssertEqual(TerrainShaping.standard.sigmaPoints, 3)
+        XCTAssertEqual(TerrainShaping.standard.peakSigmaPoints, TerrainSurface.peakSigmaPoints)
+        XCTAssertEqual(TerrainShaping.standard.newRowWeight, TerrainSurface.newRowWeight)
+        var previous = TerrainShaping.forSmoothing(0)
+        for i in 1...20 {
+            let next = TerrainShaping.forSmoothing(Double(i) / 20)
+            XCTAssertGreaterThan(next.sigmaPoints, previous.sigmaPoints)
+            XCTAssertGreaterThan(next.peakSigmaPoints, previous.peakSigmaPoints)
+            XCTAssertLessThan(next.newRowWeight, previous.newRowWeight)
+            previous = next
+        }
+        XCTAssertEqual(AudioTerrainView.smoothingReadout(0.5), "50 %")
+        XCTAssertEqual(AudioTerrainView.smoothingReadout(1.2), "100 %")
+    }
+
+    /// More smoothing gives a visibly smoother noise floor and a slower fade; less keeps detail.
+    func testMoreSmoothingSmoothsTheNoise() {
+        var seed: UInt64 = 42
+        func rand() -> Float {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Float(seed >> 40) / Float(1 << 24)
+        }
+        let grid = (0..<30).map { _ in (0..<201).map { _ in -40 + 12 * (rand() - 0.5) } }
+        func roughness(_ amount: Double) -> Float {
+            let row = TerrainSurface.heightRows(grid: grid, referenceDb: -60,
+                                                shaping: .forSmoothing(amount))[0]
+            let d = (1..<row.count).map { row[$0] - row[$0 - 1] }
+            let mean = d.reduce(0, +) / Float(d.count)
+            return (d.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Float(d.count)).squareRoot()
+        }
+        let sharp = roughness(0), standard = roughness(0.5), smooth = roughness(1)
+        XCTAssertGreaterThan(sharp, standard * 1.5)
+        XCTAssertGreaterThan(standard, smooth * 1.5)
+
+        // A step that stops fades faster when sharp: one row after, it keeps (1 - newRowWeight).
+        let quiet = [Float](repeating: -100, count: 41), loud = [Float](repeating: -60, count: 41)
+        for amount in [0.0, 0.5, 1.0] {
+            let w = TerrainShaping.forSmoothing(amount).newRowWeight
+            let h = TerrainSurface.heightRows(grid: [quiet, loud], referenceDb: -100, shaping: .forSmoothing(amount))
+            XCTAssertEqual(h[0][20], (1 - w) * 40, accuracy: 1e-3, "\(amount)")
+        }
+    }
+
     func testStrongSignalNeverFlatTops() {
         let r = steadyState(grid(noise: -30, peak: 6))
         XCTAssertLessThan(r.level(6), 1)
@@ -103,7 +199,7 @@ final class TerrainSurfaceTests: XCTestCase {
     /// While the ceiling is still rising toward a new, much stronger signal, values above it are
     /// compressed (a soft knee), never clipped: different levels above the ceiling stay different.
     func testOnsetAboveCeilingIsCompressedNotClipped() {
-        let r = steadyState(grid(noise: -60, peak: -30))       // ceiling settles near -20
+        let r = steadyState(grid(noise: -60, peak: -30))       // ceiling settles at -27
         XCTAssertLessThan(r.ceilingDb, 0)
         let a = r.level(0), b = r.level(10), c = r.level(30)
         XCTAssertLessThan(a, b); XCTAssertLessThan(b, c)
@@ -143,11 +239,11 @@ final class TerrainSurfaceTests: XCTestCase {
         }
     }
 
-    func testSpanClampedTo40to90() {
-        // Flat noise: span would be 3 dB; it is held at 40 by moving the ceiling, not the floor.
+    func testSpanClampedTo15to90() {
+        // Flat noise: span would be 3 dB; it is held at 15 by moving the ceiling, not the floor.
         let narrow = steadyState(grid(noise: -70))
         XCTAssertEqual(narrow.floorDb, -70, accuracy: 0.01)
-        XCTAssertEqual(narrow.ceilingDb - narrow.floorDb, 40, accuracy: 0.01)
+        XCTAssertEqual(narrow.ceilingDb - narrow.floorDb, 15, accuracy: 0.01)
 
         // A 140 dB spread: span held at 90 by lifting the floor; the ceiling stays on the peak.
         let wide = steadyState(grid(noise: -150, peak: -10))
@@ -160,7 +256,7 @@ final class TerrainSurfaceTests: XCTestCase {
         for g in [grid(noise: -150, peak: -10), grid(noise: -20), grid(noise: -90, peak: 10)] {
             for _ in 0..<50 {
                 r.update(grid: g, dt: 0.1)
-                XCTAssertGreaterThanOrEqual(r.ceilingDb - r.floorDb, 40 - 1e-3)
+                XCTAssertGreaterThanOrEqual(r.ceilingDb - r.floorDb, 15 - 1e-3)
                 XCTAssertLessThanOrEqual(r.ceilingDb - r.floorDb, 90 + 1e-3)
             }
         }
@@ -433,7 +529,7 @@ final class TerrainSurfaceTests: XCTestCase {
         let s = TerrainSurface.heightRows(grid: [spike], referenceDb: -100)[0]
         XCTAssertGreaterThan(s[100], 40)
         for x in 100..<200 { XCTAssertLessThanOrEqual(s[x + 1], s[x] + 1e-4, "falls away at \(x)") }
-        for x in 106..<200 { XCTAssertLessThan(s[x] - s[x + 1], 1, "no step at \(x)") }
+        for x in 112..<200 { XCTAssertLessThan(s[x] - s[x + 1], 1, "no step at \(x)") }
         XCTAssertEqual(s[150], 0, accuracy: 0.01)
 
         // A spike 140 dB high, as an onset can be while the scale is still catching up: the cut-off
@@ -612,6 +708,26 @@ final class TerrainSurfaceTests: XCTestCase {
             XCTAssertGreaterThan(minLag, 0.2, "\(nominal): never sits at its stop")
             XCTAssertLessThan(maxLag, TerrainScrollClock.maxLag, "\(nominal): never fills up")
         }
+    }
+
+    func testShapingChangeRebuildsAndResettlesTheSample() throws {
+        guard let ctx = MetalContext.shared else { throw XCTSkip("No Metal device") }
+        let r = try TerrainRenderer(context: ctx)
+        var row = [Float](repeating: -90, count: 201)
+        row[100] = -20
+        r.setSource(.sample([[Float]](repeating: row, count: 30)))
+        let standard = r.autoRange
+        r.shaping = .forSmoothing(0)
+        XCTAssertEqual(r.shaping, .sharp)
+        // A sharper shape keeps more of the narrow peak, so the settled ceiling rises.
+        XCTAssertGreaterThan(r.autoRange.ceilingDb, standard.ceilingDb)
+        r.shaping = .standard
+        XCTAssertEqual(r.autoRange.ceilingDb, standard.ceilingDb, accuracy: 1e-3)
+        // The live feed's scale is not reset by a shaping change: it keeps tracking.
+        r.setSource(.feed(TerrainFeed(source: SilentTerrainSource())))
+        let live = r.autoRange
+        r.shaping = .smooth
+        XCTAssertEqual(r.autoRange, live)
     }
 
     func testSwitchingToTheFeedRestartsTheScale() throws {

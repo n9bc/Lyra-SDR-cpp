@@ -150,13 +150,34 @@ final class TerrainRenderer: LyraMetalRenderer {
         lastFrame = nil
         range = TerrainAutoRange()
         if case .sample(let grid) = newSource {
-            for _ in 0..<20 {
-                range.retarget(drawnGrid: grid,
-                               referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb)
-                range.advance(dt: 1)
-            }
+            settleSampleRange(grid)
         }
         wake()
+    }
+
+    /// The Smooth control's shaping. A change rebuilds the rows on the next frame; a sample grid's
+    /// scale is settled again for the new shape.
+    var shaping: TerrainShaping = .standard {
+        didSet {
+            guard shaping != oldValue else { return }
+            // Forces the next ingest to rebuild the rows. `lastNewest` stays, so rows that
+            // arrive while the slider moves still advance the scroll clock.
+            lastCount = -1
+            if case .sample(let grid) = source {
+                range = TerrainAutoRange()
+                settleSampleRange(grid)
+            }
+            wake()
+        }
+    }
+
+    private func settleSampleRange(_ grid: [[Float]]) {
+        for _ in 0..<20 {
+            range.retarget(drawnGrid: grid,
+                           referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb,
+                           shaping: shaping)
+            range.advance(dt: 1)
+        }
     }
 
     /// The scale the next frame maps through. Tests only.
@@ -279,13 +300,14 @@ final class TerrainRenderer: LyraMetalRenderer {
             // The peak is read from the heights as drawn, measured from the same reference the rows
             // below are built from (it moves only when the floor does, by a few dB at most).
             range.retarget(drawnGrid: grid,
-                           referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb)
+                           referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb,
+                           shaping: shaping)
         }
         // Measured from below both where the floor is and where it is heading (with a second of
         // fall to spare), so nothing the scale shows before the next row is clamped away and the
         // flat padding rows stay at level 0.
         referenceDb = min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb
-        let heights = TerrainSurface.heightRows(grid: grid, referenceDb: referenceDb)
+        let heights = TerrainSurface.heightRows(grid: grid, referenceDb: referenceDb, shaping: shaping)
         columns = Self.padded(heights, rows: TerrainHistory.rows, points: Self.points)
             .map { TerrainSurface.upsampleRow($0, width: Self.textureWidth) }
         if arrived > 0 { clock.rowsArrived(arrived, at: now) }
