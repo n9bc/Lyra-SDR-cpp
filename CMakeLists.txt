@@ -922,6 +922,9 @@ if(APPLE)
                 -sdk ${OBSERVATORY_SDK_PATH}
                 -D LYRA_BRIDGE
                 -swift-version 6
+                # Optimised (swiftc defaults to -Onone): the console's per-frame Metal and
+                # terrain work runs on the main thread and was ~70x slower unoptimised.
+                -O -wmo
                 -emit-library -static
                 -o ${CMAKE_BINARY_DIR}/libObservatory.a
                 -Xcc -I${CMAKE_SOURCE_DIR}/src/bridge
