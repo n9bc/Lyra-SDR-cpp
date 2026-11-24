@@ -80,6 +80,37 @@ final class MockRadioBackend: RadioBackend {
                 s.sub.quickToggles[i].isOn = on
             }
             if function == .sq { s.dsp.squelchOn = on }
+        case .tuneCarrier(let id, let hz):
+            guard !s.session.vfoLocked, s.receiver(id).enabled else { return s }
+            retune(&s, id, to: hz)
+            announceTuning(&s, id)
+        case .wheelTune(let id, let ticks):
+            guard !s.session.vfoLocked, s.receiver(id).enabled else { return s }
+            let next = SpectrumGestureModel.nextWheelHz(
+                s.receiver(id).frequencyHz, stepHz: s.display.exactTuning ? max(100, s.display.wheelStepHz) : s.display.wheelStepHz,
+                ticks: ticks, sticky: s.display.stickyWheel)
+            retune(&s, id, to: next)
+            announceTuning(&s, id)
+        case .ctunPan(let delta):
+            // The locked display centre slides; the dial stays put.
+            s.display.spanLowHz -= delta; s.display.spanHighHz -= delta
+        case .grabVfo(let delta):
+            guard !s.session.vfoLocked else { return s }
+            retune(&s, .main, to: s.main.frequencyHz + delta)
+            announceTuning(&s, .main)
+        case .spectrumFocusToggle(let hz):
+            if s.session.focused == .sub {
+                s.session.focused = .main
+            } else {
+                retune(&s, .sub, to: hz)
+                s.session.focused = .sub
+            }
+        case .setZoom(let zoom):
+            let z = min(max(zoom.isNaN ? 1 : zoom, 1), 16)
+            let centre = (s.display.spanLowHz + s.display.spanHighHz) / 2
+            let half = Int64((Double(s.display.spanHighHz - s.display.spanLowHz) * s.display.zoom / z / 2).rounded())
+            s.display.spanLowHz = centre - half; s.display.spanHighHz = centre + half
+            s.display.zoom = z
         }
         refreshOverlays(&s)
         return s

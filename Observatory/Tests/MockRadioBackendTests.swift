@@ -182,4 +182,75 @@ private final class Flag: @unchecked Sendable {
             XCTAssertEqual(apply(c, locked), locked, "\(c)")
         }
     }
+
+    // MARK: - Spectrum gestures
+
+    func testSpectrumTuningIsMockedInSampleMode() {
+        XCTAssertEqual(MockRadioBackend().capabilities.control(.spectrumTuning), .mocked)
+    }
+
+    func testTuneCarrierMovesDialAndKeepsItInView() {
+        let m = MockRadioBackend()
+        m.send(.tuneCarrier(.main, hz: 7_130_000))
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_130_000)
+        XCTAssertEqual(m.snapshot.display.mainCarrierHz, 7_130_000)
+        m.send(.tuneCarrier(.main, hz: 7_400_000))
+        XCTAssertTrue((m.snapshot.display.spanLowHz...m.snapshot.display.spanHighHz).contains(7_400_000))
+    }
+
+    func testGestureTuningObeysVfoLock() {
+        let m = MockRadioBackend()
+        m.send(.setVFOLock(true))
+        m.send(.tuneCarrier(.main, hz: 7_130_000))
+        m.send(.wheelTune(.main, ticks: 1))
+        m.send(.grabVfo(deltaHz: 500))
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_128_500)
+    }
+
+    func testWheelTuneUsesStepAndStickyRule() {
+        var snap = RadioSnapshot.sample
+        snap.display.wheelStepHz = 1000
+        snap.display.stickyWheel = true
+        let m = MockRadioBackend(snapshot: snap)     // 7_128_500
+        m.send(.wheelTune(.main, ticks: 1))
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_129_000)
+        m.send(.wheelTune(.main, ticks: -2))
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_127_000)
+    }
+
+    func testGrabAndCtunPan() {
+        let m = MockRadioBackend()
+        m.send(.grabVfo(deltaHz: 1_500))
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_130_000)
+        let low = m.snapshot.display.spanLowHz, high = m.snapshot.display.spanHighHz
+        m.send(.ctunPan(deltaHz: 2_000))
+        XCTAssertEqual(m.snapshot.display.spanLowHz, low - 2_000)
+        XCTAssertEqual(m.snapshot.display.spanHighHz, high - 2_000)
+        XCTAssertEqual(m.snapshot.main.frequencyHz, 7_130_000)
+    }
+
+    func testFocusToggleMovesVfoBAndFocus() {
+        let m = MockRadioBackend()
+        m.send(.setSubEnabled(true))
+        m.send(.spectrumFocusToggle(hz: 7_140_000))
+        XCTAssertEqual(m.snapshot.sub.frequencyHz, 7_140_000)
+        XCTAssertEqual(m.snapshot.session.focused, .sub)
+        m.send(.spectrumFocusToggle(hz: 7_150_000))
+        XCTAssertEqual(m.snapshot.session.focused, .main)
+        XCTAssertEqual(m.snapshot.sub.frequencyHz, 7_140_000)
+    }
+
+    func testSetZoomScalesSpanAroundItsCentre() {
+        let m = MockRadioBackend()
+        let d = m.snapshot.display
+        let centre = (d.spanLowHz + d.spanHighHz) / 2, width = d.spanHighHz - d.spanLowHz
+        m.send(.setZoom(d.zoom * 2))
+        XCTAssertEqual(m.snapshot.display.zoom, d.zoom * 2)
+        XCTAssertEqual(m.snapshot.display.spanHighHz - m.snapshot.display.spanLowHz, width / 2)
+        XCTAssertEqual((m.snapshot.display.spanLowHz + m.snapshot.display.spanHighHz) / 2, centre)
+        m.send(.setZoom(99))
+        XCTAssertEqual(m.snapshot.display.zoom, 16)
+        m.send(.setZoom(0.1))
+        XCTAssertEqual(m.snapshot.display.zoom, 1)
+    }
 }

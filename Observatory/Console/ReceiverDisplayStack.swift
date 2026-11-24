@@ -18,6 +18,10 @@ struct ReceiverDisplayStack: View {
     let sampleWaterfall: Bool
     /// Chooses the live waterfall over the sample image (see `usesLiveWaterfall`).
     let capabilities: BackendCapabilities
+    /// Which stack this is; the gesture surface tunes accordingly.
+    let receiverID: ReceiverID
+    /// Console state the tuning gestures need, and where their commands go.
+    let gestures: SpectrumGestureInputs
 
     /// The live Metal waterfall shows once the backend no longer mocks it; until then the sample
     /// image and its marker stay.
@@ -78,6 +82,13 @@ struct ReceiverDisplayStack: View {
         }
     }
 
+    /// Above the overlays, which are display-only; it must stay the topmost interactive layer.
+    private var gestureSurface: some View {
+        SpectrumInteractionView(stack: receiverID, display: display, inputs: gestures)
+            .help(gestures.disabledReason ?? SpectrumGestureInputs.help)
+            .accessibilityLabel("\(receiverID == .sub ? "Sub" : "Main") spectrum tuning surface")
+    }
+
     private func spectrum(axis: FrequencyAxis, width w: CGFloat) -> some View {
         HStack(spacing: 0) {
             // dB labels come from NeonSpectrumView itself; keep the gutter so rows stay aligned.
@@ -87,6 +98,7 @@ struct ReceiverDisplayStack: View {
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
                                  height: spectrumHeight)
+                gestureSurface
             }
             .overlay(alignment: .bottomLeading) {
                 // Bottom, right of the dB labels: clear of the band-plan row, spot labels and the Sample marker.
@@ -113,6 +125,7 @@ struct ReceiverDisplayStack: View {
                 }
                 Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
                     .frame(width: 1).offset(x: axis.x(for: display.mainCarrierHz))
+                gestureSurface
             }
             .overlay(alignment: .topLeading) {
                 if let label, spectrumHeight <= 0 { tag(label) }

@@ -117,9 +117,16 @@ extension LyraEngineFacade: EngineFacade {
                 recallBand(name, defaultHz: defaultHz, rx2: rx2)
             case .setAgcMode(let mode): setAgcMode(mode)
             case .setDsp(let function, let on): setDspFunction(function.rawValue, enabled: on)
+            case .setCtuneCenterHz(let hz): setCtuneCenter(hz)
+            case .setZoomPref(let zoom): setZoomPreference(zoom)
             }
         }
     }
+
+    // TODO(M4 Task 7): the engine has no facade method for the CTUN centre or the zoom
+    // preference yet; Task 7 replaces these no-ops with the real calls.
+    func setCtuneCenter(_ hz: UInt32) {}
+    func setZoomPreference(_ zoom: Double) {}
 
     /// One `-amateurBands` entry, or nil if a key is missing.
     private nonisolated static func band(from d: [String: Any]) -> EngineBand? {

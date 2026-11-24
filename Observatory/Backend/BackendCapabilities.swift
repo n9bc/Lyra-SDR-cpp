@@ -49,6 +49,8 @@ enum ConsoleControl: Hashable, Sendable {
     case agcMode, agcLevels, dsp(DSPFunction), dspLevels, noiseCapture
     case frontEnd, attenuator, audio, transmit, txDSP, rxEqualizer, profile, tools, displaySettings
     case tuningStep, vfoBandwidth
+    /// Click, drag, wheel and zoom gestures on the spectrum and waterfall.
+    case spectrumTuning
 }
 
 struct BackendCapabilities: Equatable, Sendable {

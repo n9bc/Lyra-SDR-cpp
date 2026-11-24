@@ -245,4 +245,98 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.connect, state()), [.connect])
         XCTAssertEqual(plan(.disconnect, state()), [.disconnect])
     }
+
+    // MARK: - Spectrum gestures
+
+    private func cw() -> EngineState {
+        var e = state(rx1: 7_030_000)
+        e.filter.mode = "CWU"
+        e.radio.markerOffsetHz = 700
+        e.radio.markerOffsetHzRx2 = -600
+        return e
+    }
+
+    func testClickSubtractsMarkerAndRit() {
+        var e = cw()
+        e.radio.ritEnabled = true
+        e.radio.ritHz = 200
+        XCTAssertEqual(plan(.tuneCarrier(.main, hz: 7_030_700), e), [.setRx1Hz(7_029_800)])
+        e.radio.ritEnabled = false
+        XCTAssertEqual(plan(.tuneCarrier(.main, hz: 7_030_700), e), [.setRx1Hz(7_030_000)])
+        XCTAssertEqual(plan(.tuneCarrier(.main, hz: -5), e), [.setRx1Hz(0)])
+        XCTAssertEqual(plan(.tuneCarrier(.main, hz: 9_000_000_000), e), [.setRx1Hz(UInt32.max)])
+    }
+
+    func testSplitTuneOnSubMovesVfoB() {
+        var e = cw()
+        e.radio.splitEnabled = true
+        XCTAssertEqual(plan(.tuneCarrier(.sub, hz: 7_040_000), e), [.setVfoBHz(7_040_000)])
+        e.radio.splitEnabled = false
+        e.radio.subEnabled = true
+        XCTAssertEqual(plan(.tuneCarrier(.sub, hz: 7_040_000), e), [.setRx2Hz(7_040_600)])
+        e.radio.subEnabled = false
+        XCTAssertEqual(plan(.tuneCarrier(.sub, hz: 7_040_000), e), [])
+    }
+
+    func testGesturesObeyVfoLock() {
+        XCTAssertEqual(plan(.tuneCarrier(.main, hz: 7_030_700), cw(), locked: true), [])
+        XCTAssertEqual(plan(.wheelTune(.main, ticks: 1), cw(), locked: true), [])
+        XCTAssertEqual(plan(.grabVfo(deltaHz: 100), cw(), locked: true), [])
+    }
+
+    func testWheelTuneSticky() {
+        var e = cw()                       // carrier 7_030_700, step 1000 sticky
+        XCTAssertEqual(plan(.wheelTune(.main, ticks: 1), e), [.setRx1Hz(7_030_300)])   // carrier 7_031_000
+        XCTAssertEqual(plan(.wheelTune(.main, ticks: -1), e), [.setRx1Hz(7_029_300)])
+        e.display.stickyWheel = false
+        XCTAssertEqual(plan(.wheelTune(.main, ticks: 2), e), [.setRx1Hz(7_032_000)])
+        e.display.stickyWheel = true
+        e.display.round100 = true
+        e.display.scrollStepHz = 10                     // round100 raises the step to 100
+        XCTAssertEqual(plan(.wheelTune(.main, ticks: 1), e), [.setRx1Hz(7_030_100)])
+    }
+
+    func testWheelTuneSub() {
+        var e = cw()
+        e.radio.subEnabled = true
+        e.radio.rx2Hz = 14_200_000                      // carrier 14_199_400
+        XCTAssertEqual(plan(.wheelTune(.sub, ticks: 1), e), [.setRx2Hz(14_200_600)])
+        e.radio.splitEnabled = true
+        e.radio.vfoBHz = 7_105_200
+        XCTAssertEqual(plan(.wheelTune(.sub, ticks: 1), e), [.setVfoBHz(7_106_000)])
+    }
+
+    func testCtunPanAndGrab() {
+        var e = cw()
+        e.radio.ctuneEnabled = true
+        e.radio.ctuneCenterHz = 7_030_000
+        XCTAssertEqual(plan(.ctunPan(deltaHz: 9_600), e), [.setCtuneCenterHz(7_020_400)])
+        XCTAssertEqual(plan(.ctunPan(deltaHz: 9_000_000), e), [.setCtuneCenterHz(0)])
+        XCTAssertEqual(plan(.grabVfo(deltaHz: -500), e), [.setRx1Hz(7_029_500)])
+        XCTAssertEqual(plan(.grabVfo(deltaHz: -9_000_000), e), [.setRx1Hz(0)])
+        XCTAssertEqual(plan(.ctunPan(deltaHz: 9_600), e, locked: true), [.setCtuneCenterHz(7_020_400)])
+    }
+
+    func testSpectrumFocusToggle() {
+        var e = cw()
+        e.radio.subEnabled = true
+        e.radio.focusedRx = 2
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e), [.setFocusedRx(1)])
+        e.radio.focusedRx = 1
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e),
+                       [.setVfoBHz(7_040_000), .setRx2Hz(7_040_600), .setFocusedRx(2)])
+        e.radio.subEnabled = false
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e),
+                       [.setVfoBHz(7_040_000), .setFocusedRx(2)])
+        // Sub off, split on, focus 2: the wheel/click receiver is Sub, so the toggle returns to Main.
+        e.radio.splitEnabled = true
+        e.radio.focusedRx = 2
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e), [.setFocusedRx(1)])
+    }
+
+    func testZoomClamped() {
+        XCTAssertEqual(plan(.setZoom(40), cw()), [.setZoomPref(16)])
+        XCTAssertEqual(plan(.setZoom(0.5), cw()), [.setZoomPref(1)])
+        XCTAssertEqual(plan(.setZoom(2.5), cw()), [.setZoomPref(2.5)])
+    }
 }

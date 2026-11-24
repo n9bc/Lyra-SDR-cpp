@@ -23,4 +23,17 @@ enum RadioCommand: Equatable, Sendable {
     case selectBand(String)
     case setAGC(AGCMode)
     case setDSP(DSPFunction, Bool)
+
+    // Spectrum and waterfall gestures (map §4). Frequencies are carriers on the display axis, not
+    // dial frequencies; the planner converts with the engine's marker offset and RIT.
+    case tuneCarrier(ReceiverID, hz: Int64)
+    /// Signed wheel notches (positive tunes up) through the sticky-snap rule.
+    case wheelTune(ReceiverID, ticks: Int)
+    /// CTUN: slide the locked display centre; positive `deltaHz` drags the spectrum right, which lowers the centre.
+    case ctunPan(deltaHz: Int64)
+    /// CTUN: move the VFO 1:1 with the cursor.
+    case grabVfo(deltaHz: Int64)
+    /// Middle or option click: focus Main when Sub is focused, else put VFO B (and Sub) here and focus Sub.
+    case spectrumFocusToggle(hz: Int64)
+    case setZoom(Double)
 }

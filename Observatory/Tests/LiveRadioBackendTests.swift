@@ -17,12 +17,21 @@ final class FakeEngineFacade: EngineFacade {
     func readState() -> EngineState { state }
     func observe(_ onChange: @escaping @MainActor (EngineChange) -> Void) { self.onChange = onChange }
     func quitApplication() {}
+    private(set) var ctuneCentres: [UInt32] = []
+    private(set) var zoomPreferences: [Double] = []
+    func setCtuneCenter(_ hz: UInt32) { ctuneCentres.append(hz) }
+    func setZoomPreference(_ zoom: Double) { zoomPreferences.append(zoom) }
 
     func perform(_ calls: [EngineCall]) {
         performed.append(calls)
         onPerform?(self, calls)
         for call in calls {
             if case .requireJumpAllowed = call, blockJumps { return }
+            switch call {
+            case .setCtuneCenterHz(let hz): setCtuneCenter(hz)
+            case .setZoomPref(let zoom): setZoomPreference(zoom)
+            default: break
+            }
             applied.append(call)
         }
     }

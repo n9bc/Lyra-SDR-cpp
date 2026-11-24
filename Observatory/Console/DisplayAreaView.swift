@@ -92,6 +92,9 @@ struct DisplayAreaView: View {
     let sampleSpectrum: Bool
     let sampleWaterfall: Bool
     let sampleTerrain: Bool
+    /// Console state and command sink for the spectrum and waterfall tuning gestures.
+    let ctunEnabled: Bool
+    let send: (RadioCommand) -> Void
     /// One bridge per Metal view (a second view on the main bridge would bind the wrong receiver);
     /// `ConsoleView` builds it on the same pump as the main bridge.
     let subSpectrum: SpectrumBridge
@@ -100,7 +103,8 @@ struct DisplayAreaView: View {
     init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot,
          capabilities: BackendCapabilities, focused: ReceiverID,
          store: DisplayStore, subSpectrum: SpectrumBridge = .mock(receiver: .sub),
-         sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool) {
+         sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool,
+         ctunEnabled: Bool, send: @escaping (RadioCommand) -> Void) {
         self.subSpectrum = subSpectrum
         self.display = display
         self.main = main
@@ -111,6 +115,8 @@ struct DisplayAreaView: View {
         self.sampleSpectrum = sampleSpectrum
         self.sampleWaterfall = sampleWaterfall
         self.sampleTerrain = sampleTerrain
+        self.ctunEnabled = ctunEnabled
+        self.send = send
     }
 
     /// Width of the "Sample" marker; the band plan stops short of it so the two never overlap.
@@ -128,20 +134,23 @@ struct DisplayAreaView: View {
             let subStack = display.showsSubStack(subEnabled: sub.enabled)
             let lay = DisplayAreaLayout.compute(height: geo.size.height, layout: store.layout,
                                                 subVisible: subStack, terrainExpanded: store.terrainExpanded)
+            let inputs = SpectrumGestureInputs(
+                ctuneEnabled: ctunEnabled, subEnabled: sub.enabled, splitEnabled: main.splitTx,
+                focused: focused, status: capabilities.control(.spectrumTuning), send: send)
             VStack(spacing: 0) {
                 DisplayToolbarView(display: display, capabilities: capabilities)
                 ReceiverDisplayStack(display: display, receiver: main, label: subStack ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
                                      sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall,
-                                     capabilities: capabilities)
+                                     capabilities: capabilities, receiverID: .main, gestures: inputs)
                     .frame(height: lay.spectrum + lay.waterfall + DisplayAreaLayout.scaleHeight)
                 if subStack {
                     ReceiverDisplayStack(display: display.view(for: .sub), receiver: sub, label: "SUB",
                                          labelHighlighted: focused == .sub,
                                          spectrumHeight: lay.subSpectrum, waterfallHeight: lay.subWaterfall,
                                          sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall,
-                                     capabilities: capabilities)
+                                     capabilities: capabilities, receiverID: .sub, gestures: inputs)
                         .environment(subSpectrum)
                         .frame(height: lay.subSpectrum + lay.subWaterfall + DisplayAreaLayout.scaleHeight)
                 }
@@ -177,7 +186,8 @@ struct DisplayAreaView: View {
     snap.sub.enabled = subOn
     return DisplayAreaView(display: snap.display, main: snap.main, sub: snap.sub,
                            capabilities: .allMocked, focused: .main,
-                           store: store, sampleSpectrum: true, sampleWaterfall: true, sampleTerrain: true)
+                           store: store, sampleSpectrum: true, sampleWaterfall: true, sampleTerrain: true,
+                           ctunEnabled: snap.session.ctunEnabled, send: { _ in })
         .environment(SpectrumBridge.mock())
         .frame(width: width, height: height)
         .padding(8).background(LyraDS.Palette.void)

@@ -27,4 +27,6 @@ enum EngineCall: Equatable, Sendable {
     case recallBand(name: String, defaultHz: UInt32, rx2: Bool)
     case setAgcMode(String)
     case setDsp(DSPFunction, Bool)
+    case setCtuneCenterHz(UInt32)
+    case setZoomPref(Double)
 }

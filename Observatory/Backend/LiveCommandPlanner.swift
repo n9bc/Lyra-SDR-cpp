@@ -65,7 +65,67 @@ enum LiveCommandPlanner {
             if function == .snb { return [] }                      // no engine path
             if function == .nnr && !e.dsp.nnrAvailable { return [] }
             return [.setDsp(function, on)]
+
+        case .tuneCarrier(let id, let hz):
+            return vfoLocked ? [] : tuneCarrier(id, hz, r)
+        case .wheelTune(let id, let ticks):
+            if vfoLocked { return [] }
+            guard let carrier = currentCarrier(id, r) else { return [] }
+            let d = e.display
+            let step = d.round100 ? max(100, d.scrollStepHz) : d.scrollStepHz
+            let next = nextWheelHz(carrier, stepHz: step, ticks: ticks, sticky: d.stickyWheel)
+            return tuneCarrier(id, next, r)
+        case .ctunPan(let delta):
+            return [.setCtuneCenterHz(clamp(Int64(r.ctuneCenterHz) &- delta))]
+        case .grabVfo(let delta):
+            return vfoLocked ? [] : [.setRx1Hz(moved(r.rx1Hz, by: delta))]
+        case .spectrumFocusToggle(let hz):
+            if panTuneRx(r) == .sub { return [.setFocusedRx(1)] }
+            var plan: [EngineCall] = [.setVfoBHz(clamp(hz))]
+            if r.subEnabled { plan.append(.setRx2Hz(clamp(hz &- Int64(r.markerOffsetHzRx2)))) }
+            return plan + [.setFocusedRx(2)]
+        case .setZoom(let zoom):
+            return [.setZoomPref(min(max(zoom.isNaN ? 1 : zoom, 1), 16))]
         }
+    }
+
+    // MARK: - Spectrum gestures
+
+    /// The carrier a display click or wheel acts on, converted to the dial the engine tunes
+    /// (QML `tuneCarrier` / `applyWheelCarrier`): Main subtracts the CW marker offset and RIT,
+    /// Sub tunes VFO B under split, else RX2 minus its marker offset. Empty when Sub has nothing to tune.
+    private nonisolated static func tuneCarrier(_ id: ReceiverID, _ carrier: Int64,
+                                                _ r: EngineState.Radio) -> [EngineCall] {
+        switch id {
+        case .main:
+            let rit = r.ritEnabled ? Int64(r.ritHz) : 0
+            return [.setRx1Hz(clamp(carrier &- Int64(r.markerOffsetHz) &- rit))]
+        case .sub:
+            if r.splitEnabled { return [.setVfoBHz(clamp(carrier))] }
+            if r.subEnabled { return [.setRx2Hz(clamp(carrier &- Int64(r.markerOffsetHzRx2)))] }
+            return []
+        }
+    }
+
+    /// The tuned receiver's carrier (QML `currentCarrierHz`), nil when Sub has nothing to tune.
+    private nonisolated static func currentCarrier(_ id: ReceiverID, _ r: EngineState.Radio) -> Int64? {
+        switch id {
+        case .main:
+            return Int64(r.rx1Hz) + Int64(r.markerOffsetHz) + (r.ritEnabled ? Int64(r.ritHz) : 0)
+        case .sub:
+            if r.splitEnabled { return Int64(r.vfoBHz) }
+            if r.subEnabled { return Int64(r.rx2Hz) + Int64(r.markerOffsetHzRx2) }
+            return nil
+        }
+    }
+
+    private nonisolated static func panTuneRx(_ r: EngineState.Radio) -> ReceiverID {
+        SpectrumGestureModel.tuneReceiver(subEnabled: r.subEnabled, splitEnabled: r.splitEnabled,
+                                          focusedRx: r.focusedRx)
+    }
+
+    private nonisolated static func nextWheelHz(_ hz: Int64, stepHz: Int, ticks: Int, sticky: Bool) -> Int64 {
+        SpectrumGestureModel.nextWheelHz(hz, stepHz: stepHz, ticks: ticks, sticky: sticky)
     }
 
     // MARK: - A/B rules

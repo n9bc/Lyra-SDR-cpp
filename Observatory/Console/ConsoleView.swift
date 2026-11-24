@@ -60,7 +60,8 @@ struct ConsoleView: View {
                                 subSpectrum: subSpectrum,
                                 sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
-                                sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain))
+                                sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain),
+                                ctunEnabled: snapshot.session.ctunEnabled, send: backend.send)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 BandModeColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
             }
