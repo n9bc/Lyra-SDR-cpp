@@ -36,6 +36,6 @@ Item {
         font.pixelSize: 11
         font.weight: Font.Medium
         horizontalAlignment: Text.AlignRight
-        elide: Text.ElideLeft
+        elide: Text.ElideRight
     }
 }

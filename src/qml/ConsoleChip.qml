@@ -16,6 +16,8 @@ Button {
     // Accessibility label and hover tooltip.
     property string help: ""
     property bool fullWidth: false
+    // Interface name from the brief; aliases Button.text.
+    property alias title: control.text
 
     // Wrap an opaque palette colour in an alpha (SwiftUI `Color.opacity`).
     function _alpha(c: color, a: real): color { return Qt.rgba(c.r, c.g, c.b, a) }
