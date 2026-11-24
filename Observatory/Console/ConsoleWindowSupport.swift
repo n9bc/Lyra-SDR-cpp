@@ -49,10 +49,14 @@ enum WindowFrameRules {
 @MainActor
 final class SpectrumOcclusionGate {
     private let pump: SpectrumPump
+    private let terrain: TerrainFeed?
     private weak var window: NSWindow?
     private nonisolated(unsafe) var observer: NSObjectProtocol?
 
-    init(pump: SpectrumPump) { self.pump = pump }
+    init(pump: SpectrumPump, terrain: TerrainFeed? = nil) {
+        self.pump = pump
+        self.terrain = terrain
+    }
 
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
 
@@ -74,6 +78,7 @@ final class SpectrumOcclusionGate {
 
     private func apply(_ state: NSWindow.OcclusionState) {
         pump.isSuspended = Self.suspends(state)
+        terrain?.isOccluded = Self.suspends(state)
     }
 
     /// Any visible part keeps the pump running.

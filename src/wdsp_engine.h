@@ -1116,7 +1116,13 @@ public:
     // outRate) / raw IQ block (interleaved I,Q float32 @ inRate) as a
     // queued signal so the (main-thread) TCI server can frame + send it.
     void setTciAudioStreaming(bool on) {
-        tciAudioOn_.store(on, std::memory_order_relaxed);
+        tciAudioWanted_.store(on, std::memory_order_relaxed);
+    }
+    // The native console's audio-terrain tap: the same post-DSP block, on
+    // its own flag so the console and the TCI server never switch each
+    // other's stream off (the emit site tests either flag).
+    void setConsoleAudioStreaming(bool on) {
+        consoleAudioWanted_.store(on, std::memory_order_relaxed);
     }
     void setTciIqStreaming(bool on) {
         tciIqOn_.store(on, std::memory_order_relaxed);
@@ -1431,7 +1437,8 @@ private:
     // poll (HL2Stream, provider-pull).  Studio-monitor bleed into the mic
     // is suppressed by VOX using this level.
     std::atomic<double> voxRxRmsLin_{0.0};
-    std::atomic<bool>   tciAudioOn_{false};   // TCI audio stream tap on
+    std::atomic<bool>   tciAudioWanted_{false};     // a TCI client wants the audio stream
+    std::atomic<bool>   consoleAudioWanted_{false}; // the native console's audio terrain wants it
     std::atomic<bool>   tciIqOn_{false};      // TCI IQ stream tap on
     // 5 Hz UI poll — emits levelsChanged so the QML audioDbFs binding
     // re-reads the atomic.  Lives on the main thread (WdspEngine is a

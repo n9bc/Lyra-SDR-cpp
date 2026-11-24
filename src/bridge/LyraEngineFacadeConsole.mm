@@ -66,6 +66,7 @@ constexpr int kTxaAlcAv = 13;
 quint64 sConnectGeneration = 0;
 QMetaObject::Connection sConsoleScanFound;
 QMetaObject::Connection sConsoleScanDone;
+QMetaObject::Connection sConsoleAudioBlock;
 constexpr int kRadioLayerRetryMs = 250;
 constexpr int kRadioLayerRetries = 80;  // 20 s
 // SpotStore::changed fires per spot during a cluster burst; each overlay change
@@ -796,6 +797,28 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 }
 
 #pragma mark Audio calls
+
+- (void)setConsoleAudioStreaming:(BOOL)on
+{
+    if (WdspEngine *we = [self engineDsp]) we->setConsoleAudioStreaming(on);
+}
+
+- (void)setConsoleAudioBlockHandler:(LyraConsoleAudioBlockHandler)handler
+{
+    QObject::disconnect(sConsoleAudioBlock);
+    sConsoleAudioBlock = QMetaObject::Connection();
+    WdspEngine *we = [self engineDsp];
+    if (!we || !handler) return;
+    LyraConsoleAudioBlockHandler copy = [handler copy];
+    // The context object lives on the main thread, so the engine's audio-thread emit is queued
+    // and the handler runs on main. It copies out of the bytes before returning.
+    sConsoleAudioBlock = QObject::connect(
+        we, &WdspEngine::tciAudioBlock, we, [copy](const QByteArray &mono, int rateHz) {
+            copy(reinterpret_cast<const float *>(mono.constData()),
+                 static_cast<NSInteger>(mono.size() / int(sizeof(float))), rateHz);
+        });
+    [self addEngineConnection:sConsoleAudioBlock];
+}
 
 - (void)setVolumeRx2:(double)volume { if (WdspEngine *we = [self engineDsp]) we->setVolumeRx2(volume); }
 - (void)setMutedRx2:(BOOL)on { if (WdspEngine *we = [self engineDsp]) we->setMutedRx2(on); }

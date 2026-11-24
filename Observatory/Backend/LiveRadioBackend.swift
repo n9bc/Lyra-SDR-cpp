@@ -192,7 +192,7 @@ final class LiveRadioBackend: RadioBackend {
 
 extension BackendCapabilities {
     /// What the live backend serves truthfully today. The spectrum, waterfall and spots are the
-    /// engine's; the audio terrain is still sample data (Milestone 5). Controls without an engine
+    /// engine's; the audio terrain is the console's own tap on the received audio. Controls without an engine
     /// path say why they are off.
     nonisolated static func live(nnrAvailable: Bool, isP2: Bool) -> BackendCapabilities {
         let statuses: [BackendFeature: CapabilityStatus] = [
@@ -200,7 +200,7 @@ extension BackendCapabilities {
             .frontEnd: .available, .audio: .available, .transmit: .available,
             .meters: .available, .telemetry: .available, .bands: .available,
             .spectrum: .available, .waterfall: .available, .spots: .available,
-            .audioTerrain: .mocked, .propagation: .mocked, .keyer: .mocked,
+            .audioTerrain: .available, .propagation: .mocked, .keyer: .mocked,
             .recorder: .unavailable("Recorder arrives in a later milestone"),
         ]
         var controls: [ConsoleControl: CapabilityStatus] = [:]

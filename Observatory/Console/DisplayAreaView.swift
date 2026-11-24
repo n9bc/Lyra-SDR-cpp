@@ -94,6 +94,8 @@ struct DisplayAreaView: View {
     let sampleSpectrum: Bool
     let sampleWaterfall: Bool
     let sampleTerrain: Bool
+    /// The live audio terrain; nil keeps the sample imagery.
+    let terrain: TerrainFeed?
     /// Console state and command sink for the spectrum and waterfall tuning gestures.
     let ctunEnabled: Bool
     let send: (RadioCommand) -> Void
@@ -106,7 +108,7 @@ struct DisplayAreaView: View {
          capabilities: BackendCapabilities, focused: ReceiverID,
          store: DisplayStore, subSpectrum: SpectrumBridge = .mock(receiver: .sub),
          sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool,
-         ctunEnabled: Bool, send: @escaping (RadioCommand) -> Void) {
+         terrain: TerrainFeed? = nil, ctunEnabled: Bool, send: @escaping (RadioCommand) -> Void) {
         self.subSpectrum = subSpectrum
         self.display = display
         self.notches = notches
@@ -118,6 +120,7 @@ struct DisplayAreaView: View {
         self.sampleSpectrum = sampleSpectrum
         self.sampleWaterfall = sampleWaterfall
         self.sampleTerrain = sampleTerrain
+        self.terrain = terrain
         self.ctunEnabled = ctunEnabled
         self.send = send
     }
@@ -160,7 +163,7 @@ struct DisplayAreaView: View {
                 }
                 HStack(spacing: 0) {
                     Color.clear.frame(width: DisplayAreaLayout.gutter)
-                    AudioTerrainView(store: store, focused: focused, sample: sampleTerrain)
+                    AudioTerrainView(store: store, focused: focused, sample: sampleTerrain, feed: terrain)
                 }
                 .frame(height: lay.terrain + DisplayAreaLayout.terrainHeaderHeight)
             }

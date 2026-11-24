@@ -14,11 +14,15 @@ struct ConsoleView: View {
     @State private var subSpectrum: SpectrumBridge
     /// Stops the shared pump while the console window cannot be seen.
     @State private var occlusion: SpectrumOcclusionGate
+    /// The live audio terrain, or nil on sample data. Its engine tap runs only while it is expanded,
+    /// the window is visible and the radio is streaming.
+    @State private var terrain: TerrainFeed?
 
     /// `spectrumSource` is where frames come from: the engine's facade on the live console,
     /// sample data otherwise.
     init(backend: any RadioBackend, displayStore: DisplayStore = DisplayStore(),
          spectrumSource: any SpectrumSource = SyntheticSpectrumSource(),
+         terrainSource: (any TerrainAudioSource)? = nil,
          openSettings: (@MainActor () -> Void)? = nil) {
         self.backend = backend
         self.displayStore = displayStore
@@ -26,7 +30,9 @@ struct ConsoleView: View {
         let pump = SpectrumPump(source: spectrumSource)
         _spectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .main))
         _subSpectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .sub))
-        _occlusion = State(initialValue: SpectrumOcclusionGate(pump: pump))
+        let feed = terrainSource.map { TerrainFeed(source: $0) }
+        _terrain = State(initialValue: feed)
+        _occlusion = State(initialValue: SpectrumOcclusionGate(pump: pump, terrain: feed))
     }
 
     var body: some View {
@@ -66,6 +72,7 @@ struct ConsoleView: View {
                                 sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
                                 sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain),
+                                terrain: terrain,
                                 ctunEnabled: snapshot.session.ctunEnabled, send: backend.send)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 BandModeColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
@@ -87,7 +94,13 @@ struct ConsoleView: View {
         .onChange(of: snapshot.connection.phase == .streaming, initial: true) { _, streaming in
             spectrum.setStreaming(streaming)
             subSpectrum.setStreaming(streaming)
+            terrain?.isStreaming = streaming
         }
+        .onChange(of: displayStore.terrainExpanded, initial: true) { _, expanded in
+            terrain?.isExpanded = expanded
+        }
+        .onAppear { terrain?.start() }
+        .onDisappear { terrain?.stop() }
         .environment(spectrum)
         .preferredColorScheme(.dark)
         .frame(minWidth: ConsoleLayout.minWindow.width, minHeight: ConsoleLayout.minWindow.height)

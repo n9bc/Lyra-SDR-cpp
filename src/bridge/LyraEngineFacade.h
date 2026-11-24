@@ -22,6 +22,9 @@ typedef void (^LyraRadioCallback)(LyraEngineFacade *facade);
 typedef void (^LyraDspCallback)(LyraEngineFacade *facade);
 typedef void (^LyraAudioCallback)(LyraEngineFacade *facade);
 typedef void (^LyraMeterCallback)(LyraEngineFacade *facade);
+// A block of received audio (mono float32 at rateHz), delivered on the main thread; `samples`
+// is valid only for the call, so copy out of it.
+typedef void (^LyraConsoleAudioBlockHandler)(const float *samples, NSInteger count, NSInteger rateHz);
 
 /// Which groups of engine state changed.  The bit values match the Swift
 /// `EngineChange` option set.
@@ -422,6 +425,15 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (int)copySpectrumRx2Into:(float *)dst maxBins:(int)maxBins;
 // The main waterfall row (WdspEngine::copyWaterfallSpectrum).
 - (int)copyWaterfallInto:(float *)dst maxBins:(int)maxBins;
+
+#pragma mark Audio terrain tap (console)
+
+// Turns the console's own audio tap on or off (WdspEngine::setConsoleAudioStreaming). It is a
+// separate flag from the TCI server's, so neither switches the other's stream off. Main thread.
+- (void)setConsoleAudioStreaming:(BOOL)on;
+// Sets the one handler that receives each audio block while the tap is on (replacing any earlier
+// one; nil removes it). Blocks are queued to the main thread; none arrive while the tap is off.
+- (void)setConsoleAudioBlockHandler:(nullable LyraConsoleAudioBlockHandler)handler;
 
 #pragma mark Audio calls
 

@@ -21,11 +21,14 @@ import AppKit
         Self.facade = facade
         let backend: any RadioBackend
         let spectrumSource: any SpectrumSource
+        let terrainSource: (any TerrainAudioSource)?
         if ProcessInfo.processInfo.environment["LYRA_CONSOLE_SAMPLE"] == "1" {
             backend = MockRadioBackend()
             spectrumSource = SyntheticSpectrumSource()
+            terrainSource = nil
         } else {
             spectrumSource = facade
+            terrainSource = facade
             let live = LiveRadioBackend(facade: facade)
             backend = live
             // Next runloop turn: main.cpp attaches the host window right after this returns,
@@ -37,6 +40,7 @@ import AppKit
         Self.shell = shell
         return NSHostingView(rootView: ConsoleView(backend: shell.backend, displayStore: shell.display,
                                                    spectrumSource: spectrumSource,
+                                                   terrainSource: terrainSource,
                                                    openSettings: openSettings)
             .background(ConsoleWindowAttachment { window in
                 shell.attach(window)

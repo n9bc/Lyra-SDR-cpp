@@ -5957,7 +5957,8 @@ void WdspEngine::dispatchAudioFrame(const double *audio, int nframes)
     // and replaced by the TX monitor (post-rack mic × Monitor vol) when MON
     // is on.  txMuted_ is the raw wire-MOX flag (TCI mutes on MOX regardless
     // of the autoMuteOnTx operator pref, matching the reference).
-    if (tciAudioOn_.load(std::memory_order_relaxed)) {
+    if (tciAudioWanted_.load(std::memory_order_relaxed)
+        || consoleAudioWanted_.load(std::memory_order_relaxed)) {
         QByteArray b(nframes * int(sizeof(float)), Qt::Uninitialized);
         float *d = reinterpret_cast<float *>(b.data());
         if (monRoute.remote) {

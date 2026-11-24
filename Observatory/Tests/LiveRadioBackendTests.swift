@@ -381,7 +381,7 @@ final class LiveRadioBackendTests: XCTestCase {
         XCTAssertEqual(hl2.status(.spectrum), .available)
         XCTAssertEqual(hl2.status(.waterfall), .available)
         XCTAssertEqual(hl2.status(.spots), .available)
-        XCTAssertEqual(hl2.status(.audioTerrain), .mocked)
+        XCTAssertEqual(hl2.status(.audioTerrain), .available)
         XCTAssertEqual(hl2.status(.recorder), .unavailable("Recorder arrives in a later milestone"))
         XCTAssertEqual(hl2.status(.meters), .available)
         XCTAssertEqual(hl2.control(.band), .available)
