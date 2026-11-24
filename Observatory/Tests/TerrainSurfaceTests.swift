@@ -1,4 +1,5 @@
 import XCTest
+import simd
 @testable import Observatory
 
 final class TerrainSurfaceTests: XCTestCase {
@@ -318,6 +319,35 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(u.x, range.floorDb + 90, accuracy: 1e-4)
         XCTAssertEqual(u.y, range.ceilingDb + 90, accuracy: 1e-4)
         XCTAssertEqual(u.z, TerrainAutoRange.kneeLevel)
+    }
+
+    /// The surface's front (newest) edge spans the same axis as the frequency labels at any pane
+    /// size, sits just above the label row, and the back crest stays inside the pane.
+    func testFramingPutsTheFrontEdgeOnTheLabelAxis() {
+        for size in [CGSize(width: 1100, height: 260), CGSize(width: 600, height: 120),
+                     CGSize(width: 1400, height: 300), CGSize(width: 900, height: 90)] {
+            let m = TerrainRenderer.framing(viewSize: size)
+            func pixel(_ p: SIMD3<Float>) -> CGPoint {
+                let c: SIMD4<Float> = m * SIMD4<Float>(p, 1)
+                let nx: Float = c.x / c.w, ny: Float = c.y / c.w
+                let x = CGFloat((nx + 1) / 2) * size.width
+                let y = CGFloat((1 - ny) / 2) * size.height
+                return CGPoint(x: x, y: y)
+            }
+            let halfW = TerrainRenderer.surfaceWidth / 2, front = TerrainRenderer.surfaceDepth / 2
+            for i in 0..<AudioTerrainView.audioLabels.count {
+                let f = Float(i) / Float(AudioTerrainView.audioLabels.count - 1)
+                let p = pixel(SIMD3<Float>((f - 0.5) * 2 * halfW, 0, front))
+                XCTAssertEqual(p.x, AudioTerrainView.labelX(index: i, width: size.width), accuracy: 0.5,
+                               "\(size) label \(i)")
+                XCTAssertEqual(p.y, size.height - TerrainRenderer.labelBandPt, accuracy: 0.5, "\(size)")
+            }
+            XCTAssertEqual(pixel(SIMD3<Float>(-halfW, 0, front)).x, TerrainRenderer.axisInsetPt, accuracy: 0.5)
+            XCTAssertEqual(pixel(SIMD3<Float>(halfW, 0, front)).x, size.width - TerrainRenderer.axisInsetPt,
+                           accuracy: 0.5)
+            let backCrest = pixel(SIMD3<Float>(0, TerrainRenderer.heightScale, -front))
+            XCTAssertEqual(backCrest.y, TerrainRenderer.topMarginPt, accuracy: 0.5, "\(size)")
+        }
     }
 
     func testUniformsLayoutMatchesShader() {

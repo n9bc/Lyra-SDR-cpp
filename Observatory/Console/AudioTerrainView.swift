@@ -44,6 +44,14 @@ struct AudioTerrainView: View {
     nonisolated static let rows = 30
     nonisolated static let audioLabels = ["0", "500", "1 k", "1.5 k", "2 k", "2.5 k", "3 k Hz"]
 
+    /// Where label `index` is centred: evenly over 0-3 kHz on the axis the renderer fits the
+    /// surface's front (newest) edge to, so each label sits over its frequency on the surface.
+    nonisolated static func labelX(index: Int, width: CGFloat) -> CGFloat {
+        let inset = TerrainRenderer.axisInsetPt
+        let f = CGFloat(index) / CGFloat(audioLabels.count - 1)
+        return inset + f * (width - 2 * inset)
+    }
+
     init(store: DisplayStore, focused: ReceiverID, sample: Bool, feed: TerrainFeed? = nil) {
         self.store = store
         self.focused = focused
@@ -103,14 +111,14 @@ struct AudioTerrainView: View {
                 ZStack(alignment: .bottom) {
                     LyraDS.Palette.void
                     surface
-                    HStack {
-                        ForEach(Self.audioLabels, id: \.self) { l in
+                    GeometryReader { geo in
+                        ForEach(Array(Self.audioLabels.enumerated()), id: \.offset) { i, l in
                             Text(l).font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1)
-                            if l != Self.audioLabels.last { Spacer(minLength: 0) }
+                                .foregroundStyle(LyraDS.Palette.textMuted).lineLimit(1).fixedSize()
+                                .position(x: Self.labelX(index: i, width: geo.size.width),
+                                          y: geo.size.height - TerrainRenderer.labelBandPt / 2)
                         }
                     }
-                    .padding(.horizontal, 8).padding(.bottom, 2)
                     .accessibilityHidden(true)
                 }
                 .opacity(liveFeed.map { $0.isLive ? 1 : 0.35 } ?? 1)

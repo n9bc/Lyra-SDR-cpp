@@ -39,6 +39,15 @@ final class TerrainRenderer: LyraMetalRenderer {
     nonisolated static let surfaceDepth: Float = 2.0
     nonisolated static let heightScale: Float = 0.55
 
+    // Fit to the pane (points). The front (newest) edge spans the frequency labels' axis, from
+    // `axisInsetPt` to width - `axisInsetPt`, and sits `labelBandPt` above the bottom, just over
+    // the label row; the back crest (full height at the back edge) reaches `topMarginPt` from the
+    // top. The mockup's camera direction and perspective are kept; only the scale and offset of
+    // the image change with the pane's size, so the labels read true at any aspect.
+    nonisolated static let axisInsetPt: CGFloat = 24
+    nonisolated static let labelBandPt: CGFloat = 18
+    nonisolated static let topMarginPt: CGFloat = 6
+
     /// What the renderer draws: the live feed, or a fixed sample grid.
     enum Source {
         case feed(TerrainFeed)
@@ -54,7 +63,7 @@ final class TerrainRenderer: LyraMetalRenderer {
     private let semaphore = DispatchSemaphore(value: 1)
     private let clearColor: MTLClearColor
     private var uniforms = TerrainGPUUniforms(stops: TerrainPalette.stops)
-    private var aspect: Float = 0
+    private var framedSize: CGSize = .zero
 
     private var source: Source = .sample([])
     private weak var view: MTKView?
@@ -213,6 +222,30 @@ final class TerrainRenderer: LyraMetalRenderer {
         SIMD4<Float>(range.floorDb - referenceDb, range.ceilingDb - referenceDb, TerrainAutoRange.kneeLevel, 0)
     }
 
+    /// The view-projection for a pane of `viewSize` points: the mockup's camera, then a clip-space
+    /// scale and shift that puts the front edge on the label axis and the back crest under the top.
+    nonisolated static func framing(viewSize: CGSize) -> simd_float4x4 {
+        let w = Float(max(viewSize.width, 1)), h = Float(max(viewSize.height, 1))
+        let base = perspective(fovY: fovY, aspect: w / h, near: 0.1, far: 20)
+            * lookAt(eye: eye, target: target, up: SIMD3<Float>(0, 1, 0))
+        func ndc(_ p: SIMD3<Float>) -> SIMD2<Float> {
+            let c = base * SIMD4<Float>(p, 1)
+            return SIMD2<Float>(c.x, c.y) / c.w
+        }
+        let front = ndc(SIMD3<Float>(surfaceWidth / 2, 0, surfaceDepth / 2))
+        let crest = ndc(SIMD3<Float>(0, heightScale, -surfaceDepth / 2))
+        let wantX = 1 - 2 * Float(axisInsetPt) / w
+        let wantFront = -1 + 2 * Float(labelBandPt) / h
+        let wantCrest = 1 - 2 * Float(topMarginPt) / h
+        let sx = wantX / front.x
+        let sy = (wantCrest - wantFront) / (crest.y - front.y)
+        let dy = wantFront - sy * front.y
+        // Clip space: x' = sx x, y' = sy y + dy w (a lens shift), z and w unchanged.
+        let fit = simd_float4x4(columns: (SIMD4<Float>(sx, 0, 0, 0), SIMD4<Float>(0, sy, 0, 0),
+                                          SIMD4<Float>(0, 0, 1, 0), SIMD4<Float>(0, dy, 0, 1)))
+        return fit * base
+    }
+
     // MARK: - Frame preparation
 
     /// Takes a new grid into the scale's targets and the cached rows. Only runs when the grid
@@ -235,7 +268,7 @@ final class TerrainRenderer: LyraMetalRenderer {
         if isNewRow { clock.rowArrived(at: now) }
     }
 
-    private func prepare(now: TimeInterval, aspect newAspect: Float) -> Bool {
+    private func prepare(now: TimeInterval, viewSize: CGSize) -> Bool {
         let (grid, live) = current
         ingest(grid, now: now)
         // The scale glides only while live (a dim, paused terrain holds still). A long gap (the
@@ -253,10 +286,9 @@ final class TerrainRenderer: LyraMetalRenderer {
                                   mipmapLevel: 0, withBytes: $0.baseAddress!,
                                   bytesPerRow: Self.textureWidth * MemoryLayout<Float>.stride)
         }
-        if newAspect != aspect {
-            aspect = newAspect
-            uniforms.viewProjection = Self.perspective(fovY: Self.fovY, aspect: newAspect, near: 0.1, far: 20)
-                * Self.lookAt(eye: Self.eye, target: Self.target, up: SIMD3<Float>(0, 1, 0))
+        if viewSize != framedSize {
+            framedSize = viewSize
+            uniforms.viewProjection = Self.framing(viewSize: viewSize)
         }
         return live
     }
@@ -290,7 +322,9 @@ final class TerrainRenderer: LyraMetalRenderer {
         semaphore.wait()
         let size = view.drawableSize
         guard size.width > 0, size.height > 0 else { semaphore.signal(); return }
-        let live = prepare(now: CACurrentMediaTime(), aspect: Float(size.width / size.height))
+        // Framed in points, the unit the SwiftUI label row is laid out in.
+        let points = view.bounds.size.width > 0 && view.bounds.size.height > 0 ? view.bounds.size : size
+        let live = prepare(now: CACurrentMediaTime(), viewSize: points)
 
         guard let pass = view.currentRenderPassDescriptor,
               let drawable = view.currentDrawable,
@@ -331,7 +365,7 @@ final class TerrainRenderer: LyraMetalRenderer {
         let resolved = try texture(context.colorPixelFormat, multisample: false, shared: true)
         let depth = try texture(Self.depthFormat, multisample: true, shared: false)
 
-        _ = prepare(now: CACurrentMediaTime(), aspect: Float(size.width) / Float(size.height))
+        _ = prepare(now: CACurrentMediaTime(), viewSize: CGSize(width: size.width, height: size.height))
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = msaa
         pass.colorAttachments[0].resolveTexture = resolved
