@@ -79,7 +79,8 @@ Button {
             id: chipShape
             anchors.fill: parent
             radius: 7
-            visible: false
+            // Software renderer cannot run MultiEffect; draw the shape directly there (no glow).
+            visible: GraphicsInfo.api === GraphicsInfo.Software
             color: control.enabled ? control._fill : LyraDS.palette.chipDimFill
             border.width: 1
             border.color: control.enabled ? control._border : LyraDS.palette.chipBorder
@@ -87,6 +88,7 @@ Button {
         // MultiEffect paints the (hidden) source plus the optional "on" glow.
         MultiEffect {
             anchors.fill: chipShape
+            visible: GraphicsInfo.api !== GraphicsInfo.Software
             source: chipShape
             shadowEnabled: control.enabled && control.kind === "on"
             shadowColor: control._alpha(LyraDS.palette.cyan, 0.22)

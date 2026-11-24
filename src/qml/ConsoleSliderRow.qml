@@ -82,7 +82,7 @@ RowLayout {
         Layout.minimumWidth: 50
         Layout.maximumWidth: 50
         font.pixelSize: 11
-        font.family: "Menlo, Consolas, monospace"
+        font.family: Qt.platform.os === "osx" ? "Menlo" : "Consolas"
         font.styleHint: Font.Monospace
         color: LyraDS.palette.textPrimary
         horizontalAlignment: Text.AlignRight
