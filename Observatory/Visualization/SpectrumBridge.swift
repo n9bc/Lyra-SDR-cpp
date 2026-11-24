@@ -22,6 +22,15 @@ final class SpectrumBridge {
     @ObservationIgnored private(set) var peakHold: PeakHoldSetting = .off
     @ObservationIgnored private(set) var peakDecayDbps = 10.0
     @ObservationIgnored private(set) var smoothing = 0
+    /// The waterfall's own settings (its range is independent of the spectrum's).
+    @ObservationIgnored private(set) var waterfallRange = DbRange(floor: -120, ceiling: -20, auto: false)
+    @ObservationIgnored private(set) var waterfallRowsPerSecond = 20
+    @ObservationIgnored private(set) var waterfallColors: WaterfallColors = .custom(baseRGB: 0x30B0FF)
+    /// Bump when the waterfall history must be dropped / the colour table rebuilt; the renderer
+    /// compares them with what it last saw.
+    @ObservationIgnored private(set) var waterfallClearEpoch: UInt64 = 0
+    @ObservationIgnored private(set) var waterfallColorEpoch: UInt64 = 0
+    @ObservationIgnored private var lastDisplay: DisplaySnapshot?
 
     init(pump: SpectrumPump, receiver: ReceiverID = .main) {
         self.pump = pump
@@ -38,6 +47,14 @@ final class SpectrumBridge {
         peakHold = display.peakHold
         peakDecayDbps = display.peakDecayDbps
         smoothing = display.smoothing
+        waterfallRange = display.waterfallRange
+        waterfallRowsPerSecond = display.waterfallRowsPerSecond
+        if let last = lastDisplay {
+            if WaterfallHistoryPolicy.shouldClear(old: last, new: display) { waterfallClearEpoch &+= 1 }
+            if last.waterfallColors != display.waterfallColors { waterfallColorEpoch &+= 1 }
+        }
+        waterfallColors = display.waterfallColors
+        lastDisplay = display
         if !display.dbRange.auto {
             let r = Self.constrained(floor: display.dbRange.floor, ceiling: display.dbRange.ceiling)
             if dbFloor != r.floor { dbFloor = r.floor }

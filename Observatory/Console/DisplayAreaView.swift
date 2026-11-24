@@ -133,13 +133,15 @@ struct DisplayAreaView: View {
                 ReceiverDisplayStack(display: display, receiver: main, label: subStack ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
-                                     sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall)
+                                     sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall,
+                                     capabilities: capabilities)
                     .frame(height: lay.spectrum + lay.waterfall + DisplayAreaLayout.scaleHeight)
                 if subStack {
                     ReceiverDisplayStack(display: display.view(for: .sub), receiver: sub, label: "SUB",
                                          labelHighlighted: focused == .sub,
                                          spectrumHeight: lay.subSpectrum, waterfallHeight: lay.subWaterfall,
-                                         sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall)
+                                         sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall,
+                                     capabilities: capabilities)
                         .environment(subSpectrum)
                         .frame(height: lay.subSpectrum + lay.subWaterfall + DisplayAreaLayout.scaleHeight)
                 }

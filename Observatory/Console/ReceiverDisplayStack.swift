@@ -16,6 +16,14 @@ struct ReceiverDisplayStack: View {
     /// Shows the "Sample" marker on the spectrum / waterfall (see `DisplayAreaView.showsSampleMarker`).
     let sampleSpectrum: Bool
     let sampleWaterfall: Bool
+    /// Chooses the live waterfall over the sample image (see `usesLiveWaterfall`).
+    let capabilities: BackendCapabilities
+
+    /// The live Metal waterfall shows once the backend no longer mocks it; until then the sample
+    /// image and its marker stay.
+    nonisolated static func usesLiveWaterfall(_ capabilities: BackendCapabilities) -> Bool {
+        capabilities.status(.waterfall) != .mocked
+    }
 
     private var sampleMarker: some View { SampleMarker(accessibilityName: "Sample spectrum") }
 
@@ -97,8 +105,12 @@ struct ReceiverDisplayStack: View {
         HStack(spacing: 0) {
             gutterLabels(Self.waterfallGutterLabels(height: waterfallHeight), padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
             ZStack(alignment: .topLeading) {
-                SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
-                                     signals: display.spots.map(\.frequencyHz) + [receiver.frequencyHz])
+                if Self.usesLiveWaterfall(capabilities) {
+                    WaterfallView()
+                } else {
+                    SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
+                                         signals: display.spots.map(\.frequencyHz) + [receiver.frequencyHz])
+                }
                 Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
                     .frame(width: 1).offset(x: axis.x(for: display.mainCarrierHz))
             }
