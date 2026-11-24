@@ -346,8 +346,10 @@ final class LiveRadioBackendTests: XCTestCase {
 
     func testLiveCapabilities() {
         let hl2 = BackendCapabilities.live(nnrAvailable: false, isP2: false)
-        XCTAssertEqual(hl2.status(.spectrum), .mocked)
-        XCTAssertEqual(hl2.status(.spots), .unavailable("Spots arrive in Milestone 4"))
+        XCTAssertEqual(hl2.status(.spectrum), .available)
+        XCTAssertEqual(hl2.status(.waterfall), .available)
+        XCTAssertEqual(hl2.status(.spots), .available)
+        XCTAssertEqual(hl2.status(.audioTerrain), .mocked)
         XCTAssertEqual(hl2.status(.recorder), .unavailable("Recorder arrives in a later milestone"))
         XCTAssertEqual(hl2.status(.meters), .available)
         XCTAssertEqual(hl2.control(.band), .available)
@@ -357,7 +359,7 @@ final class LiveRadioBackendTests: XCTestCase {
         XCTAssertEqual(hl2.control(.attenuator),
                        .unavailable("Hermes-Lite 2 has no attenuator; use LNA"))
         XCTAssertEqual(hl2.control(.zeroBeat),
-                       .unavailable("Zero beat needs the live spectrum (Milestone 4)"))
+                       .unavailable("Zero beat arrives in a later milestone"))
         XCTAssertEqual(hl2.control(.transmit), .unavailable("Transmit arrives in Milestone 5"))
         XCTAssertEqual(hl2.control(.bandTabs), .unavailable("Only Ham bands in this version"))
 

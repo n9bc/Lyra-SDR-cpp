@@ -97,7 +97,7 @@ struct EngineState: Equatable, Sendable {
     }
 
     /// Display and Prefs-backed spectrum settings. Defaults are the Prefs defaults (map §2, §7);
-    /// the facade reads them live in M4 Task 7.
+    /// the facade reads them live (`consoleDisplay`).
     struct Display: Equatable, Sendable {
         /// Main span in Hz; 0 while no analyzer is running.
         var spanHz = 0

@@ -20,6 +20,10 @@ final class SpectrumPump {
     private var hasRow = [false, false]
     private var lastPull: TimeInterval?
 
+    /// While true (the console window is covered or minimised) `tick` pulls nothing and the
+    /// renderers keep showing the last frame. The engine's analyzer runs regardless.
+    var isSuspended = false
+
     /// Bumps only when a good frame arrived.
     private(set) var frameSerial: UInt64 = 0
     /// Bumps when a good spectrum (not waterfall row) arrived for that receiver, so a renderer
@@ -45,6 +49,7 @@ final class SpectrumPump {
     /// Pulls the Main streams, and the Sub streams when `sub`, unless one was pulled less than
     /// `minInterval` ago. Call from the display tick (the MTKView draw callback).
     func tick(now: TimeInterval, sub: Bool) {
+        if isSuspended { return }
         if let last = lastPull, now - last < minInterval, now >= last { return }
         lastPull = now
         pull(.main, waterfall: false)

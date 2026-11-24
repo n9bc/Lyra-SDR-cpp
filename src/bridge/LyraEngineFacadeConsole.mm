@@ -1,29 +1,35 @@
 // Lyra — the facade's Console category: what the native console reads and
 // calls (Observatory/Backend/EngineFacade.swift).  See LyraEngineFacade.h.
-// Engine APIs per .superpowers/sdd/m3-engine-api-map.md §A-§C.  Main thread
+// Engine APIs per .superpowers/sdd/m3-engine-api-map.md §A-§C and, for the
+// spectrum, waterfall and overlays, m4-engine-api-map.md.  Main thread
 // only.  Compiled with ARC (see CMakeLists.txt).
 
 #import "bridge/LyraEngineFacade.h"
 #import "bridge/LyraEngineFacade+Internal.h"
 
 #include "bandmemory.h"
+#include "bandplan.h"
 #include "hl2_discovery.h"
 #include "hl2_stream.h"
 #include "mainwindow.h"
 #include "metermodel.h"
+#include "palettes.h"
 #include "prefs.h"
 #include "profile/ProfileManager.h"
 #include "rig/RigRegistry.h"
+#include "spotstore.h"
 #include "statusbus.h"
 #include "wdsp_engine.h"
 #include "wire/P2RxBridge.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QMetaObject>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 #include <QVariantMap>
 
 #include <cmath>
@@ -41,9 +47,11 @@ using lyra::ipc::HL2Discovery;
 using lyra::ipc::HL2Stream;
 using lyra::profile::ProfileManager;
 using lyra::ui::BandMemory;
+using lyra::ui::BandPlan;
 using lyra::ui::MainWindow;
 using lyra::ui::MeterModel;
 using lyra::ui::Prefs;
+using lyra::ui::SpotStore;
 using lyra::wire::P2RxBridge;
 
 namespace {
@@ -94,6 +102,16 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 @implementation LyraSessionReading
 @end
 @implementation LyraLinkReading
+@end
+@implementation LyraDisplayReading
+@end
+@implementation LyraSegmentReading
+@end
+@implementation LyraLandmarkReading
+@end
+@implementation LyraSpotReading
+@end
+@implementation LyraOverlayReading
 @end
 
 @implementation LyraEngineFacade (ConsoleInternal)
@@ -179,6 +197,43 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     LYRA_CHANGE(pr, &Prefs::txBandwidthChanged, dsp);
     LYRA_CHANGE(pr, &Prefs::bwLockedChanged, dsp);
     LYRA_CHANGE(pr, &Prefs::sampleRateChanged, dsp);
+
+    // Display geometry (map §3): the span follows rate, zoom and the MOX
+    // analyzer swap (spanChanged above); ctuneChanged, ritChanged and
+    // markerOffsetChanged are in the radio group.  The ADC count decides
+    // whether the RX2 analyzer exists.
+    LYRA_CHANGE(we, &WdspEngine::zoomChanged, dsp);
+    LYRA_CHANGE(we, &WdspEngine::passbandChanged, dsp);
+    LYRA_CHANGE(we, &WdspEngine::passbandRx2Changed, dsp);
+    LYRA_CHANGE(st, &HL2Stream::dualAdcChanged, radio);
+    // Spectrum display preferences (map §2, §7).  The dB pairs also fire
+    // when Prefs swaps to the TX pair on a MOX edge.
+    LYRA_CHANGE(pr, &Prefs::dbMinChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::dbMaxChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::dbAutoChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallDbMinChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallDbMaxChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallDbAutoChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallSpeedChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallPaletteChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::waterfallColorChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::peakEnabledChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::peakHoldSecsChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::peakDecayDbpsChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::smoothingChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::zoomChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::panScrollStepHzChanged, dsp);
+    LYRA_CHANGE(pr, &Prefs::panRound100Changed, dsp);
+    LYRA_CHANGE(pr, &Prefs::vfoStickyWheelChanged, dsp);
+
+    // Band-plan preferences change what the overlays hold.  SpotStore and
+    // BandPlan belong to the host window: -attachHostWindow: connects them.
+    const LyraEngineChange overlays = LyraEngineChangeOverlays;
+    LYRA_CHANGE(pr, &Prefs::bandPlanSegmentsChanged, overlays);
+    LYRA_CHANGE(pr, &Prefs::bandPlanLandmarksChanged, overlays);
+    LYRA_CHANGE(pr, &Prefs::bandPlanBeaconsChanged, overlays);
+    LYRA_CHANGE(pr, &Prefs::bandPlanRegionChanged, overlays);
+    LYRA_CHANGE(pr, &Prefs::bandPlanCountryChanged, overlays);
 
     const LyraEngineChange audio = LyraEngineChangeAudio;
     LYRA_CHANGE(we, &WdspEngine::volumeChanged, audio);
@@ -281,10 +336,30 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
             pr, &Prefs::rxBandwidthChanged, we,
             [pr, we]() { we->setBandwidth(pr->rxBandwidth()); })];
         we->setBandwidth(pr->rxBandwidth());
+
+        // Prefs.zoom -> WdspEngine (map H3): the QML Binding that did this
+        // never loads in this mode, so the engine would stay at zoom 1 and
+        // ignore the saved zoom.  The console writes zoom through Prefs only,
+        // so it persists and this one binding keeps the engine in step.
+        [self addEngineConnection:QObject::connect(
+            pr, &Prefs::zoomChanged, we, [pr, we]() { we->setZoom(pr->zoom()); })];
+        we->setZoom(pr->zoom());
+    }
+
+    // The host's spot bank (fed by the cluster, SpotHole and TCI) and band
+    // plan: the overlays re-read when either changes.
+    if (SpotStore *spots = host->spotStore()) {
+        [self addEngineConnection:QObject::connect(
+            spots, &SpotStore::changed, spots, [fire]() { fire(LyraEngineChangeOverlays); })];
+    }
+    if (BandPlan *plan = host->bandPlan()) {
+        [self addEngineConnection:QObject::connect(
+            plan, &BandPlan::regionChanged, plan, [fire]() { fire(LyraEngineChangeOverlays); })];
     }
 
     fire(LyraEngineChangeRadio | LyraEngineChangeDsp | LyraEngineChangeAudio
-         | LyraEngineChangeMeters | LyraEngineChangeStats | LyraEngineChangeSession);
+         | LyraEngineChangeMeters | LyraEngineChangeStats | LyraEngineChangeSession
+         | LyraEngineChangeOverlays);
 }
 
 - (void)setConsoleChangeCallback:(LyraEngineChangeCallback)callback
@@ -532,6 +607,216 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     l.autoConnectOnLaunch = pr && pr->autoStartOnLaunch()
                             && !qEnvironmentVariableIsSet("LYRA_SAFE");
     return l;
+}
+
+- (LyraDisplayReading *)consoleDisplay
+{
+    LyraDisplayReading *d = [LyraDisplayReading new];
+    d.zoom = 1.0;
+    d.waterfallLut = [NSData data];
+    if (WdspEngine *we = [self engineDsp]) {
+        d.spanHz = we->spanHz();
+        d.iqRateHz = we->iqRateHz();
+        d.zoom = we->zoom();
+        d.txOwnsAnalyzer = we->txOwnsAnalyzer();
+        d.passbandLowHz = we->passbandLowHz();
+        d.passbandHighHz = we->passbandHighHz();
+        d.passbandLowHzRx2 = we->passbandLowHzRx2();
+        d.passbandHighHzRx2 = we->passbandHighHzRx2();
+    }
+    // copySpectrumRx2 returns 0 unless the radio has a second ADC (map §5).
+    if (HL2Stream *st = [self engineStream])
+        d.rx2SpectrumAvailable = st->dualAdc();
+
+    // Prefs defaults where there are no Prefs (EngineState.Display's).
+    d.dbMin = -130.0;
+    d.dbMax = -20.0;
+    d.waterfallDbMin = -120.0;
+    d.waterfallDbMax = -20.0;
+    d.waterfallSpeed = 20;
+    d.waterfallBaseRGB = 0x30B0FF;
+    d.peakDecayDbps = 10.0;
+    d.scrollStepHz = 1000;
+    d.bandPlanSegments = YES;
+    d.bandPlanLandmarks = YES;
+    if (Prefs *pr = [self enginePrefs]) {
+        // The live pairs: Prefs returns the TX pair while keyed (map H17).
+        d.dbMin = pr->dbMin();
+        d.dbMax = pr->dbMax();
+        d.dbAuto = pr->dbAuto();
+        d.waterfallDbMin = pr->waterfallDbMin();
+        d.waterfallDbMax = pr->waterfallDbMax();
+        d.waterfallDbAuto = pr->waterfallDbAuto();
+        d.waterfallSpeed = pr->waterfallSpeed();
+        d.waterfallPalette = pr->waterfallPalette();
+        // As Waterfall::rebuildLut: an index past the presets selects the
+        // custom ramp from waterfallColor, which the console builds itself.
+        const int palette = pr->waterfallPalette();
+        if (palette >= 0 && palette < lyra::palettes::names().count()) {
+            const lyra::palettes::Lut &lut = lyra::palettes::lut(palette);
+            static_assert(sizeof(lyra::palettes::Lut) == 256 * 3, "packed RGB LUT");
+            d.waterfallLut = [NSData dataWithBytes:lut.data() length:sizeof(lyra::palettes::Lut)];
+        }
+        const QColor base(pr->waterfallColor());
+        if (base.isValid())
+            d.waterfallBaseRGB = static_cast<uint32_t>(base.rgb() & 0xFFFFFFu);
+        d.peakEnabled = pr->peakEnabled();
+        d.peakHoldSecs = pr->peakHoldSecs();
+        d.peakDecayDbps = pr->peakDecayDbps();
+        d.smoothing = pr->smoothing();
+        d.scrollStepHz = pr->panScrollStepHz();
+        d.round100 = pr->panRound100();
+        d.stickyWheel = pr->vfoStickyWheel();
+        d.bandPlanSegments = pr->bandPlanSegments();
+        d.bandPlanLandmarks = pr->bandPlanLandmarks();
+        d.bandPlanBeacons = pr->bandPlanBeacons();
+    }
+    MainWindow *host = [self engineHost];
+    SpotStore *spots = host ? host->spotStore() : nullptr;
+    d.showSpots = spots ? spots->showSpots() : NO;
+    return d;
+}
+
+- (LyraOverlayReading *)consoleOverlaysCentreHz:(double)centreHz spanHz:(double)spanHz
+{
+    LyraOverlayReading *o = [LyraOverlayReading new];
+    o.segments = @[];
+    o.landmarks = @[];
+    o.spots = @[];
+    MainWindow *host = [self engineHost];
+    if (!host || spanHz <= 0) return o;
+
+    const QString kLo = QStringLiteral("lo"), kHi = QStringLiteral("hi"),
+                  kLabel = QStringLiteral("label"), kChannel = QStringLiteral("channel"),
+                  kQsy = QStringLiteral("qsy"), kFreq = QStringLiteral("freq"),
+                  kMode = QStringLiteral("mode"), kBeacon = QStringLiteral("beacon"),
+                  kCall = QStringLiteral("call"), kFreqHz = QStringLiteral("freqHz"),
+                  kMine = QStringLiteral("mine");
+
+    if (BandPlan *plan = host->bandPlan()) {
+        NSMutableArray<LyraSegmentReading *> *segments = [NSMutableArray array];
+        for (const QVariant &v : plan->segments(centreHz, spanHz)) {
+            const QVariantMap m = v.toMap();
+            LyraSegmentReading *seg = [LyraSegmentReading new];
+            seg.lowHz = m.value(kLo).toDouble();
+            seg.highHz = m.value(kHi).toDouble();
+            seg.label = m.value(kLabel).toString().toNSString();
+            seg.channel = m.value(kChannel).toBool();
+            seg.qsyHz = m.contains(kQsy) ? m.value(kQsy).toDouble() : NAN;
+            [segments addObject:seg];
+        }
+        o.segments = segments;
+
+        // Both groups: the console filters them by its own flags.
+        NSMutableArray<LyraLandmarkReading *> *landmarks = [NSMutableArray array];
+        for (const QVariant &v : plan->landmarks(centreHz, spanHz, true, true)) {
+            const QVariantMap m = v.toMap();
+            LyraLandmarkReading *mark = [LyraLandmarkReading new];
+            mark.hz = m.value(kFreq).toDouble();
+            mark.label = m.value(kLabel).toString().toNSString();
+            mark.mode = m.value(kMode).toString().toNSString();
+            mark.beacon = m.value(kBeacon).toBool();
+            [landmarks addObject:mark];
+        }
+        o.landmarks = landmarks;
+    }
+
+    if (SpotStore *store = host->spotStore()) {
+        NSMutableArray<LyraSpotReading *> *spots = [NSMutableArray array];
+        for (const QVariant &v : store->spotsInSpan(centreHz, spanHz)) {
+            const QVariantMap m = v.toMap();
+            LyraSpotReading *spot = [LyraSpotReading new];
+            spot.call = m.value(kCall).toString().toNSString();
+            spot.hz = m.value(kFreqHz).toDouble();
+            spot.mine = m.value(kMine).toBool();
+            spot.mode = m.value(kMode).toString().toNSString();
+            [spots addObject:spot];
+        }
+        o.spots = spots;
+    }
+    return o;
+}
+
+#pragma mark Spectrum
+
+- (int)copySpectrumRx2Into:(float *)dst maxBins:(int)maxBins
+{
+    NSAssert([NSThread isMainThread], @"copySpectrumRx2Into must be called from the main thread");
+    WdspEngine *we = [self engineDsp];
+    if (!we || !dst || maxBins <= 0) return 0;
+    return we->copySpectrumRx2(dst, maxBins);
+}
+
+- (int)copyWaterfallInto:(float *)dst maxBins:(int)maxBins
+{
+    NSAssert([NSThread isMainThread], @"copyWaterfallInto must be called from the main thread");
+    WdspEngine *we = [self engineDsp];
+    if (!we || !dst || maxBins <= 0) return 0;
+    return we->copyWaterfallSpectrum(dst, maxBins);
+}
+
+#pragma mark Display calls
+
+- (void)setCtuneCenterHz:(uint32_t)hz
+{
+    if (HL2Stream *st = [self engineStream]) st->setCtuneCenterHz(hz);
+}
+
+- (void)writeZoomPref:(double)zoom
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setZoom(zoom);
+}
+
+- (void)writeScrollStepPref:(NSInteger)hz
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setPanScrollStepHz(static_cast<int>(hz));
+}
+
+- (void)writeRound100Pref:(BOOL)on
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setPanRound100(on);
+}
+
+- (void)writePeakPrefEnabled:(BOOL)enabled holdSecs:(double)secs
+{
+    Prefs *pr = [self enginePrefs];
+    if (!pr) return;
+    if (enabled) pr->setPeakHoldSecs(secs);
+    pr->setPeakEnabled(enabled);
+}
+
+- (void)writeSmoothingPref:(NSInteger)value
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setSmoothing(static_cast<int>(value));
+}
+
+- (void)writeBandPlanSegmentsPref:(BOOL)on
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setBandPlanSegments(on);
+}
+
+- (void)writeShowSpotsPref:(BOOL)on
+{
+    MainWindow *host = [self engineHost];
+    if (SpotStore *spots = host ? host->spotStore() : nullptr) spots->setShowSpots(on);
+}
+
+- (void)writeStepPref:(NSInteger)hz rx2:(BOOL)rx2
+{
+    Prefs *pr = [self enginePrefs];
+    if (!pr) return;
+    if (rx2) pr->setVfoStepHzRx2(pr->modeRx2(), static_cast<int>(hz));
+    else pr->setVfoStepHz(pr->mode(), static_cast<int>(hz));
+    // Prefs has no signal for the per-mode step, so say it changed here.
+    LyraEngineChangeCallback cb = [self consoleChangeCallback];
+    if (cb) cb(LyraEngineChangeDsp);
+}
+
+- (void)activateSpotCall:(NSString *)call
+{
+    MainWindow *host = [self engineHost];
+    if (SpotStore *spots = host ? host->spotStore() : nullptr)
+        spots->activate(QString::fromNSString(call));
 }
 
 #pragma mark Connection

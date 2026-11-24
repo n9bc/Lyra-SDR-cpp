@@ -50,9 +50,7 @@ extension LyraEngineFacade: EngineFacade {
         e.meters = EngineState.Meters(
             sMeterDbm: m.sMeterDbm, sMeterDbmRx2: m.sMeterDbmRx2, snrDb: m.snrDb,
             sampleRateHz: m.sampleRateHz)
-        // The rest of Display is read live in M4 Task 7; the span and IQ rate move here as is.
-        e.display.spanHz = m.spanHz
-        e.display.iqRateHz = m.iqRateHz
+        e.display = Self.display(from: consoleDisplay())
 
         e.bands = amateurBands().compactMap(Self.band(from:))
 
@@ -131,23 +129,63 @@ extension LyraEngineFacade: EngineFacade {
         }
     }
 
-    // TODO(M4 Task 7): the engine has no facade method for the CTUN centre or the zoom
-    // preference yet; Task 7 replaces these no-ops with the real calls.
-    func setCtuneCenter(_ hz: UInt32) {}
-    func setZoomPreference(_ zoom: Double) {}
-    // TODO(M4 Task 7): the display-setting Prefs writes. `setStepPreference` writes
-    // `Prefs::setVfoStepHz(mode, hz)` / `setVfoStepHzRx2(modeRx2, hz)`, the keys `consoleFilter` reads.
-    func setScrollStepPreference(_ hz: Int) {}
-    func setRound100Preference(_ on: Bool) {}
-    func setPeakPreference(enabled: Bool, secs: Double) {}
-    func setSmoothingPreference(_ value: Int) {}
-    func setBandPlanSegmentsPreference(_ on: Bool) {}
-    func setShowSpotsPreference(_ on: Bool) {}
-    func setStepPreference(_ receiver: ReceiverID, hz: Int) {}
-    // TODO(M4 Task 7): `BandPlan::segments/landmarks` and `SpotStore::spotsInSpan/activate`; until
-    // then the live console has no overlays.
-    func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays { EngineOverlays() }
-    func activateSpot(_ call: String) {}
+    func setCtuneCenter(_ hz: UInt32) { setCtuneCenterHz(hz) }
+    /// `Prefs::setZoom`; the engine follows it through the binding `attachHostWindow` makes.
+    func setZoomPreference(_ zoom: Double) { writeZoomPref(zoom) }
+    func setScrollStepPreference(_ hz: Int) { writeScrollStepPref(hz) }
+    func setRound100Preference(_ on: Bool) { writeRound100Pref(on) }
+    func setPeakPreference(enabled: Bool, secs: Double) {
+        writePeakPrefEnabled(enabled, holdSecs: secs)
+    }
+    func setSmoothingPreference(_ value: Int) { writeSmoothingPref(value) }
+    func setBandPlanSegmentsPreference(_ on: Bool) { writeBandPlanSegmentsPref(on) }
+    func setShowSpotsPreference(_ on: Bool) { writeShowSpotsPref(on) }
+    /// `Prefs::setVfoStepHz(mode, hz)` / `setVfoStepHzRx2(modeRx2, hz)`, the keys `consoleFilter`
+    /// reads.
+    func setStepPreference(_ receiver: ReceiverID, hz: Int) {
+        writeStepPref(hz, rx2: receiver == .sub)
+    }
+    func activateSpot(_ call: String) { activateSpotCall(call) }
+
+    /// `BandPlan::segments` / `landmarks` and `SpotStore::spotsInSpan` for the window.
+    func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays {
+        let o = consoleOverlays(centreHz: Double(centreHz), spanHz: Double(spanHz))
+        return EngineOverlays(
+            segments: o.segments.map {
+                EngineSegment(lowHz: Self.hz($0.lowHz), highHz: Self.hz($0.highHz), label: $0.label,
+                              channel: $0.channel,
+                              qsyHz: $0.qsyHz.isFinite ? Self.hz($0.qsyHz) : nil)
+            },
+            landmarks: o.landmarks.map {
+                EngineLandmark(hz: Self.hz($0.hz), label: $0.label, mode: $0.mode, beacon: $0.beacon)
+            },
+            spots: o.spots.map {
+                EngineSpot(call: $0.call, hz: Self.hz($0.hz), mine: $0.mine, mode: $0.mode)
+            })
+    }
+
+    private nonisolated static func display(from d: LyraDisplayReading) -> EngineState.Display {
+        EngineState.Display(
+            spanHz: d.spanHz, iqRateHz: d.iqRateHz, zoom: d.zoom, txOwnsAnalyzer: d.txOwnsAnalyzer,
+            passbandLowHz: d.passbandLowHz, passbandHighHz: d.passbandHighHz,
+            passbandLowHzRx2: d.passbandLowHzRx2, passbandHighHzRx2: d.passbandHighHzRx2,
+            rx2SpectrumAvailable: d.rx2SpectrumAvailable,
+            dbMin: d.dbMin, dbMax: d.dbMax, dbAuto: d.dbAuto,
+            waterfallDbMin: d.waterfallDbMin, waterfallDbMax: d.waterfallDbMax,
+            waterfallDbAuto: d.waterfallDbAuto, waterfallSpeed: d.waterfallSpeed,
+            waterfallPalette: d.waterfallPalette, waterfallLut: [UInt8](d.waterfallLut),
+            waterfallBaseRGB: d.waterfallBaseRGB,
+            peakEnabled: d.peakEnabled, peakHoldSecs: d.peakHoldSecs,
+            peakDecayDbps: d.peakDecayDbps, smoothing: d.smoothing,
+            scrollStepHz: d.scrollStepHz, round100: d.round100, stickyWheel: d.stickyWheel,
+            bandPlanSegments: d.bandPlanSegments, bandPlanLandmarks: d.bandPlanLandmarks,
+            bandPlanBeacons: d.bandPlanBeacons, showSpots: d.showSpots)
+    }
+
+    /// A frequency in whole Hz; 0 for NaN or infinity, which `Int64(_:)` would trap on.
+    private nonisolated static func hz(_ v: Double) -> Int64 {
+        v.isFinite ? Int64(v.rounded()) : 0
+    }
 
     /// One `-amateurBands` entry, or nil if a key is missing.
     private nonisolated static func band(from d: [String: Any]) -> EngineBand? {

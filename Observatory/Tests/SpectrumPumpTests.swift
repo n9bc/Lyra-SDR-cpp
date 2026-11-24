@@ -102,3 +102,26 @@ final class SpectrumPumpTests: XCTestCase {
         XCTAssertGreaterThan(pump.frameSerial, a)
     }
 }
+
+@MainActor
+final class SpectrumOcclusionTests: XCTestCase {
+    func testSuspendedPumpPullsNothingAndKeepsTheLastFrame() {
+        let src = FakeSpectrumSource()
+        let pump = SpectrumPump(source: src)
+        pump.tick(now: 0, sub: false)
+        let pulls = src.calls.count
+        XCTAssertNotNil(pump.spectrum(.main))
+        pump.isSuspended = true
+        pump.tick(now: 1, sub: true)
+        XCTAssertEqual(src.calls.count, pulls)
+        XCTAssertNotNil(pump.spectrum(.main))
+        pump.isSuspended = false
+        pump.tick(now: 2, sub: false)
+        XCTAssertGreaterThan(src.calls.count, pulls)
+    }
+
+    func testOnlyAFullyHiddenWindowSuspendsThePump() {
+        XCTAssertTrue(SpectrumOcclusionGate.suspends([]))
+        XCTAssertFalse(SpectrumOcclusionGate.suspends(.visible))
+    }
+}

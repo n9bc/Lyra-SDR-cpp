@@ -133,6 +133,8 @@ public:
     // Transient status-bar bus (QML `Status` + C++ advisories).
     StatusBus *statusBus() const { return statusBus_; }
     BandMemory *bandMemory() const { return bandMemory_; }
+    BandPlan *bandPlan() const { return bandPlan_; }
+    SpotStore *spotStore() const { return spots_; }
 
     // Share JUST the panel layout as a small .lyralayout file (driven from
     // Settings → Backup & Restore → "Share a layout").  Arrangement only —

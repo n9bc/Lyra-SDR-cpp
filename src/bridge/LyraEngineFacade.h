@@ -32,6 +32,8 @@ typedef NS_OPTIONS(NSInteger, LyraEngineChange) {
     LyraEngineChangeMeters  = 1 << 3,
     LyraEngineChangeStats   = 1 << 4,
     LyraEngineChangeSession = 1 << 5,
+    // Spots, the band plan or the band-plan preferences changed.
+    LyraEngineChangeOverlays = 1 << 6,
 };
 
 typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
@@ -116,6 +118,77 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 @property (nonatomic) NSInteger spanHz;
 @property (nonatomic) NSInteger iqRateHz;
 @property (nonatomic) NSInteger sampleRateHz;
+@end
+
+// Display geometry from WdspEngine and the spectrum display preferences
+// (Prefs, SpotStore).  Units and sentinels as EngineState.Display.
+@interface LyraDisplayReading : NSObject
+@property (nonatomic) NSInteger spanHz;
+@property (nonatomic) NSInteger iqRateHz;
+@property (nonatomic) double zoom;
+@property (nonatomic) BOOL txOwnsAnalyzer;
+@property (nonatomic) double passbandLowHz;
+@property (nonatomic) double passbandHighHz;
+@property (nonatomic) double passbandLowHzRx2;
+@property (nonatomic) double passbandHighHzRx2;
+// The radio has more than one ADC (HL2Stream::dualAdc), so the RX2
+// analyzer can run.
+@property (nonatomic) BOOL rx2SpectrumAvailable;
+@property (nonatomic) double dbMin;
+@property (nonatomic) double dbMax;
+@property (nonatomic) BOOL dbAuto;
+@property (nonatomic) double waterfallDbMin;
+@property (nonatomic) double waterfallDbMax;
+@property (nonatomic) BOOL waterfallDbAuto;
+@property (nonatomic) NSInteger waterfallSpeed;
+@property (nonatomic) NSInteger waterfallPalette;
+// 768 bytes (256 RGB triples) for a preset palette; empty for the custom ramp.
+@property (nonatomic, copy) NSData *waterfallLut;
+// 0xRRGGBB of Prefs.waterfallColor, the custom ramp's base.
+@property (nonatomic) uint32_t waterfallBaseRGB;
+@property (nonatomic) BOOL peakEnabled;
+@property (nonatomic) double peakHoldSecs;
+@property (nonatomic) double peakDecayDbps;
+@property (nonatomic) NSInteger smoothing;
+@property (nonatomic) NSInteger scrollStepHz;
+@property (nonatomic) BOOL round100;
+@property (nonatomic) BOOL stickyWheel;
+@property (nonatomic) BOOL bandPlanSegments;
+@property (nonatomic) BOOL bandPlanLandmarks;
+@property (nonatomic) BOOL bandPlanBeacons;
+@property (nonatomic) BOOL showSpots;
+@end
+
+// One band-plan segment (BandPlan::segments), clipped to the window.
+@interface LyraSegmentReading : NSObject
+@property (nonatomic) double lowHz;
+@property (nonatomic) double highHz;
+@property (nonatomic, copy) NSString *label;
+@property (nonatomic) BOOL channel;
+// A channel's unclipped low edge; NaN for other segments.
+@property (nonatomic) double qsyHz;
+@end
+
+// One BandPlan::landmarks entry (watering hole or NCDXF beacon).
+@interface LyraLandmarkReading : NSObject
+@property (nonatomic) double hz;
+@property (nonatomic, copy) NSString *label;
+@property (nonatomic, copy) NSString *mode;
+@property (nonatomic) BOOL beacon;
+@end
+
+// One SpotStore::spotsInSpan entry; hz is the carrier frequency.
+@interface LyraSpotReading : NSObject
+@property (nonatomic, copy) NSString *call;
+@property (nonatomic) double hz;
+@property (nonatomic) BOOL mine;
+@property (nonatomic, copy) NSString *mode;
+@end
+
+@interface LyraOverlayReading : NSObject
+@property (nonatomic, copy) NSArray<LyraSegmentReading *> *segments;
+@property (nonatomic, copy) NSArray<LyraLandmarkReading *> *landmarks;
+@property (nonatomic, copy) NSArray<LyraSpotReading *> *spots;
 @end
 
 @interface LyraTelemetryReading : NSObject
@@ -296,8 +369,9 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 
 // Late binding to the hidden MainWindow* (it is built after the facade):
 // gives the facade's MeterModel the P2 bridge, follows the status bus, keeps
-// the band memory, and binds Prefs.rxBandwidth to the engine (a binding that
-// only the QML panels made, which do not load in this mode).
+// the band memory, binds Prefs.rxBandwidth and Prefs.zoom to the engine
+// (bindings that only the QML panels made, which do not load in this mode),
+// and follows the host's spot store and band plan.
 - (void)attachHostWindow:(void *)mainWindow;
 
 // The one change handler (nil clears it).
@@ -313,6 +387,41 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (LyraTransmitReading *)consoleTransmit;
 - (LyraSessionReading *)consoleSession;
 - (LyraLinkReading *)consoleLink;
+- (LyraDisplayReading *)consoleDisplay;
+// Every segment, landmark (digital and beacons) and spot in the window
+// centreHz +/- spanHz / 2; the console applies its display flags itself.
+// Empty until the host window is attached.  Allocates: call on a change, not
+// per frame.
+- (LyraOverlayReading *)consoleOverlaysCentreHz:(double)centreHz spanHz:(double)spanHz
+    NS_SWIFT_NAME(consoleOverlays(centreHz:spanHz:));
+
+#pragma mark Spectrum (console)
+
+// As -copySpectrumInto:maxBins:, for the RX2 analyzer (WdspEngine::
+// copySpectrumRx2): 0 on a single-ADC radio, where it never opens.
+- (int)copySpectrumRx2Into:(float *)dst maxBins:(int)maxBins;
+// The main waterfall row (WdspEngine::copyWaterfallSpectrum).
+- (int)copyWaterfallInto:(float *)dst maxBins:(int)maxBins;
+
+#pragma mark Display calls
+
+// HL2Stream::setCtuneCenterHz: moves the locked CTUN display centre.
+- (void)setCtuneCenterHz:(uint32_t)hz;
+// Prefs writes; the engine follows Prefs.zoom (bound in -attachHostWindow:).
+- (void)writeZoomPref:(double)zoom;
+- (void)writeScrollStepPref:(NSInteger)hz;
+- (void)writeRound100Pref:(BOOL)on;
+// Off writes only peakEnabled, keeping the hold time for the next time on.
+- (void)writePeakPrefEnabled:(BOOL)enabled holdSecs:(double)secs;
+- (void)writeSmoothingPref:(NSInteger)value;
+- (void)writeBandPlanSegmentsPref:(BOOL)on;
+// SpotStore::setShowSpots (persisted under spots/).
+- (void)writeShowSpotsPref:(BOOL)on;
+// Prefs::setVfoStepHz / setVfoStepHzRx2 for the receiver's current mode,
+// the keys -consoleFilter reads.
+- (void)writeStepPref:(NSInteger)hz rx2:(BOOL)rx2;
+// SpotStore::activate: tunes to the spot (the store guards transmit).
+- (void)activateSpotCall:(NSString *)call;
 
 // Connects the active rig through MainWindow::beginConnect.  Waits for the
 // radio layer (up to 20 s).  Does nothing while a session is live: a running

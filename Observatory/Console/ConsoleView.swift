@@ -12,8 +12,11 @@ struct ConsoleView: View {
     /// share one `SpectrumPump`, so the two stacks drawing in one frame make a single engine pull.
     @State private var spectrum: SpectrumBridge
     @State private var subSpectrum: SpectrumBridge
+    /// Stops the shared pump while the console window cannot be seen.
+    @State private var occlusion: SpectrumOcclusionGate
 
-    /// `spectrumSource` is where frames come from; sample data until Task 7 wires the engine's.
+    /// `spectrumSource` is where frames come from: the engine's facade on the live console,
+    /// sample data otherwise.
     init(backend: any RadioBackend, displayStore: DisplayStore = DisplayStore(),
          spectrumSource: any SpectrumSource = SyntheticSpectrumSource(),
          openSettings: (@MainActor () -> Void)? = nil) {
@@ -23,6 +26,7 @@ struct ConsoleView: View {
         let pump = SpectrumPump(source: spectrumSource)
         _spectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .main))
         _subSpectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .sub))
+        _occlusion = State(initialValue: SpectrumOcclusionGate(pump: pump))
     }
 
     var body: some View {
@@ -77,6 +81,7 @@ struct ConsoleView: View {
         .padding(gap)
         .background(LyraDS.Palette.void)
         .background(ConsoleKeyMonitor(snapshot: { backend.snapshot }, send: backend.send))
+        .background(ConsoleWindowAttachment { occlusion.watch($0) })
         .environment(spectrum)
         .preferredColorScheme(.dark)
         .frame(minWidth: ConsoleLayout.minWindow.width, minHeight: ConsoleLayout.minWindow.height)

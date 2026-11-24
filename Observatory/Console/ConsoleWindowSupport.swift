@@ -43,6 +43,45 @@ enum WindowFrameRules {
     }
 }
 
+/// Suspends the spectrum pump while its window is not visible at all (fully covered, minimised or
+/// on another Space), per `NSWindow.occlusionState`, so the console stops pulling frames nobody
+/// can see. The engine's analyzer keeps running; only the console's pulls stop.
+@MainActor
+final class SpectrumOcclusionGate {
+    private let pump: SpectrumPump
+    private weak var window: NSWindow?
+    private nonisolated(unsafe) var observer: NSObjectProtocol?
+
+    init(pump: SpectrumPump) { self.pump = pump }
+
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+    /// Follows `window`'s occlusion from now on (once per window).
+    func watch(_ window: NSWindow) {
+        guard window !== self.window else { return }
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        self.window = window
+        apply(window.occlusionState)
+        observer = NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window else { return }
+                self.apply(window.occlusionState)
+            }
+        }
+    }
+
+    private func apply(_ state: NSWindow.OcclusionState) {
+        pump.isSuspended = Self.suspends(state)
+    }
+
+    /// Any visible part keeps the pump running.
+    nonisolated static func suspends(_ state: NSWindow.OcclusionState) -> Bool {
+        !state.contains(.visible)
+    }
+}
+
 /// Reports the `NSWindow` its view joins, once per window, so AppKit-only setup (menus,
 /// frame autosave) can run without touching the code that created the window.
 struct ConsoleWindowAttachment: NSViewRepresentable {

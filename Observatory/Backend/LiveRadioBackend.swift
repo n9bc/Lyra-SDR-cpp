@@ -187,22 +187,23 @@ final class LiveRadioBackend: RadioBackend {
 }
 
 extension BackendCapabilities {
-    /// What the live backend serves truthfully today. The spectrum family is still sample data;
-    /// controls without an engine path say why they are off.
+    /// What the live backend serves truthfully today. The spectrum, waterfall and spots are the
+    /// engine's; the audio terrain is still sample data (Milestone 5). Controls without an engine
+    /// path say why they are off.
     nonisolated static func live(nnrAvailable: Bool, isP2: Bool) -> BackendCapabilities {
         let statuses: [BackendFeature: CapabilityStatus] = [
             .connection: .available, .tuning: .available, .receiverDSP: .available,
             .frontEnd: .available, .audio: .available, .transmit: .available,
             .meters: .available, .telemetry: .available, .bands: .available,
-            .spectrum: .mocked, .waterfall: .mocked, .audioTerrain: .mocked,
-            .propagation: .mocked, .keyer: .mocked,
-            .spots: .unavailable("Spots arrive in Milestone 4"),
+            .spectrum: .available, .waterfall: .available, .spots: .available,
+            .audioTerrain: .mocked, .propagation: .mocked, .keyer: .mocked,
             .recorder: .unavailable("Recorder arrives in a later milestone"),
         ]
         var controls: [ConsoleControl: CapabilityStatus] = [:]
         let live: [ConsoleControl] = [
             .connect, .focus, .subReceiver, .copyAB, .swapAB, .split, .ctun, .vfoLock, .rit, .xit,
             .mode, .filterPreset, .bwLock, .band, .agcMode,
+            .displaySettings, .tuningStep, .spectrumTuning,
         ]
         for c in live { controls[c] = .available }
         for f in DSPFunction.allCases { controls[.dsp(f)] = .available }
@@ -215,7 +216,7 @@ extension BackendCapabilities {
         let edges = CapabilityStatus.unavailable("Filter edges arrive in Milestone 5")
         let tx = CapabilityStatus.unavailable("Transmit arrives in Milestone 5")
         controls[.memory] = .unavailable("Memories arrive in a later milestone")
-        controls[.zeroBeat] = .unavailable("Zero beat needs the live spectrum (Milestone 4)")
+        controls[.zeroBeat] = .unavailable("Zero beat arrives in a later milestone")
         controls[.filterEdges] = edges
         controls[.txBandwidth] = edges
         controls[.bandTabs] = .unavailable("Only Ham bands in this version")
@@ -230,9 +231,6 @@ extension BackendCapabilities {
         controls[.rxEqualizer] = .unavailable("The receive equaliser arrives in Milestone 5")
         controls[.profile] = later
         controls[.tools] = later
-        controls[.displaySettings] = .unavailable("Display settings arrive in Milestone 4")
-        controls[.tuningStep] = .unavailable("Tuning step arrives with the live spectrum")
-        controls[.spectrumTuning] = .unavailable("Spectrum tuning arrives with the live spectrum")
         controls[.vfoBandwidth] = .unavailable("Use the filter chips to change the bandwidth")
         return BackendCapabilities(statuses: statuses, controls: controls,
                                    fallback: .unavailable("Not available"))

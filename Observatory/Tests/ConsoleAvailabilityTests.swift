@@ -133,9 +133,6 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         .txDSP: "Transmit arrives in Milestone 5",
         .transmit: "Transmit arrives in Milestone 5",
         .profile: "Arrives in a later milestone",
-        .displaySettings: "Display settings arrive in Milestone 4",
-        .tuningStep: "Tuning step arrives with the live spectrum",
-        .spectrumTuning: "Spectrum tuning arrives with the live spectrum",
         .vfoBandwidth: "Use the filter chips to change the bandwidth",
     ]
 
@@ -162,11 +159,16 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         }
     }
 
-    func testLiveSpotsChipIsUnavailable() {
+    /// The live engine serves the spectrum display: its settings, the tuning step, spectrum
+    /// tuning and spots are enabled with their normal help.
+    func testLiveSpectrumControlsAreAvailable() {
         let caps = BackendCapabilities.live(nnrAvailable: false, isP2: false)
-        XCTAssertTrue(ConsoleAvailability.isDisabled(caps.status(.spots)))
+        XCTAssertFalse(ConsoleAvailability.isDisabled(caps.status(.spots)))
         XCTAssertEqual(ConsoleAvailability.help(caps.status(.spots), normal: "Show spots"),
-                       "Spots arrive in Milestone 4")
+                       "Show spots")
+        for control in [ConsoleControl.displaySettings, .tuningStep, .spectrumTuning] {
+            XCTAssertEqual(caps.control(control), .available, "\(control)")
+        }
     }
 
     func testMOXKeyIsDisabledWithTheMilestoneFiveReasonOnLive() {

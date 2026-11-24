@@ -15,13 +15,17 @@ import AppKit
     /// Creates the SwiftUI hosting view for the Observatory window.
     ///
     /// Called from Obj-C++ (`ObservatoryWindow.mm`). The console runs on the live engine through
-    /// the facade; `LYRA_CONSOLE_SAMPLE=1` runs it on sample data instead.
+    /// the facade, which is also the spectrum and waterfall source; `LYRA_CONSOLE_SAMPLE=1` runs
+    /// it on sample data instead.
     @objc public static func createHostingView(facade: LyraEngineFacade) -> NSView {
         Self.facade = facade
         let backend: any RadioBackend
+        let spectrumSource: any SpectrumSource
         if ProcessInfo.processInfo.environment["LYRA_CONSOLE_SAMPLE"] == "1" {
             backend = MockRadioBackend()
+            spectrumSource = SyntheticSpectrumSource()
         } else {
+            spectrumSource = facade
             let live = LiveRadioBackend(facade: facade)
             backend = live
             // Next runloop turn: main.cpp attaches the host window right after this returns,
@@ -32,6 +36,7 @@ import AppKit
         let shell = ConsoleShell(backend: backend, display: DisplayStore(), openSettings: openSettings)
         Self.shell = shell
         return NSHostingView(rootView: ConsoleView(backend: shell.backend, displayStore: shell.display,
+                                                   spectrumSource: spectrumSource,
                                                    openSettings: openSettings)
             .background(ConsoleWindowAttachment { window in
                 shell.attach(window)
