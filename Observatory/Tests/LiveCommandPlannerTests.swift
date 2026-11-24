@@ -427,6 +427,79 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.addNotch(offsetHz: .nan), e), [])
     }
 
+    // MARK: - Passband edges and the dB range (M5a Task 4)
+
+    private func usb(ctune: Bool = false) -> EngineState {
+        var e = state(rx1: 14_200_000)
+        e.filter.mode = "USB"
+        e.radio.ctuneEnabled = ctune
+        e.radio.ctuneCenterHz = 14_190_000
+        return e
+    }
+
+    func testInnerEdgeSetsFilterLowUSB() {
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: 180), usb()), [.setFilterLowPref(180)])
+        // The negative side of the dial is just as far from it.
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: -179.6), usb()), [.setFilterLowPref(180)])
+    }
+
+    func testInnerEdgeLSBIsHighEdge() {
+        var e = usb()
+        e.filter.mode = "LSB"
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: -150), e), [.setFilterLowPref(150)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: -2600), e), [.setRxBandwidthPref(2600)])
+        e.filter.mode = "DIGL"
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: -90), e), [.setFilterLowPref(90)])
+        e.filter.mode = "DIGU"
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: 90), e), [.setFilterLowPref(90)])
+    }
+
+    func testFilterLowClamp() {
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: 620), usb()), [.setFilterLowPref(500)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: 0.2), usb()), [.setFilterLowPref(0)])
+    }
+
+    func testOuterEdgeSetsBandwidth() {
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 2700), usb()), [.setRxBandwidthPref(2700)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 20), usb()), [.setRxBandwidthPref(50)])
+        var am = usb()
+        am.filter.mode = "AM"
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 3000), am), [.setRxBandwidthPref(6000)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: -3000), am), [.setRxBandwidthPref(6000)])
+        // CW uses the engine's pitch, which the marker offset carries.
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 1000), cw()), [.setRxBandwidthPref(600)])
+    }
+
+    func testEdgeOffsetSubtractsCtunDialOffset() {
+        // CTUN: the dial sits 10 kHz above the locked display centre, so an edge 10_180 Hz from the
+        // centre is 180 Hz from the dial.
+        XCTAssertEqual(plan(.dragPassbandEdge(.low, offsetHz: 10_180), usb(ctune: true)),
+                       [.setFilterLowPref(180)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 12_700), usb(ctune: true)),
+                       [.setRxBandwidthPref(2700)])
+        // Without CTUN the offset is used as is.
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 12_700), usb()), [.setRxBandwidthPref(12_700)])
+    }
+
+    func testEdgeDragIsNotBlockedByVfoLockAndRefusesNonFinite() {
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: 2700), usb(), locked: true),
+                       [.setRxBandwidthPref(2700)])
+        XCTAssertEqual(plan(.dragPassbandEdge(.high, offsetHz: .nan), usb()), [])
+    }
+
+    func testDbRangeAndAutoPlan() {
+        XCTAssertEqual(plan(.setDbRange(floor: -120, ceiling: -30), usb()),
+                       [.setDbMinPref(-120), .setDbMaxPref(-30)])
+        XCTAssertEqual(plan(.setDbAuto(false), usb()), [.setDbAutoPref(false)])
+        XCTAssertEqual(plan(.setDbAuto(true), usb()), [.setDbAutoPref(true)])
+        // The engine's own limits: floor -150...-3, ceiling floor + 3 ... 30.
+        XCTAssertEqual(plan(.setDbRange(floor: -200, ceiling: 90), usb()),
+                       [.setDbMinPref(-150), .setDbMaxPref(30)])
+        XCTAssertEqual(plan(.setDbRange(floor: -2, ceiling: -50), usb()),
+                       [.setDbMinPref(-3), .setDbMaxPref(0)])
+        XCTAssertEqual(plan(.setDbRange(floor: .nan, ceiling: -30), usb()), [])
+    }
+
     func testZoomClamped() {
         XCTAssertEqual(plan(.setZoom(40), cw()), [.setZoomPref(16)])
         XCTAssertEqual(plan(.setZoom(0.5), cw()), [.setZoomPref(1)])

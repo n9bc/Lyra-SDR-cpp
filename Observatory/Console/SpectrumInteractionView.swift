@@ -1,6 +1,9 @@
 import AppKit
 import SwiftUI
 
+/// Which pane a gesture surface sits on. Only the spectrum has passband edge handles and a dB scale.
+enum SpectrumSurface: Equatable, Sendable { case spectrum, waterfall }
+
 /// What the gesture surface needs from the console beyond the display it sits on.
 struct SpectrumGestureInputs {
     var ctuneEnabled: Bool
@@ -25,6 +28,7 @@ struct SpectrumGestureInputs {
 
     static let help = "Click to tune, drag to pan, scroll to step, Command-scroll or pinch to zoom, middle or Option click to switch receiver"
     static let notchHelp = "Right-click to add or remove a notch, drag a notch to move it, scroll over it to change its width"
+    static let edgeHelp = "Drag a passband edge to change the filter, drag the right-edge dB scale to change the range"
 
     /// The notch gestures' availability on `stack`.
     func notchAvailability(on stack: ReceiverID) -> CapabilityStatus {
@@ -38,8 +42,9 @@ struct SpectrumGestureInputs {
 
     /// The surface's tooltip: the tuning help (or why tuning is off), then the notch help (or why
     /// notches are off here).
-    func help(for stack: ReceiverID) -> String {
-        let tuning = disabledReason ?? Self.help
+    func help(for stack: ReceiverID, surface: SpectrumSurface = .spectrum) -> String {
+        var tuning = disabledReason ?? Self.help
+        if disabledReason == nil, surface == .spectrum, stack == .main { tuning += "\n" + Self.edgeHelp }
         if case .unavailable(let reason) = notchAvailability(on: stack) { return tuning + "\n" + reason }
         return tuning + "\n" + Self.notchHelp
     }
@@ -78,6 +83,11 @@ struct SpectrumInteractionView: NSViewRepresentable {
     let stack: ReceiverID
     let display: DisplaySnapshot
     let inputs: SpectrumGestureInputs
+    /// Passband edge handles and the dB scale exist on the spectrum only.
+    var surface: SpectrumSurface = .spectrum
+    /// The dB range being drawn: the engine's manual range, or the auto fit while auto is on.
+    var shownDbFloor = -130.0
+    var shownDbCeiling = -20.0
 
     func makeNSView(context: Context) -> SurfaceView { SurfaceView() }
 
@@ -85,14 +95,20 @@ struct SpectrumInteractionView: NSViewRepresentable {
         view.stack = stack
         view.display = display
         view.inputs = inputs
-        view.toolTip = inputs.help(for: stack)
+        view.surface = surface
+        view.shownDbRange = (shownDbFloor, shownDbCeiling)
+        view.toolTip = inputs.help(for: stack, surface: surface)
     }
 
     final class SurfaceView: NSView {
         var stack: ReceiverID = .main
         var display: DisplaySnapshot?
         var inputs: SpectrumGestureInputs?
+        var surface: SpectrumSurface = .spectrum
+        var shownDbRange = (floor: -130.0, ceiling: -20.0)
 
+        private var dbDrag: SpectrumDbDrag?
+        private var edgeDrag: SpectrumEdgeDrag?
         private var session: SpectrumGestureSession?
         /// A press that began on a notch, or a right press that may add one.
         private var notchGesture: NotchGesture?
@@ -126,18 +142,58 @@ struct SpectrumInteractionView: NSViewRepresentable {
             return (NotchModel.visible(inputs.notches, on: stack), Double(bounds.width), span, inputs)
         }
 
-        /// Starts a notch gesture when the press lands on a notch (any button) or is a right press.
-        private func beginNotchGesture(_ event: NSEvent, button: NotchGesture.Button) -> Bool {
-            guard let n = notchContext() else { return false }
-            let p = point(event)
-            // Controller ruling R1: the dB-scale zone and the passband-edge handles (Task 4) are
-            // checked before this, through `SpectrumGestureModel.hitTarget`.
-            if button == .left,
-               case .tune = SpectrumGestureModel.hitTarget(x: p.x, y: p.y, notches: n.notches, width: n.width,
-                                                           spanHz: n.span, notchesEnabled: true) {
+        /// The passband edge handles' x positions, Main spectrum only (Sub's edges have no write
+        /// path, and the waterfall has no handles). Nil while TX owns the axis or there is no axis.
+        private func edgeXs() -> (lo: Double, hi: Double)? {
+            guard stack == .main, surface == .spectrum, let (display, _) = live, !display.txAxis else { return nil }
+            let span = Double(display.spanHighHz - display.spanLowHz)
+            guard span > 0, bounds.width > 0 else { return nil }
+            let centre = Double(display.spanLowHz + display.spanHighHz) / 2
+            func x(_ hz: Int64) -> Double { (Double(hz) - centre) / span * Double(bounds.width) + Double(bounds.width) / 2 }
+            return (x(display.mainPassband.lowerBound), x(display.mainPassband.upperBound))
+        }
+
+        /// What a press at `p` grabs, in controller ruling R1's order: dB scale, passband edge,
+        /// notch, then tune.
+        private func hitTarget(at p: CGPoint) -> SpectrumHitTarget {
+            let n = notchContext()
+            let width = Double(bounds.width)
+            let span = n?.span ?? display.map { Double($0.spanHighHz - $0.spanLowHz) } ?? 0
+            return SpectrumGestureModel.hitTarget(
+                x: p.x, y: p.y, notches: n?.notches ?? [], width: width, spanHz: span,
+                notchesEnabled: n != nil, height: Double(bounds.height),
+                dbZoneEnabled: stack == .main && surface == .spectrum && live != nil, edges: edgeXs())
+        }
+
+        /// Starts a dB-scale or passband-edge drag when a plain left press lands on one.
+        private func beginGrab(_ target: SpectrumHitTarget, at p: CGPoint) -> Bool {
+            guard let (display, inputs) = live else { return false }
+            switch target {
+            case .dbScale(let zone):
+                var drag = SpectrumDbDrag(zone: zone, startY: p.y, shownFloor: shownDbRange.floor,
+                                          shownCeiling: shownDbRange.ceiling, auto: display.dbRange.auto)
+                for command in drag.beginCommands { inputs.send(command) }
+                dbDrag = drag
+                return true
+            case .edge(let edge):
+                let span = Double(display.spanHighHz - display.spanLowHz)
+                edgeDrag = SpectrumEdgeDrag(edge: edge, width: Double(bounds.width), spanHz: span)
+                return true
+            case .notch, .tune:
                 return false
             }
-            notchGesture = NotchGesture(button: button, x: p.x, notches: n.notches, width: n.width, spanHz: n.span)
+        }
+
+        /// Starts a notch gesture when a left press landed on a notch (`target`) or a right press
+        /// may add one.
+        private func beginNotchGesture(_ event: NSEvent, button: NotchGesture.Button,
+                                       target: SpectrumHitTarget? = nil) -> Bool {
+            guard let n = notchContext() else { return false }
+            if button == .left {
+                guard case .notch? = target else { return false }
+            }
+            notchGesture = NotchGesture(button: button, x: point(event).x, notches: n.notches,
+                                        width: n.width, spanHz: n.span)
             return notchGesture != nil
         }
 
@@ -156,6 +212,46 @@ struct SpectrumInteractionView: NSViewRepresentable {
             }
         }
 
+        private func moveGrab(_ event: NSEvent) {
+            guard let (_, inputs) = live else { return }
+            let p = point(event)
+            let command = dbDrag != nil
+                ? dbDrag?.moved(toY: p.y, height: Double(bounds.height), at: event.timestamp)
+                : edgeDrag?.moved(toX: p.x, at: event.timestamp)
+            if let command { inputs.send(command) }
+        }
+
+        /// The release flushes what the throttle held back.
+        private func endGrab(_ event: NSEvent) {
+            defer { dbDrag = nil; edgeDrag = nil }
+            guard let (_, inputs) = live else { return }
+            let p = point(event)
+            let command = dbDrag != nil
+                ? dbDrag?.ended(atY: p.y, height: Double(bounds.height))
+                : edgeDrag?.ended(atX: p.x)
+            if let command { inputs.send(command) }
+        }
+
+        // MARK: Hover cursor
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            addTrackingArea(NSTrackingArea(rect: .zero,
+                                           options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                           owner: self, userInfo: nil))
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            switch hitTarget(at: point(event)) {
+            case .edge: NSCursor.resizeLeftRight.set()
+            case .dbScale: NSCursor.resizeUpDown.set()
+            case .notch, .tune: NSCursor.arrow.set()
+            }
+        }
+
+        override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
+
         private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
         /// Where an Option press began, so a release after a drag does not switch receivers.
@@ -164,7 +260,11 @@ struct SpectrumInteractionView: NSViewRepresentable {
         override func mouseDown(with event: NSEvent) {
             // A drag that starts on a notch moves it (Control-click is a right click).
             let control = event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.option)
-            if beginNotchGesture(event, button: control ? .right : .left) { return }
+            let option = event.modifierFlags.contains(.option)
+            let target = hitTarget(at: point(event))
+            // The dB scale and the passband edges come before notches and tuning (R1).
+            if !control, !option, beginGrab(target, at: point(event)) { return }
+            if beginNotchGesture(event, button: control ? .right : .left, target: target) { return }
             guard let (ctx, _) = context() else { return super.mouseDown(with: event) }
             let p = point(event)
             optionClick = event.modifierFlags.contains(.option)
@@ -173,6 +273,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         override func mouseDragged(with event: NSEvent) {
+            if dbDrag != nil || edgeDrag != nil { return moveGrab(event) }
             if notchGesture != nil { return moveNotchGesture(event) }
             guard let (_, inputs) = context() else { return super.mouseDragged(with: event) }
             guard session != nil else { return }
@@ -182,6 +283,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         override func mouseUp(with event: NSEvent) {
+            if dbDrag != nil || edgeDrag != nil { return endGrab(event) }
             if notchGesture != nil { return endNotchGesture(event) }
             defer { session = nil; optionClick = false }
             guard let (ctx, inputs) = context() else { return super.mouseUp(with: event) }

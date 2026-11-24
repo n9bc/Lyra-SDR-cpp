@@ -128,9 +128,10 @@ struct ReceiverDisplayStack: View {
     }
 
     /// Above the display-only overlays; only `SpectrumOverlayControls` sits higher.
-    private var gestureSurface: some View {
-        SpectrumInteractionView(stack: receiverID, display: display, inputs: gestures)
-            .help(gestures.help(for: receiverID))
+    private func gestureSurface(_ surface: SpectrumSurface) -> some View {
+        SpectrumInteractionView(stack: receiverID, display: display, inputs: gestures, surface: surface,
+                                shownDbFloor: bridge.dbFloor, shownDbCeiling: bridge.dbCeiling)
+            .help(gestures.help(for: receiverID, surface: surface))
             .accessibilityLabel("\(receiverID == .sub ? "Sub" : "Main") spectrum tuning surface")
     }
 
@@ -144,8 +145,9 @@ struct ReceiverDisplayStack: View {
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
                                  notches: NotchModel.visible(gestures.notches, on: receiverID),
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
+                                 showsPassbandHandles: receiverID == .main && !display.txAxis,
                                  height: spectrumHeight)
-                gestureSurface
+                gestureSurface(.spectrum)
                 // Above the gesture surface so its labels and channels are clickable; empty
                 // elsewhere, so the surface still gets every other gesture.
                 SpectrumOverlayControls(display: display, axis: axis, status: capabilities.status(.spots),
@@ -180,7 +182,7 @@ struct ReceiverDisplayStack: View {
                 }
                 Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
                     .frame(width: 1).offset(x: axis.x(for: display.mainCarrierHz))
-                gestureSurface
+                gestureSurface(.waterfall)
             }
             .overlay(alignment: .topLeading) {
                 if let label, spectrumHeight <= 0 { tag(label) }

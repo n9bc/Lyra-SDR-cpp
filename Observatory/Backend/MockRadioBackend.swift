@@ -120,6 +120,18 @@ final class MockRadioBackend: RadioBackend {
             let half = Int64((Double(s.display.spanHighHz - s.display.spanLowHz) * s.display.zoom / z / 2).rounded())
             s.display.spanLowHz = centre - half; s.display.spanHighHz = centre + half
             s.display.zoom = z
+        case .dragPassbandEdge(let edge, let offset):
+            guard offset.isFinite else { return s }
+            // The sample has no filter low cutoff, so only the outer edge (the bandwidth) moves.
+            let m = s.main.mode
+            let lower = m == .lsb || m == .digl
+            if lower || m == .usb || m == .digu, lower ? edge == .high : edge == .low { return s }
+            s.main.filterHz = SpectrumGestureModel.bandwidthForEdge(offset, mode: m.rawValue)
+        case .setDbRange(let floor, let ceiling):
+            guard floor.isFinite, ceiling.isFinite else { return s }
+            let r = SpectrumGestureModel.clampedDbRange(floor: floor, ceiling: ceiling)
+            s.display.dbRange.floor = r.floor; s.display.dbRange.ceiling = r.ceiling
+        case .setDbAuto(let on): s.display.dbRange.auto = on
         case .setWheelStep(let hz): s.display.wheelStepHz = hz
         case .setExactTuning(let on): s.display.exactTuning = on
         case .setPeakHold(let setting): s.display.peakHold = setting

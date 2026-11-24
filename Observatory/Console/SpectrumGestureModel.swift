@@ -20,10 +20,21 @@ struct SpectrumGestureContext: Equatable, Sendable {
 
 /// Where a press on the spectrum lands (see `SpectrumGestureModel.hitTarget`).
 enum SpectrumHitTarget: Equatable, Sendable {
+    /// The right-edge dB scale strip (see `SpectrumGestureModel.dbZone`).
+    case dbScale(DbZone)
+    /// A passband edge handle.
+    case edge(PassbandEdge)
     case notch(Int)
     /// CTUN pan strip or click-to-tune.
     case tune
 }
+
+/// The two edges of the Main passband.
+enum PassbandEdge: Equatable, Sendable { case low, high }
+
+/// Which part of the dB scale a press grabs: the top third moves the ceiling, the bottom third the
+/// floor, the middle both.
+enum DbZone: Equatable, Sendable { case ceiling, floor, both }
 
 /// Pure maths for the spectrum and waterfall tuning gestures, ported from `PanadapterPanel.qml`
 /// (map §4) and `vfo_snap.h`.
@@ -101,13 +112,79 @@ enum SpectrumGestureModel {
         ticks >= 0 ? pow(1.25, Double(ticks)) : pow(0.8, Double(-ticks))
     }
 
-    /// What a press on the Main spectrum grabs, in controller ruling R1's priority order:
-    /// dB-scale zone, passband-edge handle, notch, then the CTUN pan strip and click-to-tune.
-    /// Only the notch and tune rungs exist yet.
+    /// Width of the passband edge hit area, centred on the edge.
+    nonisolated static let edgeHandleWidthPx = 9.0
+    /// The dB scale strip at the spectrum's right edge, and the strip at the top it leaves alone.
+    nonisolated static let dbZoneWidthPx = 50.0
+    nonisolated static let dbZoneTopInsetPx = 24.0
+
+    /// The passband edge under `x`, nearest first when the handles overlap (QML passband handles).
+    nonisolated static func edgeHit(x: Double, loX: Double, hiX: Double) -> PassbandEdge? {
+        let half = edgeHandleWidthPx / 2
+        let dLo = abs(x - loX), dHi = abs(x - hiX)
+        let lo = dLo <= half, hi = dHi <= half
+        if lo && hi { return dLo <= dHi ? .low : .high }
+        return lo ? .low : (hi ? .high : nil)
+    }
+
+    /// The dB scale zone under a press (QML `dbModeAt`): the right 50 px, below the top 24 px,
+    /// cut into thirds of the spectrum's height.
+    nonisolated static func dbZone(x: Double, y: Double, width: Double, height: Double) -> DbZone? {
+        guard width > 0, height > 0, x >= width - dbZoneWidthPx, y >= dbZoneTopInsetPx else { return nil }
+        let third = height / 3
+        if y < third { return .ceiling }
+        if y > 2 * third { return .floor }
+        return .both
+    }
+
+    /// The range after dragging the scale `dy` points down from where it began (QML dB drag).
+    /// Down lowers it; a drag of the full height moves it by its own span. The floor stays within
+    /// -150...-3 and the ceiling within floor + 3 ... 30.
+    nonisolated static func dbDrag(startFloor: Double, startCeiling: Double, dy: Double, height: Double,
+                                   zone: DbZone) -> (floor: Double, ceiling: Double) {
+        let delta = -dy * (startCeiling - startFloor) / max(1, height)
+        var floor = startFloor, ceiling = startCeiling
+        switch zone {
+        case .ceiling: ceiling += delta
+        case .floor: floor += delta
+        case .both: floor += delta; ceiling += delta
+        }
+        return clampedDbRange(floor: floor, ceiling: ceiling)
+    }
+
+    /// The engine's limits on the dB range: floor -150...-3, ceiling floor + 3 ... 30.
+    nonisolated static func clampedDbRange(floor: Double, ceiling: Double) -> (floor: Double, ceiling: Double) {
+        let f = max(-150, min(-3, floor))
+        return (f, max(f + 3, min(30, ceiling)))
+    }
+
+    /// `WdspEngine::bandwidthForModeEdge`: the filter width that puts a passband edge `off` Hz
+    /// from the dial. SSB and digital take the edge as the cutoff, CW centres on the pitch, every
+    /// other mode is symmetric about the dial. Whole Hz, 50...20000. `cwPitchHz` is the engine's
+    /// CW pitch (default 600).
+    nonisolated static func bandwidthForEdge(_ off: Double, mode: String, cwPitchHz: Int = 600) -> Int {
+        guard off.isFinite else { return 50 }
+        let bw: Double
+        switch mode {
+        case "USB", "DIGU", "LSB", "DIGL": bw = abs(off)
+        case "CWU": bw = 2 * abs(off - Double(cwPitchHz))
+        case "CWL": bw = 2 * abs(off + Double(cwPitchHz))
+        default: bw = 2 * abs(off)
+        }
+        return Int(min(max(bw + 0.5, 50), 20_000))
+    }
+
+    /// What a press on the spectrum grabs, in controller ruling R1's priority order: dB-scale
+    /// zone, passband-edge handle, notch, then the CTUN pan strip and click-to-tune.
+    /// `dbZoneEnabled` and `edges` are off for surfaces without them (the waterfall, the Sub stack).
     nonisolated static func hitTarget(x: Double, y: Double, notches: [NotchInfo], width: Double,
-                                      spanHz: Double, notchesEnabled: Bool) -> SpectrumHitTarget {
-        // TODO(M5a Task 4): 1. the dB-scale zone (right 50 px, below the top 24 px) and
-        // 2. the passband-edge handles are checked here, before the notch.
+                                      spanHz: Double, notchesEnabled: Bool, height: Double = 0,
+                                      dbZoneEnabled: Bool = false,
+                                      edges: (lo: Double, hi: Double)? = nil) -> SpectrumHitTarget {
+        if dbZoneEnabled, let zone = dbZone(x: x, y: y, width: width, height: height) {
+            return .dbScale(zone)
+        }
+        if let edges, let edge = edgeHit(x: x, loX: edges.lo, hiX: edges.hi) { return .edge(edge) }
         if notchesEnabled, let i = NotchModel.hitIndex(x: x, notches: notches, width: width, spanHz: spanHz) {
             return .notch(i)
         }
@@ -211,6 +288,93 @@ struct SpectrumGestureSession: Sendable {
             lastX = x
             return mode == .ctunPan ? .ctunPan(deltaHz: delta) : .grabVfo(deltaHz: delta)
         }
+    }
+}
+
+/// One press-drag-release on the dB scale. A press while auto is on first seeds the manual range
+/// from the range shown and turns auto off (a Prefs write puts the pair in the live RX or TX
+/// slot). Writes go out at most every 1/30 s and the release flushes the final value.
+struct SpectrumDbDrag: Sendable {
+    private let zone: DbZone
+    private let startY: Double
+    private let startFloor: Double
+    private let startCeiling: Double
+    private let seeds: [RadioCommand]
+    private var throttle = WriteThrottle<DbPair>(interval: SpectrumGestureModel.dragThrottle)
+    private var lastTime: TimeInterval = 0
+    private var sent: DbPair?
+
+    private struct DbPair: Equatable, Sendable { var floor: Double; var ceiling: Double }
+
+    nonisolated init(zone: DbZone, startY: Double, shownFloor: Double, shownCeiling: Double, auto: Bool) {
+        self.zone = zone
+        self.startY = startY
+        if auto {
+            startFloor = shownFloor.rounded()
+            startCeiling = shownCeiling.rounded()
+            seeds = [.setDbRange(floor: startFloor, ceiling: startCeiling), .setDbAuto(false)]
+        } else {
+            startFloor = shownFloor
+            startCeiling = shownCeiling
+            seeds = []
+        }
+    }
+
+    /// What the press itself sends: the seed and auto off, when auto was on.
+    nonisolated var beginCommands: [RadioCommand] { seeds }
+
+    private nonisolated func pair(atY y: Double, height: Double) -> DbPair {
+        let r = SpectrumGestureModel.dbDrag(startFloor: startFloor, startCeiling: startCeiling,
+                                            dy: y - startY, height: height, zone: zone)
+        return DbPair(floor: r.floor, ceiling: r.ceiling)
+    }
+
+    nonisolated mutating func moved(toY y: Double, height: Double, at time: TimeInterval) -> RadioCommand? {
+        lastTime = time
+        guard let p = throttle.offer(pair(atY: y, height: height), now: time) else { return nil }
+        sent = p
+        return .setDbRange(floor: p.floor, ceiling: p.ceiling)
+    }
+
+    /// The release: the range at the release point, unless it is already what was last sent.
+    nonisolated mutating func ended(atY y: Double, height: Double) -> RadioCommand? {
+        let p = pair(atY: y, height: height)
+        _ = throttle.flush()
+        guard p != sent else { return nil }
+        sent = p
+        return .setDbRange(floor: p.floor, ceiling: p.ceiling)
+    }
+}
+
+/// One press-drag-release on a passband edge handle. Offsets are from the display centre; the
+/// planner makes them dial-relative. Throttled to 1/30 s, flushed on release.
+struct SpectrumEdgeDrag: Sendable {
+    private let edge: PassbandEdge
+    private let width: Double
+    private let spanHz: Double
+    private var throttle = WriteThrottle<Double>(interval: SpectrumGestureModel.dragThrottle)
+    private var sent: Double?
+
+    nonisolated init(edge: PassbandEdge, width: Double, spanHz: Double) {
+        self.edge = edge
+        self.width = width
+        self.spanHz = spanHz
+    }
+
+    private nonisolated func offset(atX x: Double) -> Double { (x / max(1, width) - 0.5) * spanHz }
+
+    nonisolated mutating func moved(toX x: Double, at time: TimeInterval) -> RadioCommand? {
+        guard let off = throttle.offer(offset(atX: x), now: time) else { return nil }
+        sent = off
+        return .dragPassbandEdge(edge, offsetHz: off)
+    }
+
+    nonisolated mutating func ended(atX x: Double) -> RadioCommand? {
+        let off = offset(atX: x)
+        _ = throttle.flush()
+        guard off != sent else { return nil }
+        sent = off
+        return .dragPassbandEdge(edge, offsetHz: off)
     }
 }
 

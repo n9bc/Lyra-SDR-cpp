@@ -12,6 +12,9 @@ struct SpectrumOverlays: View {
     /// Room kept clear at the right end of the band-plan strip (for the "Sample" marker).
     var bandPlanTrailingInset: CGFloat = 0
 
+    /// Draws the grab handles on the passband edges (Main spectrum only).
+    var showsPassbandHandles = false
+
     /// Pane height; the VFO readout is dropped when it would not fit whole below the spot rows.
     var height: CGFloat = .infinity
 
@@ -112,6 +115,16 @@ struct SpectrumOverlays: View {
             if pbEnd > pbX {
                 Rectangle().fill(LyraDS.Palette.cyan.opacity(0.10))
                     .frame(width: pbEnd - pbX).offset(x: pbX, y: Self.bandPlanHeight)
+            }
+            if showsPassbandHandles {
+                ForEach(Array([pb.lowerBound, pb.upperBound].enumerated()), id: \.offset) { _, hz in
+                    let x = axis.x(for: hz)
+                    if x >= 0, x <= w {
+                        Rectangle().fill(LyraDS.Palette.cyan.opacity(0.55))
+                            .frame(width: 2).offset(x: x - 1, y: Self.bandPlanHeight)
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             if let sub = display.subOverlay { subOverlay(sub, width: w) }
             notchOverlay(width: w)

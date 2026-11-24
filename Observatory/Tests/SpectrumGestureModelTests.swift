@@ -134,6 +134,122 @@ final class SpectrumGestureModelTests: XCTestCase {
         XCTAssertEqual(M.dragThrottle, 1.0 / 30)
         XCTAssertEqual(M.ctunPanStripPx, 15)
     }
+
+    // MARK: - Passband edges and the dB scale (M5a Task 4)
+
+    func testBandwidthForEdgeMatchesEngine() {
+        // Expected values are `WdspEngine::bandwidthForModeEdge` worked by hand:
+        // int(bw + 0.5) clamped to 50...20000, with the CW pitch at 600 Hz.
+        let table: [(String, Double, Int)] = [
+            ("USB", 1500, 1500), ("USB", -1500, 1500), ("USB", 1500.4, 1500), ("USB", 1500.5, 1501),
+            ("USB", 10, 50), ("USB", 30_000, 20_000), ("LSB", -2400, 2400), ("DIGU", 2000, 2000),
+            ("DIGL", -2000, 2000),
+            ("CWU", 1000, 800), ("CWU", 0, 1200), ("CWU", -200, 1600), ("CWU", 600, 50),
+            ("CWL", -1000, 800), ("CWL", 1000, 3200), ("CWL", -600, 50),
+            ("AM", 3000, 6000), ("AM", -3000, 6000), ("AM", 10, 50), ("AM", 15_000, 20_000),
+            ("FM", 2.4, 50), ("DSB", 4000.3, 8001), ("DSB", 4000.2, 8000), ("SAM", 5, 50),
+        ]
+        for (mode, off, want) in table {
+            XCTAssertEqual(M.bandwidthForEdge(off, mode: mode), want, "\(mode) \(off)")
+        }
+        // The pitch is the engine's, not a constant.
+        XCTAssertEqual(M.bandwidthForEdge(1000, mode: "CWU", cwPitchHz: 700), 600)
+        XCTAssertEqual(M.bandwidthForEdge(.nan, mode: "USB"), 50)
+    }
+
+    func testEdgeHitIsNineWideAndNearestWins() {
+        XCTAssertEqual(M.edgeHit(x: 300, loX: 300, hiX: 500), .low)
+        XCTAssertEqual(M.edgeHit(x: 304.5, loX: 300, hiX: 500), .low)
+        XCTAssertNil(M.edgeHit(x: 304.6, loX: 300, hiX: 500))
+        XCTAssertEqual(M.edgeHit(x: 495.5, loX: 300, hiX: 500), .high)
+        XCTAssertNil(M.edgeHit(x: 400, loX: 300, hiX: 500))
+        // A passband narrower than a handle: the nearer edge wins.
+        XCTAssertEqual(M.edgeHit(x: 302, loX: 300, hiX: 304), .low)
+        XCTAssertEqual(M.edgeHit(x: 303, loX: 300, hiX: 304), .high)
+    }
+
+    func testDbZoneThirdsAndTopStrip() {
+        // Right 50 px of a 1000 x 300 spectrum; the top 24 px are reserved.
+        XCTAssertNil(M.dbZone(x: 949, y: 150, width: 1000, height: 300))
+        XCTAssertNil(M.dbZone(x: 980, y: 23, width: 1000, height: 300))
+        XCTAssertEqual(M.dbZone(x: 950, y: 24, width: 1000, height: 300), .ceiling)
+        XCTAssertEqual(M.dbZone(x: 980, y: 99, width: 1000, height: 300), .ceiling)
+        XCTAssertEqual(M.dbZone(x: 980, y: 150, width: 1000, height: 300), .both)
+        XCTAssertEqual(M.dbZone(x: 980, y: 200, width: 1000, height: 300), .both)
+        XCTAssertEqual(M.dbZone(x: 980, y: 201, width: 1000, height: 300), .floor)
+        XCTAssertNil(M.dbZone(x: 980, y: 150, width: 0, height: 300))
+    }
+
+    func testDbDragClamps() {
+        // dy down by a tenth of the height lowers by a tenth of the span (110 dB -> 11 dB).
+        var r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: 30, height: 300, zone: .both)
+        XCTAssertEqual(r.floor, -141, accuracy: 1e-9)
+        XCTAssertEqual(r.ceiling, -31, accuracy: 1e-9)
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: 30, height: 300, zone: .ceiling)
+        XCTAssertEqual(r.floor, -130)
+        XCTAssertEqual(r.ceiling, -31, accuracy: 1e-9)
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: 30, height: 300, zone: .floor)
+        XCTAssertEqual(r.floor, -141, accuracy: 1e-9)
+        XCTAssertEqual(r.ceiling, -20)
+        // The floor never rises above -3, nor falls below -150.
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: -3000, height: 300, zone: .floor)
+        XCTAssertEqual(r.floor, -3)
+        XCTAssertEqual(r.ceiling, 0)   // pushed up to floor + 3
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: 3000, height: 300, zone: .both)
+        XCTAssertEqual(r.floor, -150)
+        // The ceiling stays within floor + 3 ... 30.
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: -3000, height: 300, zone: .ceiling)
+        XCTAssertEqual(r.ceiling, 30)
+        r = M.dbDrag(startFloor: -130, startCeiling: -20, dy: 3000, height: 300, zone: .ceiling)
+        XCTAssertEqual(r.ceiling, -127)
+    }
+
+    func testDbDragSeedsFromAutoAndTurnsAutoOff() {
+        var d = SpectrumDbDrag(zone: .both, startY: 100, shownFloor: -121.6, shownCeiling: -33.4, auto: true)
+        XCTAssertEqual(d.beginCommands, [.setDbRange(floor: -122, ceiling: -33), .setDbAuto(false)])
+        // The drag builds on the rounded values the engine was given.
+        XCTAssertEqual(d.moved(toY: 100 + 30, height: 300, at: 0),
+                       .setDbRange(floor: -122 - 8.9, ceiling: -33 - 8.9))
+        let manual = SpectrumDbDrag(zone: .floor, startY: 100, shownFloor: -130, shownCeiling: -20, auto: false)
+        XCTAssertEqual(manual.beginCommands, [])
+    }
+
+    func testDbDragThrottlesAndFlushesOnRelease() {
+        var d = SpectrumDbDrag(zone: .ceiling, startY: 100, shownFloor: -130, shownCeiling: -20, auto: false)
+        XCTAssertNotNil(d.moved(toY: 110, height: 300, at: 0))
+        XCTAssertNil(d.moved(toY: 120, height: 300, at: 0.01))
+        XCTAssertNil(d.moved(toY: 130, height: 300, at: 0.02))
+        XCTAssertEqual(d.ended(atY: 130, height: 300), .setDbRange(floor: -130, ceiling: -20 - 11))
+        XCTAssertNil(d.ended(atY: 130, height: 300))
+    }
+
+    func testEdgeDragSendsOffsetsAndFlushes() {
+        var d = SpectrumEdgeDrag(edge: .high, width: 1000, spanHz: 96_000)
+        XCTAssertEqual(d.moved(toX: 625, at: 0), .dragPassbandEdge(.high, offsetHz: 12_000))
+        XCTAssertNil(d.moved(toX: 700, at: 0.01))
+        XCTAssertEqual(d.ended(atX: 750), .dragPassbandEdge(.high, offsetHz: 24_000))
+        XCTAssertNil(d.ended(atX: 750))
+    }
+
+    func testEdgeHandleBeatsClickToTune() {
+        // Controller ruling R1: dB zone, then edge handle, then notch, then tune.
+        let notch = [NotchInfo(offsetHz: 0, widthHz: 200, active: true)]
+        func hit(_ x: Double, _ y: Double, edges: (lo: Double, hi: Double)? = (500, 700)) -> SpectrumHitTarget {
+            M.hitTarget(x: x, y: y, notches: notch, width: 1000, spanHz: 96_000, notchesEnabled: true,
+                        height: 300, dbZoneEnabled: true, edges: edges)
+        }
+        XCTAssertEqual(hit(702, 100), .edge(.high))
+        XCTAssertEqual(hit(498, 100), .edge(.low))
+        XCTAssertEqual(hit(600, 100), .tune)
+        // An edge handle on top of a notch wins; so does the dB zone over an edge.
+        XCTAssertEqual(hit(500, 100), .edge(.low))
+        XCTAssertEqual(hit(975, 50, edges: (972, 700)), .dbScale(.ceiling))
+        XCTAssertEqual(hit(975, 10, edges: (972, 700)), .edge(.low))
+        // No edges (Sub stack, waterfall): the notch and tune rungs are as before.
+        XCTAssertEqual(hit(500, 100, edges: nil), .notch(0))
+        XCTAssertEqual(M.hitTarget(x: 975, y: 100, notches: [], width: 1000, spanHz: 96_000,
+                                   notchesEnabled: false), .tune)
+    }
 }
 
 final class SpectrumGestureContextTests: XCTestCase {

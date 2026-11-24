@@ -34,3 +34,5 @@ struct WriteThrottle<Value: Equatable> {
         return v
     }
 }
+
+extension WriteThrottle: Sendable where Value: Sendable {}

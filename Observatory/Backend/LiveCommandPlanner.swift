@@ -92,6 +92,13 @@ enum LiveCommandPlanner {
             return plan + [.setFocusedRx(2)]
         case .setZoom(let zoom):
             return [.setZoomPref(min(max(zoom.isNaN ? 1 : zoom, 1), 16))]
+        case .dragPassbandEdge(let edge, let offsetHz):
+            return passbandEdge(edge, offsetHz: offsetHz, e)
+        case .setDbRange(let floor, let ceiling):
+            guard floor.isFinite, ceiling.isFinite else { return [] }
+            let r = SpectrumGestureModel.clampedDbRange(floor: floor, ceiling: ceiling)
+            return [.setDbMinPref(r.floor), .setDbMaxPref(r.ceiling)]
+        case .setDbAuto(let on): return [.setDbAutoPref(on)]
 
         case .setWheelStep(let hz): return [.setScrollStepPref(hz)]
         case .setExactTuning(let on): return [.setRound100Pref(on)]
@@ -168,6 +175,24 @@ enum LiveCommandPlanner {
     // MARK: - Audio
 
     /// Clamps to the engine's range; NaN becomes the low end.
+    /// QML passband-edge drag: `off` is dial-relative, so the CTUN dial offset comes off. The inner
+    /// edge of an SSB or digital mode sets the low cutoff (0...500), any other edge the bandwidth.
+    private nonisolated static func passbandEdge(_ edge: PassbandEdge, offsetHz: Double,
+                                                 _ e: EngineState) -> [EngineCall] {
+        guard offsetHz.isFinite else { return [] }
+        let r = e.radio
+        let dialOff = r.ctuneEnabled ? Double(Int64(r.rx1Hz) - Int64(r.ctuneCenterHz)) : 0
+        let off = offsetHz - dialOff
+        let mode = e.filter.mode
+        let lsb = mode == "LSB" || mode == "DIGL"
+        if lsb || mode == "USB" || mode == "DIGU" {
+            let inner = lsb ? edge == .high : edge == .low
+            if inner { return [.setFilterLowPref(Int(min(max(abs(off).rounded(), 0), 500)))] }
+        }
+        let pitch = r.markerOffsetHz == 0 ? 600 : abs(r.markerOffsetHz)
+        return [.setRxBandwidthPref(SpectrumGestureModel.bandwidthForEdge(off, mode: mode, cwPitchHz: pitch))]
+    }
+
     private nonisolated static func clampAudio(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
         v.isNaN ? lo : min(max(v, lo), hi)
     }

@@ -469,6 +469,13 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (void)setCtuneCenterHz:(uint32_t)hz;
 // Prefs writes; the engine follows Prefs.zoom (bound in -attachHostWindow:).
 - (void)writeZoomPref:(double)zoom;
+// Prefs::setFilterLow (clamped 0...500 by Prefs) and Prefs::setRxBandwidth for the current mode.
+- (void)writeFilterLowPref:(NSInteger)hz;
+- (void)writeRxBandwidthPref:(NSInteger)hz;
+// Prefs::setDbMin / setDbMax / setDbAuto. Prefs writes the live RX or TX pair itself.
+- (void)writeDbMinPref:(double)db;
+- (void)writeDbMaxPref:(double)db;
+- (void)writeDbAutoPref:(BOOL)on;
 - (void)writeScrollStepPref:(NSInteger)hz;
 - (void)writeRound100Pref:(BOOL)on;
 // Off writes only peakEnabled, keeping the hold time for the next time on.

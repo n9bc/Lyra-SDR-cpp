@@ -882,6 +882,31 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     if (Prefs *pr = [self enginePrefs]) pr->setZoom(zoom);
 }
 
+- (void)writeFilterLowPref:(NSInteger)hz
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setFilterLow(static_cast<int>(hz));
+}
+
+- (void)writeRxBandwidthPref:(NSInteger)hz
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setRxBandwidth(static_cast<int>(hz));
+}
+
+- (void)writeDbMinPref:(double)db
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setDbMin(db);
+}
+
+- (void)writeDbMaxPref:(double)db
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setDbMax(db);
+}
+
+- (void)writeDbAutoPref:(BOOL)on
+{
+    if (Prefs *pr = [self enginePrefs]) pr->setDbAuto(on);
+}
+
 - (void)writeScrollStepPref:(NSInteger)hz
 {
     if (Prefs *pr = [self enginePrefs]) pr->setPanScrollStepHz(static_cast<int>(hz));

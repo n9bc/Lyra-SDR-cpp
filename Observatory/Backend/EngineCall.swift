@@ -31,6 +31,10 @@ enum EngineCall: Equatable, Sendable {
     case setDsp(DSPFunction, Bool)
     case setCtuneCenterHz(UInt32)
     case setZoomPref(Double)
+    /// `Prefs::setFilterLow` (0...500) and `Prefs::setRxBandwidth` (50...20000) for the current mode.
+    case setFilterLowPref(Int), setRxBandwidthPref(Int)
+    /// `Prefs::setDbMin` / `setDbMax` / `setDbAuto`; Prefs writes the live RX or TX pair.
+    case setDbMinPref(Double), setDbMaxPref(Double), setDbAutoPref(Bool)
     case setScrollStepPref(Int)
     case setRound100Pref(Bool)
     /// `secs`: 0 off, -1 hold, -2 live, above 0 seconds (the engine's `peakHoldSecs`).

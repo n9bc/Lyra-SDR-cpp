@@ -36,6 +36,13 @@ enum RadioCommand: Equatable, Sendable {
     /// Middle or option click: focus Main when Sub is focused, else put VFO B (and Sub) here and focus Sub.
     case spectrumFocusToggle(hz: Int64)
     case setZoom(Double)
+    /// Dragging a passband edge to `offsetHz` from the display centre. The planner makes it
+    /// dial-relative and writes the inner SSB/DIG edge to the filter's low cutoff, any other to
+    /// the bandwidth.
+    case dragPassbandEdge(PassbandEdge, offsetHz: Double)
+    /// The panadapter's manual dB range (the engine writes the live RX or TX pair).
+    case setDbRange(floor: Double, ceiling: Double)
+    case setDbAuto(Bool)
 
     // Display toolbar settings. The engine owns them; the snapshot reports them back.
     /// The wheel step in Hz (Prefs `scrollStepHz`).
