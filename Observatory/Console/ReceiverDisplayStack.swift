@@ -98,7 +98,7 @@ struct ReceiverDisplayStack: View {
                 SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
                                      signals: display.spots.map(\.frequencyHz) + [receiver.frequencyHz])
                 Rectangle().fill(LyraDS.Palette.yellow.opacity(0.7))
-                    .frame(width: 1).offset(x: axis.x(for: receiver.frequencyHz))
+                    .frame(width: 1).offset(x: axis.x(for: display.mainCarrierHz))
             }
             .overlay(alignment: .topLeading) {
                 if let label, spectrumHeight <= 0 { tag(label) }

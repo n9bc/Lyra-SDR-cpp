@@ -81,7 +81,24 @@ final class MockRadioBackend: RadioBackend {
             }
             if function == .sq { s.dsp.squelchOn = on }
         }
+        refreshOverlays(&s)
         return s
+    }
+
+    /// Keeps the sample's VFO lines and passbands on the receivers' frequencies, modes and filters.
+    private nonisolated static func refreshOverlays(_ s: inout RadioSnapshot) {
+        func passband(_ r: ReceiverSnapshot) -> ClosedRange<Int64> {
+            let f = r.frequencyHz, bw = Int64(r.filterHz)
+            switch r.mode {
+            case .lsb, .cwl, .digl: return (f - bw)...f
+            case .am, .sam, .dsb, .fm: return (f - bw / 2)...(f + bw / 2)
+            case .usb, .cwu, .digu: return f...(f + bw)
+            }
+        }
+        s.display.mainCarrierHz = s.main.frequencyHz
+        s.display.mainPassband = passband(s.main)
+        s.display.subCarrierHz = s.sub.frequencyHz
+        s.display.subPassband = passband(s.sub)
     }
 
     /// Where each band's button tunes the mock.

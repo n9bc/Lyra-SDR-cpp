@@ -159,6 +159,28 @@ struct Spot: Identifiable, Equatable, Sendable {
     var kind: SpotKind
 }
 
+enum PeakHoldSetting: Equatable, Sendable { case off, hold, live, seconds(Double) }
+
+enum WaterfallColors: Equatable, Sendable {
+    /// 768 bytes of RGB, 256 entries.
+    case lut([UInt8])
+    case custom(baseRGB: UInt32)
+}
+
+struct DbRange: Equatable, Sendable {
+    var floor: Double
+    var ceiling: Double
+    var auto: Bool
+}
+
+/// The Sub receiver drawn on the Main spectrum, used while the engine has no RX2 spectrum.
+struct SubOverlay: Equatable, Sendable {
+    var carrierHz: Int64
+    var passband: ClosedRange<Int64>
+    /// Set when the carrier lies outside the Main span.
+    var offSpan: OffSpanCue?
+}
+
 struct DisplaySnapshot: Equatable, Sendable {
     var spanLowHz: Int64
     var spanHighHz: Int64
@@ -167,11 +189,36 @@ struct DisplaySnapshot: Equatable, Sendable {
     var subSpanHighHz: Int64
     var zoom: Double
     var wheelStepHz: Int
-    var peakHold: String
-    var averaging: Bool
+    var peakHold: PeakHoldSetting
     var bandPlanVisible: Bool
     var bandPlan: [BandPlanSegment]
     var spots: [Spot]
+    /// The VFO line, from the engine's DDC centre, marker offset and CTUN dial offset.
+    var mainCarrierHz: Int64
+    var mainPassband: ClosedRange<Int64>
+    /// The Sub carrier and passband on the Sub span (the Sub stack's own VFO line).
+    var subCarrierHz: Int64
+    var subPassband: ClosedRange<Int64>
+    /// Sub drawn on the Main spectrum; nil when there is a Sub spectrum or no analyzer.
+    var subOverlay: SubOverlay?
+    var subSpectrumAvailable: Bool
+    var dbRange: DbRange
+    var waterfallRange: DbRange
+    var waterfallRowsPerSecond: Int
+    var waterfallColors: WaterfallColors
+    var peakDecayDbps: Double
+    var smoothing: Int
+    var exactTuning: Bool
+    var stickyWheel: Bool
+    var spotsVisible: Bool
+    /// The span is the TX analyzer's.
+    var txAxis: Bool
+
+    var averaging: Bool { smoothing > 0 }
+
+    /// A Sub stack exists only while Sub is on and the engine has a Sub spectrum to fill it;
+    /// without one, Sub is drawn on the Main spectrum.
+    func showsSubStack(subEnabled: Bool) -> Bool { subEnabled && subSpectrumAvailable }
 
     /// The display as seen by one receiver. Sub gets its own span, and the band plan and
     /// spots (which are for the Main receiver's band) are dropped.
@@ -180,6 +227,9 @@ struct DisplaySnapshot: Equatable, Sendable {
         var v = self
         v.spanLowHz = subSpanLowHz
         v.spanHighHz = subSpanHighHz
+        v.mainCarrierHz = subCarrierHz
+        v.mainPassband = subPassband
+        v.subOverlay = nil
         v.bandPlan = []
         v.spots = []
         return v
@@ -324,7 +374,7 @@ extension RadioSnapshot {
         display: DisplaySnapshot(
             spanLowHz: 7_060_000, spanHighHz: 7_200_000,
             subSpanLowHz: 14_125_000, subSpanHighHz: 14_265_000, zoom: 2.0, wheelStepHz: 500,
-            peakHold: "2 s", averaging: true, bandPlanVisible: true,
+            peakHold: .seconds(2), bandPlanVisible: true,
             bandPlan: [
                 BandPlanSegment(lowHz: 7_060_000, highHz: 7_074_000, label: "Digital", kind: .digital),
                 BandPlanSegment(lowHz: 7_074_000, highHz: 7_080_000, label: "FT8", kind: .ft8),
@@ -340,7 +390,16 @@ extension RadioSnapshot {
                 Spot(call: "MM7CEH", frequencyHz: 7_163_000, kind: .dx),
                 Spot(call: "G0AKH/P", frequencyHz: 7_176_000, kind: .dx),
                 Spot(call: "S52DC", frequencyHz: 7_188_000, kind: .dx),
-            ]),
+            ],
+            // Main 7.1285 MHz LSB 2.7 kHz; Sub 14.195 MHz USB 2.7 kHz.
+            mainCarrierHz: 7_128_500, mainPassband: 7_125_800...7_128_500,
+            subCarrierHz: 14_195_000, subPassband: 14_195_000...14_197_700,
+            subOverlay: nil, subSpectrumAvailable: true,
+            dbRange: DbRange(floor: -130, ceiling: -20, auto: false),
+            waterfallRange: DbRange(floor: -120, ceiling: -20, auto: false),
+            waterfallRowsPerSecond: 20, waterfallColors: .custom(baseRGB: 0x30B0FF),
+            peakDecayDbps: 10, smoothing: 3, exactTuning: false, stickyWheel: true,
+            spotsVisible: true, txAxis: false),
         propagation: PropagationSnapshot(
             sfi: 142, aIndex: 8, kIndex: 2,
             bands: [

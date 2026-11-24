@@ -121,16 +121,17 @@ struct DisplayAreaView: View {
 
     var body: some View {
         GeometryReader { geo in
+            let subStack = display.showsSubStack(subEnabled: sub.enabled)
             let lay = DisplayAreaLayout.compute(height: geo.size.height, layout: store.layout,
-                                                subVisible: sub.enabled, terrainExpanded: store.terrainExpanded)
+                                                subVisible: subStack, terrainExpanded: store.terrainExpanded)
             VStack(spacing: 0) {
                 DisplayToolbarView(display: display, capabilities: capabilities)
-                ReceiverDisplayStack(display: display, receiver: main, label: sub.enabled ? "MAIN" : nil,
+                ReceiverDisplayStack(display: display, receiver: main, label: subStack ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,
                                      sampleSpectrum: sampleSpectrum, sampleWaterfall: sampleWaterfall)
                     .frame(height: lay.spectrum + lay.waterfall + DisplayAreaLayout.scaleHeight)
-                if sub.enabled {
+                if subStack {
                     ReceiverDisplayStack(display: display.view(for: .sub), receiver: sub, label: "SUB",
                                          labelHighlighted: focused == .sub,
                                          spectrumHeight: lay.subSpectrum, waterfallHeight: lay.subWaterfall,

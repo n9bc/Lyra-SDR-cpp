@@ -46,12 +46,42 @@ enum LiveSnapshotMapper {
             splitTx: r.splitEnabled, isTxVFO: r.splitEnabled,
             quickToggles: quickToggles(e, includeAutoAndBin: false))
 
-        let mainCentre = r.ctuneEnabled
-            ? Int64(r.ctuneCenterHz) : Int64(r.rx1Hz) + (r.ritEnabled ? Int64(r.ritHz) : 0)
-        let mainSpan = Int64(e.meters.spanHz)
+        let d = e.display
+        let rx1 = Int64(r.rx1Hz), ctuneCentre = Int64(r.ctuneCenterHz)
+        let mainCentre = SpectrumGeometry.mainCentreHz(
+            rx1Hz: rx1, ritEnabled: r.ritEnabled, ritHz: Int64(r.ritHz),
+            ctuneEnabled: r.ctuneEnabled, ctuneCentreHz: ctuneCentre)
+        let dialOffset = SpectrumGeometry.ctunDialOffsetHz(
+            rx1Hz: rx1, ctuneEnabled: r.ctuneEnabled, ctuneCentreHz: ctuneCentre)
+        let mainSpan = Int64(d.spanHz)
+        let spanLow = mainCentre - mainSpan / 2, spanHigh = mainCentre + mainSpan / 2
         let subCentre = Int64(r.rx2Hz)
-        let subSpan = Int64(e.meters.iqRateHz)
-        let zoom = e.meters.spanHz > 0 ? Double(e.meters.iqRateHz) / Double(e.meters.spanHz) : 1
+        let subSpan = Int64(d.iqRateHz)
+        let zoom = d.spanHz > 0 && d.iqRateHz > 0 ? Double(d.iqRateHz) / Double(d.spanHz) : d.zoom
+        let mainCarrier = SpectrumGeometry.mainCarrierHz(
+            centre: mainCentre, markerOffsetHz: Int64(r.markerOffsetHz), ctunDialOffsetHz: dialOffset)
+        let subCarrier = SpectrumGeometry.subCarrierHz(
+            rx2Hz: subCentre, markerOffsetHzRx2: Int64(r.markerOffsetHzRx2))
+        // Passband edges are meaningful only with an analyzer running; without one the passband
+        // collapses onto the carrier (an empty-equivalent range) and no Sub overlay is drawn.
+        let analyzer = d.spanHz > 0
+        let mainPassband = analyzer
+            ? SpectrumGeometry.passband(
+                centre: mainCentre, ctunDialOffsetHz: dialOffset,
+                lowOffsetHz: wholeNumber(d.passbandLowHz).map(Int64.init) ?? 0,
+                highOffsetHz: wholeNumber(d.passbandHighHz).map(Int64.init) ?? 0)
+            : mainCarrier...mainCarrier
+        let subPassband = analyzer
+            ? SpectrumGeometry.passband(
+                centre: subCentre, ctunDialOffsetHz: 0,
+                lowOffsetHz: wholeNumber(d.passbandLowHzRx2).map(Int64.init) ?? 0,
+                highOffsetHz: wholeNumber(d.passbandHighHzRx2).map(Int64.init) ?? 0)
+            : subCarrier...subCarrier
+        let subOverlay: SubOverlay? = subOn && !d.rx2SpectrumAvailable && analyzer
+            ? SubOverlay(carrierHz: subCarrier, passband: subPassband,
+                         offSpan: SpectrumGeometry.offSpanCue(hz: subCarrier, lowHz: spanLow,
+                                                              highHz: spanHigh))
+            : nil
 
         let visibleBands = e.bands.filter { e.link.isP2Rig || $0.name != "6m" }
         // A band click recalls into the focused receiver, so its carrier (what its panel title
@@ -98,10 +128,21 @@ enum LiveSnapshotMapper {
                 bwLocked: e.filter.bwLocked,
                 txBandwidthLabel: FilterPresets.label(e.filter.txBandwidthHz)),
             display: DisplaySnapshot(
-                spanLowHz: mainCentre - mainSpan / 2, spanHighHz: mainCentre + mainSpan / 2,
+                spanLowHz: spanLow, spanHighHz: spanHigh,
                 subSpanLowHz: subCentre - subSpan / 2, subSpanHighHz: subCentre + subSpan / 2,
                 zoom: zoom, wheelStepHz: focused == .sub ? e.filter.stepHzRx2 : e.filter.stepHz,
-                peakHold: "—", averaging: false, bandPlanVisible: false, bandPlan: [], spots: []),
+                peakHold: peakHold(d), bandPlanVisible: false, bandPlan: [], spots: [],
+                mainCarrierHz: mainCarrier, mainPassband: mainPassband,
+                subCarrierHz: subCarrier, subPassband: subPassband,
+                subOverlay: subOverlay, subSpectrumAvailable: d.rx2SpectrumAvailable,
+                dbRange: DbRange(floor: d.dbMin, ceiling: d.dbMax, auto: d.dbAuto),
+                waterfallRange: DbRange(floor: d.waterfallDbMin, ceiling: d.waterfallDbMax,
+                                        auto: d.waterfallDbAuto),
+                waterfallRowsPerSecond: d.waterfallSpeed,
+                waterfallColors: d.waterfallLut.isEmpty
+                    ? .custom(baseRGB: d.waterfallBaseRGB) : .lut(d.waterfallLut),
+                peakDecayDbps: d.peakDecayDbps, smoothing: d.smoothing, exactTuning: d.round100,
+                stickyWheel: d.stickyWheel, spotsVisible: d.showSpots, txAxis: d.txOwnsAnalyzer),
             propagation: sample.propagation,
             transmit: TransmitSnapshot(
                 state: txState, drivePct: Int((Double(t.driveRaw) * 100 / 255).rounded()),
@@ -141,6 +182,14 @@ enum LiveSnapshotMapper {
     }
 
     // MARK: - Helpers
+
+    /// Prefs' peak-hold encoding: seconds 0 off, -1 infinite hold, -2 live, above 0 hold then decay.
+    private nonisolated static func peakHold(_ d: EngineState.Display) -> PeakHoldSetting {
+        guard d.peakEnabled else { return .off }
+        if d.peakHoldSecs == -1 { return .hold }
+        if d.peakHoldSecs == -2 { return .live }
+        return d.peakHoldSecs > 0 ? .seconds(d.peakHoldSecs) : .off
+    }
 
     private nonisolated static func finite(_ v: Double) -> Double? { v.isFinite ? v : nil }
 

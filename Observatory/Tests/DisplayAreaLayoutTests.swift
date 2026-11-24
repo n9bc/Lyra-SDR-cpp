@@ -30,4 +30,15 @@ final class DisplayAreaLayoutTests: XCTestCase {
     func testShorterThanFixedIsAllZero() {
         XCTAssertEqual(sum(DisplayAreaLayout.compute(height: 40, subVisible: true)), 0)
     }
+    func testSubWithoutSpectrumKeepsOneStack() {
+        var d = RadioSnapshot.sample.display
+        d.subSpectrumAvailable = false
+        XCTAssertFalse(d.showsSubStack(subEnabled: true))
+        let l = DisplayAreaLayout.compute(height: 646, subVisible: d.showsSubStack(subEnabled: true))
+        XCTAssertEqual(l.subSpectrum, 0); XCTAssertEqual(l.subWaterfall, 0)
+        XCTAssertEqual(l, DisplayAreaLayout.compute(height: 646))
+        d.subSpectrumAvailable = true
+        XCTAssertTrue(d.showsSubStack(subEnabled: true))
+        XCTAssertFalse(d.showsSubStack(subEnabled: false))
+    }
 }

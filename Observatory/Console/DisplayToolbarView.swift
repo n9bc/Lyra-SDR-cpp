@@ -14,6 +14,16 @@ struct DisplayToolbarView: View {
     nonisolated static let wheelOptions = ["50 Hz", "100 Hz", "500 Hz", "1 kHz"]
     nonisolated static let peakOptions = ["Off", "0.5 s", "2 s", "5 s"]
 
+    /// The chip's text for the engine's peak-hold setting.
+    nonisolated static func peakLabel(_ p: PeakHoldSetting) -> String {
+        switch p {
+        case .off: "Off"
+        case .hold: "Hold"
+        case .live: "Live"
+        case .seconds(let s): String(format: "%g s", s)
+        }
+    }
+
     init(display: DisplaySnapshot, capabilities: BackendCapabilities) {
         self.display = display
         self.capabilities = capabilities
@@ -52,8 +62,8 @@ struct DisplayToolbarView: View {
                             status: status)
             ConsoleChip(title: "Exact", help: "Exact tuning", status: status)
             if !compact { label("Peak") }
-            ConsoleMenuChip(label: display.peakHold, help: "Peak hold", options: Self.peakOptions,
-                            selection: .constant(display.peakHold), status: status)
+            ConsoleMenuChip(label: Self.peakLabel(display.peakHold), help: "Peak hold", options: Self.peakOptions,
+                            selection: .constant(Self.peakLabel(display.peakHold)), status: status)
             ConsoleChip(title: "Avg", help: "Spectrum averaging", kind: display.averaging ? .on : .plain,
                         status: status)
             // Spots are drawn whenever the snapshot carries any.

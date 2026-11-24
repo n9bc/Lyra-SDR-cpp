@@ -49,7 +49,10 @@ extension LyraEngineFacade: EngineFacade {
         let m = consoleMeters()
         e.meters = EngineState.Meters(
             sMeterDbm: m.sMeterDbm, sMeterDbmRx2: m.sMeterDbmRx2, snrDb: m.snrDb,
-            spanHz: m.spanHz, iqRateHz: m.iqRateHz, sampleRateHz: m.sampleRateHz)
+            sampleRateHz: m.sampleRateHz)
+        // The rest of Display is read live in M4 Task 7; the span and IQ rate move here as is.
+        e.display.spanHz = m.spanHz
+        e.display.iqRateHz = m.iqRateHz
 
         e.bands = amateurBands().compactMap(Self.band(from:))
 

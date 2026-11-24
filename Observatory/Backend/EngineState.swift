@@ -93,9 +93,47 @@ struct EngineState: Equatable, Sendable {
         var sMeterDbm = -140.0
         var sMeterDbmRx2 = -140.0
         var snrDb = Double.nan
-        var spanHz = 0
-        var iqRateHz = 0
         var sampleRateHz = 0
+    }
+
+    /// Display and Prefs-backed spectrum settings. Defaults are the Prefs defaults (map §2, §7);
+    /// the facade reads them live in M4 Task 7.
+    struct Display: Equatable, Sendable {
+        /// Main span in Hz; 0 while no analyzer is running.
+        var spanHz = 0
+        /// The IQ rate, which is the Sub receiver's span.
+        var iqRateHz = 0
+        var zoom = 1.0
+        var txOwnsAnalyzer = false
+        /// Passband edges, signed offsets from the DDC centre (map §6.4).
+        var passbandLowHz = 0.0
+        var passbandHighHz = 0.0
+        var passbandLowHzRx2 = 0.0
+        var passbandHighHzRx2 = 0.0
+        var rx2SpectrumAvailable = false
+        var dbMin = -130.0
+        var dbMax = -20.0
+        var dbAuto = false
+        var waterfallDbMin = -120.0
+        var waterfallDbMax = -20.0
+        var waterfallDbAuto = false
+        var waterfallSpeed = 20
+        var waterfallPalette = 0
+        /// 768 bytes of RGB, or empty for the custom ramp.
+        var waterfallLut: [UInt8] = []
+        var waterfallBaseRGB: UInt32 = 0x30B0FF
+        var peakEnabled = false
+        /// 0 off, -1 hold, -2 live, above 0 seconds.
+        var peakHoldSecs = 0.0
+        var peakDecayDbps = 10.0
+        var smoothing = 0
+        var scrollStepHz = 1000
+        var round100 = false
+        var stickyWheel = true
+        var bandPlanSegments = true
+        var bandPlanLandmarks = true
+        var bandPlanBeacons = false
+        var showSpots = true
     }
 
     struct Telemetry: Equatable, Sendable {
@@ -149,6 +187,7 @@ struct EngineState: Equatable, Sendable {
     var frontEnd = FrontEnd()
     var audio = Audio()
     var meters = Meters()
+    var display = Display()
     var bands: [EngineBand] = []
     var telemetry = Telemetry()
     var transmit = Transmit()

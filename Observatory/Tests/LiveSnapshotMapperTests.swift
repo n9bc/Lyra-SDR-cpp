@@ -79,7 +79,7 @@ final class LiveSnapshotMapperTests: XCTestCase {
         e.radio.rx1Hz = 7_100_000
         e.radio.ritEnabled = true
         e.radio.ritHz = 120
-        e.meters.spanHz = 96_000
+        e.display.spanHz = 96_000
         var s = map(e)
         XCTAssertEqual(s.display.spanLowHz, 7_052_120)
         XCTAssertEqual(s.display.spanHighHz, 7_148_120)
@@ -89,7 +89,7 @@ final class LiveSnapshotMapperTests: XCTestCase {
         XCTAssertEqual(s.display.spanLowHz, 7_072_000)
         XCTAssertTrue(s.session.ctunEnabled)
         e.radio.rx2Hz = 14_200_000
-        e.meters.iqRateHz = 192_000
+        e.display.iqRateHz = 192_000
         s = map(e)
         XCTAssertEqual(s.display.subSpanLowHz, 14_104_000)
         XCTAssertEqual(s.display.subSpanHighHz, 14_296_000)
@@ -361,5 +361,106 @@ final class LiveSnapshotMapperTests: XCTestCase {
         let s = map(e)
         XCTAssertEqual(s.main.bandName, "40")
         XCTAssertEqual(s.band.selectedBand, "40")
+    }
+
+    // MARK: - Display geometry
+
+    func testSubOverlayOnMainWithoutRx2Spectrum() {
+        var e = EngineState.idle
+        e.radio.rx1Hz = 7_100_000; e.radio.rx2Hz = 7_110_000; e.radio.markerOffsetHzRx2 = 700
+        e.radio.subEnabled = true
+        e.display.spanHz = 96_000
+        e.display.passbandLowHzRx2 = 450; e.display.passbandHighHzRx2 = 950
+        let d = map(e).display
+        let sub = try! XCTUnwrap(d.subOverlay)
+        XCTAssertEqual(sub.carrierHz, 7_110_700)
+        XCTAssertEqual(sub.passband, 7_110_450...7_110_950)
+        XCTAssertNil(sub.offSpan)
+        XCTAssertFalse(d.showsSubStack(subEnabled: true))
+    }
+
+    func testSubStackOnlyWithLiveSubSpectrum() {
+        var e = EngineState.idle
+        e.radio.subEnabled = true; e.display.spanHz = 96_000; e.display.rx2SpectrumAvailable = true
+        let d = map(e).display
+        XCTAssertNil(d.subOverlay)
+        XCTAssertTrue(d.showsSubStack(subEnabled: true))
+        XCTAssertFalse(d.showsSubStack(subEnabled: false))
+    }
+
+    func testSubOffSpanCue() {
+        var e = EngineState.idle
+        e.radio.rx1Hz = 7_100_000; e.radio.rx2Hz = 7_000_000
+        e.radio.subEnabled = true; e.display.spanHz = 96_000
+        XCTAssertEqual(map(e).display.subOverlay?.offSpan, .left)
+        e.radio.rx2Hz = 7_200_000
+        XCTAssertEqual(map(e).display.subOverlay?.offSpan, .right)
+        e.radio.rx2Hz = 7_110_000
+        XCTAssertNil(map(e).display.subOverlay?.offSpan)
+        XCTAssertNotNil(map(e).display.subOverlay)
+    }
+
+    func testAxisFollowsEngineSpanInTx() {
+        var e = EngineState.idle
+        e.radio.rx1Hz = 7_100_000; e.display.spanHz = 96_000; e.display.txOwnsAnalyzer = true
+        let d = map(e).display
+        XCTAssertEqual(d.spanHighHz - d.spanLowHz, 96_000)
+        XCTAssertTrue(d.txAxis)
+    }
+
+    func testDbRangesComeFromPrefs() {
+        var e = EngineState.idle
+        e.display.dbMin = -110; e.display.dbMax = -10; e.display.dbAuto = true
+        e.display.waterfallDbMin = -100; e.display.waterfallDbMax = -30; e.display.waterfallDbAuto = true
+        let d = map(e).display
+        XCTAssertEqual(d.dbRange, DbRange(floor: -110, ceiling: -10, auto: true))
+        XCTAssertEqual(d.waterfallRange, DbRange(floor: -100, ceiling: -30, auto: true))
+    }
+
+    func testPeakHoldSettingFromPrefs() {
+        var e = EngineState.idle
+        func peak(_ on: Bool, _ secs: Double) -> PeakHoldSetting {
+            e.display.peakEnabled = on; e.display.peakHoldSecs = secs
+            return map(e).display.peakHold
+        }
+        XCTAssertEqual(peak(false, 5), .off)
+        XCTAssertEqual(peak(true, -1), .hold)
+        XCTAssertEqual(peak(true, -2), .live)
+        XCTAssertEqual(peak(true, 2), .seconds(2))
+    }
+
+    func testNoAnalyzerHidesOverlays() {
+        var e = EngineState.idle
+        e.radio.rx1Hz = 7_030_000; e.radio.markerOffsetHz = 700
+        e.radio.rx2Hz = 14_200_000; e.radio.subEnabled = true
+        let d = map(e).display   // spanHz is 0
+        XCTAssertNil(d.subOverlay)
+        XCTAssertEqual(d.mainCarrierHz, 7_030_700)
+        XCTAssertEqual(d.mainPassband, 7_030_700...7_030_700)
+    }
+
+    func testCtunPassbandAndCarrier() {
+        var e = EngineState.idle
+        e.radio.rx1Hz = 7_030_000; e.radio.ctuneEnabled = true; e.radio.ctuneCenterHz = 7_028_000
+        e.radio.markerOffsetHz = 700
+        e.display.spanHz = 96_000; e.display.passbandLowHz = 450; e.display.passbandHighHz = 950
+        let d = map(e).display
+        XCTAssertEqual(d.mainCarrierHz, 7_030_700)
+        XCTAssertEqual(d.mainPassband, 7_030_450...7_030_950)
+    }
+
+    func testPassbandWithNonFiniteEdgesDoesNotTrap() {
+        var e = EngineState.idle
+        e.display.spanHz = 96_000; e.display.passbandLowHz = .nan; e.display.passbandHighHz = .infinity
+        _ = map(e)
+    }
+
+    func testWaterfallColorsAndAveraging() {
+        var e = EngineState.idle
+        XCTAssertEqual(map(e).display.waterfallColors, .custom(baseRGB: 0x30B0FF))
+        XCTAssertFalse(map(e).display.averaging)
+        e.display.waterfallLut = [UInt8](repeating: 7, count: 768); e.display.smoothing = 4
+        XCTAssertEqual(map(e).display.waterfallColors, .lut([UInt8](repeating: 7, count: 768)))
+        XCTAssertTrue(map(e).display.averaging)
     }
 }

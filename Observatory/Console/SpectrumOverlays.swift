@@ -16,6 +16,7 @@ struct SpectrumOverlays: View {
     nonisolated static let vfoLabelY: CGFloat = 56
     nonisolated static let vfoLabelHeight: CGFloat = 20
     nonisolated static func showsVFOLabel(height: CGFloat) -> Bool { height >= vfoLabelY + vfoLabelHeight }
+    nonisolated static let subCueY: CGFloat = 80
     nonisolated static let spotRowY: [CGFloat] = [26, 44]
 
     nonisolated static func color(for kind: BandPlanKind) -> Color {
@@ -33,17 +34,6 @@ struct SpectrumOverlays: View {
         case .dx: LyraDS.Palette.cyan
         case .watering: LyraDS.Palette.yellow
         case .own: LyraDS.Palette.magenta
-        }
-    }
-
-    /// Passband edges in Hz: below the VFO for lower-sideband modes, above for the rest,
-    /// centred for the symmetric modes.
-    nonisolated static func passband(main: ReceiverSnapshot) -> ClosedRange<Int64> {
-        let f = main.frequencyHz, bw = Int64(main.filterHz)
-        switch main.mode {
-        case .lsb, .cwl, .digl: return (f - bw)...f
-        case .am, .sam, .dsb, .fm: return (f - bw / 2)...(f + bw / 2)
-        case .usb, .cwu, .digu: return f...(f + bw)
         }
     }
 
@@ -66,12 +56,38 @@ struct SpectrumOverlays: View {
         return "\(s) \(main.mode.rawValue)"
     }
 
+    /// Sub drawn on the Main spectrum (no RX2 spectrum): a green carrier line and passband box,
+    /// or an edge cue when the carrier is outside the span.
+    @ViewBuilder
+    private func subOverlay(_ sub: SubOverlay, width w: CGFloat) -> some View {
+        let green = LyraDS.Palette.green
+        if let cue = sub.offSpan {
+            Text(cue == .left ? "\u{25C0} SUB" : "SUB \u{25B6}")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(green).lineLimit(1).fixedSize()
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(RoundedRectangle(cornerRadius: 4).fill(LyraDS.Palette.void.opacity(0.85)))
+                .frame(width: w, alignment: cue == .left ? .leading : .trailing)
+                .offset(y: Self.subCueY)
+                .accessibilityLabel(cue == .left ? "Sub receiver is below the span" : "Sub receiver is above the span")
+        } else {
+            let x0 = max(axis.x(for: sub.passband.lowerBound), 0)
+            let x1 = min(axis.x(for: sub.passband.upperBound), w)
+            if x1 > x0 {
+                Rectangle().fill(green.opacity(0.12))
+                    .frame(width: x1 - x0).offset(x: x0, y: Self.bandPlanHeight)
+            }
+            Rectangle().fill(green)
+                .frame(width: 1.5).offset(x: axis.x(for: sub.carrierHz) - 0.75, y: Self.bandPlanHeight)
+        }
+    }
+
     var body: some View {
         let w = axis.width
-        let pb = Self.passband(main: main)
+        let pb = display.mainPassband
         let pbX = max(axis.x(for: pb.lowerBound), 0)
         let pbEnd = min(axis.x(for: pb.upperBound), w)
-        let vfoX = axis.x(for: main.frequencyHz)
+        let vfoX = axis.x(for: display.mainCarrierHz)
         let visible = display.spots.filter { axis.contains($0.frequencyHz) }
         let rows = Self.spotRows(visible.map { ($0.call, axis.x(for: $0.frequencyHz)) })
         ZStack(alignment: .topLeading) {
@@ -79,6 +95,7 @@ struct SpectrumOverlays: View {
                 Rectangle().fill(LyraDS.Palette.cyan.opacity(0.10))
                     .frame(width: pbEnd - pbX).offset(x: pbX, y: Self.bandPlanHeight)
             }
+            if let sub = display.subOverlay { subOverlay(sub, width: w) }
             if display.bandPlanVisible {
                 ForEach(Array(display.bandPlan.enumerated()), id: \.offset) { _, seg in
                     let x0 = max(axis.x(for: seg.lowHz), 0)
