@@ -32,6 +32,13 @@ final class MetalContext {
 /// Implemented by GPU renderers hosted in a `LyraMetalView`.
 @MainActor
 protocol LyraMetalRenderer: AnyObject {
+    /// Called once when the hosting MTKView is made, before its first draw: a renderer that needs
+    /// MSAA or a depth buffer sets them here. The default does nothing.
+    func configure(_ view: MTKView)
     func draw(in view: MTKView, context: MetalContext)
     func drawableSizeWillChange(_ size: CGSize)
+}
+
+extension LyraMetalRenderer {
+    func configure(_ view: MTKView) {}
 }

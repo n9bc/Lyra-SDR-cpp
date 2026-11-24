@@ -3,16 +3,13 @@ import CoreGraphics
 @testable import Observatory
 
 final class SampleImageryTests: XCTestCase {
-    func testTerrainDeterministicAndInBounds() {
-        let size = CGSize(width: 940, height: 230)
-        let a = SampleImagery.terrainRidges(rows: 30, points: 201, size: size)
-        XCTAssertEqual(a, SampleImagery.terrainRidges(rows: 30, points: 201, size: size))
+    func testTerrainGridDeterministicAndFinite() {
+        let a = SampleImagery.terrainGrid()
+        XCTAssertEqual(a, SampleImagery.terrainGrid())
         XCTAssertEqual(a.count, 30)
-        for ridge in a {
-            for p in ridge {
-                XCTAssertTrue((0...size.width).contains(p.x))
-                XCTAssertTrue((-1...size.height).contains(p.y))
-            }
+        for row in a {
+            XCTAssertEqual(row.count, 201)
+            XCTAssertTrue(row.allSatisfy { $0.isFinite && $0 <= 0 })
         }
     }
 

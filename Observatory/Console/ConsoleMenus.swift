@@ -6,7 +6,6 @@ enum ConsoleMenuAction: Hashable {
     case toggleSub
     case layout(DisplayLayout)
     case toggleTerrain
-    case terrainView(TerrainView)
     case toggleConnection
 
     /// The menu shortcut, if any. ⌘1/⌘2 focus a receiver, ⌥⌘1–3 pick a layout in
@@ -19,7 +18,7 @@ enum ConsoleMenuAction: Hashable {
             (String((DisplayLayout.allCases.firstIndex(of: layout) ?? 0) + 1), [.command, .option])
         case .toggleTerrain: ("t", [.command, .option])
         case .toggleConnection: ("k", [.command])
-        case .toggleSub, .terrainView: nil
+        case .toggleSub: nil
         }
     }
 }
@@ -29,13 +28,11 @@ struct ConsoleMenuState {
     let snapshot: RadioSnapshot
     let layout: DisplayLayout
     let terrainExpanded: Bool
-    let terrainView: TerrainView
 
-    init(snapshot: RadioSnapshot, layout: DisplayLayout, terrainExpanded: Bool, terrainView: TerrainView) {
+    init(snapshot: RadioSnapshot, layout: DisplayLayout, terrainExpanded: Bool) {
         self.snapshot = snapshot
         self.layout = layout
         self.terrainExpanded = terrainExpanded
-        self.terrainView = terrainView
     }
 
     /// Only focusing Sub is ever unavailable: there is nothing to focus while it is off.
@@ -50,7 +47,6 @@ struct ConsoleMenuState {
         case .toggleSub: snapshot.sub.enabled
         case .layout(let l): layout == l
         case .toggleTerrain: false
-        case .terrainView(let v): terrainView == v
         case .toggleConnection: false
         }
     }
@@ -62,7 +58,6 @@ struct ConsoleMenuState {
         case .toggleSub: "Sub Receiver"
         case .layout(let l): l.title
         case .toggleTerrain: terrainExpanded ? "Hide Audio Terrain" : "Show Audio Terrain"
-        case .terrainView(let v): v.rawValue
         case .toggleConnection: snapshot.connection.phase.powerCommand == .connect ? "Connect" : "Disconnect"
         }
     }
@@ -108,7 +103,7 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
 
     private var state: ConsoleMenuState {
         ConsoleMenuState(snapshot: backend.snapshot, layout: display.layout,
-                         terrainExpanded: display.terrainExpanded, terrainView: display.terrainView)
+                         terrainExpanded: display.terrainExpanded)
     }
 
     func perform(_ action: ConsoleMenuAction) {
@@ -117,7 +112,6 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         case .toggleSub: backend.send(.setSubEnabled(!backend.snapshot.sub.enabled))
         case .layout(let l): display.layout = l
         case .toggleTerrain: display.terrainExpanded.toggle()
-        case .terrainView(let v): display.terrainView = v
         case .toggleConnection: backend.send(backend.snapshot.connection.phase.powerCommand)
         }
     }
@@ -262,13 +256,6 @@ final class ConsoleShell: NSObject, NSMenuItemValidation {
         for layout in DisplayLayout.allCases { menu.addItem(item(.layout(layout))) }
         menu.addItem(.separator())
         menu.addItem(item(.toggleTerrain))
-
-        let terrain = NSMenu(title: "Audio Terrain View")
-        for view in TerrainView.allCases { terrain.addItem(item(.terrainView(view))) }
-        let terrainItem = NSMenuItem(title: "Audio Terrain View", action: nil, keyEquivalent: "")
-        terrainItem.submenu = terrain
-        terrainItem.setAccessibilityLabel("Audio Terrain View")
-        menu.addItem(terrainItem)
         return menu
     }
 

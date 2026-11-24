@@ -154,13 +154,4 @@ final class TerrainFeedTests: XCTestCase {
         let peak = row.enumerated().max { $0.element < $1.element }!.offset
         XCTAssertEqual(peak, 67, accuracy: 2)
     }
-
-    func testRidgesPlaceTheOldestRowAtTheBack() {
-        let quiet = [Float](repeating: -200, count: 201)
-        let loud = [Float](repeating: -30, count: 201)
-        let ridges = TerrainRendering.ridges(grid: [loud, quiet], size: CGSize(width: 400, height: 100), rows: 30)
-        XCTAssertEqual(ridges.count, 2)
-        // A young grid fills from the front; the newest (loud) ridge is last and rises higher (smaller y).
-        XCTAssertLessThan(ridges[1][0].y, ridges[0][0].y)
-    }
 }

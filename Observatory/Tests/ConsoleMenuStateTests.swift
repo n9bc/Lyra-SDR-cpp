@@ -4,7 +4,7 @@ import AppKit
 
 @MainActor final class ConsoleMenuStateTests: XCTestCase {
     func state(_ s: RadioSnapshot = .sample, expanded: Bool = true) -> ConsoleMenuState {
-        ConsoleMenuState(snapshot: s, layout: .spectrumOnly, terrainExpanded: expanded, terrainView: .both)
+        ConsoleMenuState(snapshot: s, layout: .spectrumOnly, terrainExpanded: expanded)
     }
     func testFocusSubDisabledWhileSubOff() {
         XCTAssertFalse(state().isEnabled(.focus(.sub))); XCTAssertTrue(state().isEnabled(.focus(.main)))
@@ -15,7 +15,7 @@ import AppKit
         let m = state()
         XCTAssertTrue(m.isChecked(.focus(.main))); XCTAssertFalse(m.isChecked(.toggleSub))
         XCTAssertTrue(m.isChecked(.layout(.spectrumOnly))); XCTAssertFalse(m.isChecked(.layout(.waterfallOnly)))
-        XCTAssertTrue(m.isChecked(.terrainView(.both)))
+        XCTAssertFalse(m.isChecked(.toggleTerrain))
     }
     func testTerrainTitleFlips() {
         XCTAssertEqual(state(expanded: true).title(.toggleTerrain), "Hide Audio Terrain")
@@ -23,7 +23,7 @@ import AppKit
     }
     func testShortcutsAreUniqueAndAvoidSystemOnes() {
         let all: [ConsoleMenuAction] = [.focus(.main), .focus(.sub), .toggleSub, .toggleTerrain, .toggleConnection]
-            + DisplayLayout.allCases.map { .layout($0) } + TerrainView.allCases.map { .terrainView($0) }
+            + DisplayLayout.allCases.map { .layout($0) }
         let keys = all.compactMap { $0.keyEquivalent }.map { "\($0.modifiers.rawValue)-\($0.key)" }
         XCTAssertEqual(Set(keys).count, keys.count)
         let cmd = NSEvent.ModifierFlags.command.rawValue
@@ -62,6 +62,5 @@ import AppKit
         shell.perform(.layout(.waterfallOnly)); XCTAssertEqual(display.layout, .waterfallOnly)
         let expanded = display.terrainExpanded
         shell.perform(.toggleTerrain); XCTAssertEqual(display.terrainExpanded, !expanded)
-        shell.perform(.terrainView(.waterfall)); XCTAssertEqual(display.terrainView, .waterfall)
     }
 }

@@ -40,6 +40,7 @@ private struct MetalHost: NSViewRepresentable {
         view.enableSetNeedsDisplay = false
         view.isPaused = false
         view.preferredFramesPerSecond = LyraMetalView.targetFPS(lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+        renderer.configure(view)
         view.delegate = context.coordinator
         return view
     }

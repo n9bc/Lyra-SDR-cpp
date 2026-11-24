@@ -53,10 +53,6 @@ enum BandPlanKind: Equatable, Sendable { case cw, digital, cwDigital, phone, fm,
 
 enum SpotKind: Equatable, Sendable { case dx, watering, beacon, own }
 
-enum TerrainView: String, CaseIterable, Sendable {
-    case threeD = "3D", waterfall = "Waterfall", both = "Both"
-}
-
 enum PropagationQuality: String, Equatable, Sendable {
     case good = "Good", fair = "Fair", poor = "Poor"
 }

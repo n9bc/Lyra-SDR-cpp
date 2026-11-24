@@ -28,17 +28,20 @@ struct SampleWaterfallImage: View {
     }
 }
 
-/// "Audio terrain" header and body: ridges (3D), a sample waterfall of the audio band, or both.
+/// "Audio terrain" header and body: the received audio as one smooth, lit Metal surface
+/// (`TerrainRenderer`), or the same surface drawn from the sample grid.
 struct AudioTerrainView: View {
     @Bindable var store: DisplayStore
     let focused: ReceiverID
     /// Shows the "Sample" marker in the terrain's top-right corner (see `DisplayAreaView.showsSampleMarker`).
     let sample: Bool
-    /// The live feed; nil (or `sample`) draws the sample imagery.
+    /// The live feed; nil (or `sample`) draws the sample grid.
     var feed: TerrainFeed?
 
+    @State private var renderer: TerrainRenderer?
+    @State private var rendererFailed = false
+
     nonisolated static let rows = 30
-    nonisolated static let points = 201
     nonisolated static let audioLabels = ["0", "500", "1 k", "1.5 k", "2 k", "2.5 k", "3 k Hz"]
 
     init(store: DisplayStore, focused: ReceiverID, sample: Bool, feed: TerrainFeed? = nil) {
@@ -54,7 +57,7 @@ struct AudioTerrainView: View {
         "received audio \u{00B7} MAIN \u{00B7} 0\u{2013}3 kHz \u{00B7} last 4 s"
     }
 
-    /// Draws the engine's audio rather than the sample imagery.
+    /// Draws the engine's audio rather than the sample grid.
     private var liveFeed: TerrainFeed? { sample ? nil : feed }
 
     private var chevron: some View {
@@ -82,20 +85,11 @@ struct AudioTerrainView: View {
             }
             Spacer(minLength: 6)
             if store.terrainExpanded {
-                LyraSegmentedControl("Terrain view", selection: $store.terrainView, options: TerrainView.allCases,
-                                     title: { $0.rawValue }, accent: LyraDS.Palette.cyan)
-                Text("Mix").font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
-                Slider(value: $store.terrainMix, in: 0...1).controlSize(.small).tint(LyraDS.Palette.purple).frame(width: 80)
-                    .accessibilityLabel("Combined opacity").help("Combined opacity")
                 ConsoleChip(title: "Orbit", help: "Orbit the terrain view")
             }
         }
         .padding(.horizontal, 10)
         .frame(height: DisplayAreaLayout.terrainHeaderHeight)
-    }
-
-    private var audioAxis: (CGFloat) -> FrequencyAxis {
-        { FrequencyAxis(lowHz: 0, highHz: 3000, width: $0) }
     }
 
     var body: some View {
@@ -108,17 +102,7 @@ struct AudioTerrainView: View {
             if store.terrainExpanded {
                 ZStack(alignment: .bottom) {
                     LyraDS.Palette.void
-                    if store.terrainView != .threeD {
-                        Group {
-                            if let liveFeed {
-                                LiveTerrainWaterfall(grid: liveFeed.grid)
-                            } else {
-                                SampleWaterfallImage(axis: audioAxis, signals: [520, 1500, 2450], traceWidthHz: 70)
-                            }
-                        }
-                        .opacity(store.terrainView == .both ? store.terrainMix : 1)
-                    }
-                    if store.terrainView != .waterfall { ridgeCanvas }
+                    surface
                     HStack {
                         ForEach(Self.audioLabels, id: \.self) { l in
                             Text(l).font(.system(size: 11, design: .monospaced))
@@ -147,74 +131,40 @@ struct AudioTerrainView: View {
         .overlay(alignment: .top) { Rectangle().fill(LyraDS.Palette.border).frame(height: 1) }
     }
 
-    private var ridgeCanvas: some View {
-        GeometryReader { geo in
-            // Pure and static: re-evaluated only when the size or the view state changes, never per frame.
-            let ridges = liveFeed.map { TerrainRendering.ridges(grid: $0.grid, size: geo.size, rows: Self.rows) }
-                ?? SampleImagery.terrainRidges(rows: Self.rows, points: Self.points, size: geo.size)
-            Canvas { ctx, size in
-                let n = ridges.count
-                for (i, ridge) in ridges.enumerated() where ridge.count > 1 {
-                    let t = n > 1 ? Double(i) / Double(n - 1) : 1
-                    let base = SampleImagery.ridgeBase(row: i, rows: n, height: size.height)
-                    let amp = SampleImagery.ridgeAmpScale(row: i, rows: n)
-                    var line = Path()
-                    line.move(to: ridge[0])
-                    for p in ridge.dropFirst() { line.addLine(to: p) }
-                    var fill = line
-                    fill.addLine(to: CGPoint(x: ridge[ridge.count - 1].x, y: size.height))
-                    fill.addLine(to: CGPoint(x: ridge[0].x, y: size.height))
-                    fill.closeSubpath()
-                    ctx.fill(fill, with: .color(LyraDS.Palette.void.opacity(0.93)))
-                    let top = max(base - 0.54 * size.height * amp, 0)
-                    ctx.opacity = 0.25 + 0.75 * t
-                    ctx.stroke(line,
-                               with: .linearGradient(LyraDS.Palette.spectrumGradient,
-                                                     startPoint: CGPoint(x: 0, y: min(base, size.height)),
-                                                     endPoint: CGPoint(x: 0, y: top)),
-                               lineWidth: 1.3)
-                    ctx.opacity = 1
-                }
+    /// The Metal surface. Its MTKView exists only while the terrain is expanded; the renderer
+    /// pauses it while the feed is not live and wakes it when the feed goes live or the grid changes.
+    private var surface: some View {
+        ZStack {
+            Color.clear
+            if let renderer {
+                LyraMetalView(renderer: renderer)
+            } else if rendererFailed {
+                Text("Metal unavailable").font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
             }
         }
         .accessibilityHidden(true)
-    }
-}
-
-/// The live terrain as a waterfall: one pixel row per STFT row, newest at the top, scaled to fill.
-struct LiveTerrainWaterfall: View {
-    let grid: [[Float]]
-
-    var body: some View {
-        GeometryReader { geo in
-            if let image = Self.image(grid: grid) {
-                Image(decorative: image, scale: 1)
-                    .resizable().interpolation(.medium)
-                    .frame(width: geo.size.width, height: geo.size.height)
-            }
-        }
-        .clipped()
-        .accessibilityHidden(true)
+        .onAppear(perform: makeRendererIfNeeded)
+        .onChange(of: liveFeed.map(ObjectIdentifier.init)) { applySource() }
+        .onChange(of: liveFeed?.isLive) { renderer?.wake() }
+        .onChange(of: liveFeed?.grid.count) { renderer?.wake() }
     }
 
-    nonisolated static func image(grid: [[Float]]) -> CGImage? {
-        guard let width = grid.first?.count, width > 0 else { return nil }
-        let height = grid.count
-        var buf = [UInt8](repeating: 255, count: width * height * 4)
-        for (y, row) in grid.enumerated() where row.count == width {
-            for x in 0..<width {
-                let c = LyraDS.Palette.sample(LyraDS.Palette.spectrumStops, at: TerrainRendering.level(row[x]))
-                let o = (y * width + x) * 4
-                buf[o] = UInt8(min(max(c.x, 0), 1) * 255 + 0.5)
-                buf[o + 1] = UInt8(min(max(c.y, 0), 1) * 255 + 0.5)
-                buf[o + 2] = UInt8(min(max(c.z, 0), 1) * 255 + 0.5)
-            }
+    private func makeRendererIfNeeded() {
+        guard renderer == nil, !rendererFailed else { return }
+        guard let ctx = MetalContext.shared, let r = try? TerrainRenderer(context: ctx) else {
+            rendererFailed = true
+            return
         }
-        guard let provider = CGDataProvider(data: Data(buf) as CFData),
-              let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
-        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: width * 4, space: space,
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        renderer = r
+        applySource()
+    }
+
+    private func applySource() {
+        guard let renderer else { return }
+        if let liveFeed {
+            renderer.setSource(.feed(liveFeed))
+        } else {
+            renderer.setSource(.sample(SampleImagery.terrainGrid()))
+        }
     }
 }

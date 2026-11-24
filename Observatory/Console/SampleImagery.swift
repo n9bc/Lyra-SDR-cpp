@@ -12,38 +12,20 @@ enum SampleImagery {
         return s - s.rounded(.down)
     }
 
-    /// Baseline y of terrain row `row` of `rows` (row 0 = back).
-    nonisolated static func ridgeBase(row: Int, rows: Int, height: CGFloat) -> CGFloat {
-        let t = rows > 1 ? Double(row) / Double(rows - 1) : 1
-        return 30 + CGFloat(pow(t, 1.2) * 0.79) * height
-    }
-
-    /// Amplitude scale for a row (front rows are taller).
-    nonisolated static func ridgeAmpScale(row: Int, rows: Int) -> CGFloat {
-        let t = rows > 1 ? Double(row) / Double(rows - 1) : 1
-        return CGFloat(0.40 + 0.60 * t)
-    }
-
-    /// Voice-like audio terrain: `rows` ridges of `points` points each, row 0 = back.
-    /// Amplitude scales with `size`: the tallest peak is at most 0.5 * height * ampScale.
-    /// Every x is clamped into 0...width and every y into 0...height.
-    nonisolated static func terrainRidges(rows: Int, points: Int, size: CGSize) -> [[CGPoint]] {
+    /// Voice-like audio terrain in the live feed's shape: `rows` rows (newest first) of `points`
+    /// dBFS values over 0-3 kHz, with a steady 700 Hz tone. It goes through the same renderer as
+    /// the feed. Deterministic.
+    nonisolated static func terrainGrid(rows: Int = TerrainHistory.rows, points: Int = 201) -> [[Float]] {
         guard rows > 0, points > 1 else { return [] }
-        var out: [[CGPoint]] = []
+        var out: [[Float]] = []
         out.reserveCapacity(rows)
         for i in 0..<rows {
-            let t = rows > 1 ? Double(i) / Double(rows - 1) : 1
-            let base = Double(ridgeBase(row: i, rows: rows, height: size.height))
-            let ws = 0.70 + 0.30 * t
-            let amp = Double(ridgeAmpScale(row: i, rows: rows))
             let f0 = 128 + 26 * sin(Double(i) * 0.41)
             var syl = pow(abs(sin(Double(i) * 0.52 + 0.4)), 0.6)
             if i % 11 == 7 { syl *= 0.15 }
-            var ridge: [CGPoint] = []
-            ridge.reserveCapacity(points)
+            var row = [Float](repeating: 0, count: points)
             for q in 0..<points {
-                let u = Double(q) / Double(points - 1)
-                let hz = u * 3000
+                let hz = Double(q) / Double(points - 1) * 3000
                 var a = 0.03 + 0.05 * rnd(Double(i) * 577 + Double(q) * 3.7)
                 let env = exp(-pow((hz - 520) / 320, 2))
                     + 0.65 * exp(-pow((hz - 1500) / 420, 2))
@@ -55,14 +37,14 @@ enum SampleImagery {
                 }
                 let gate = hz < 120 || hz > 2850 ? 0.1 : 1.0
                 a += syl * env * harm * gate * (0.75 + 0.25 * rnd(Double(i) * 13 + Double(q)))
-                let peak = min(a, 1.1) / 1.1 * 0.5 * Double(size.height) * amp
-                let x = Double(size.width) / 2 + (u - 0.5) * Double(size.width) * ws
-                let y = base - peak
-                ridge.append(CGPoint(
-                    x: min(max(x, 0), Double(size.width)),
-                    y: min(max(y, 0), Double(size.height))))
+                // Voice: 20 log10 of the mockup's amplitude, about -55 (noise) to -25 dBFS (peaks).
+                var db = 20 * log10(max(a, 1e-4)) - 25
+                // The tone: -12 dBFS at 700 Hz with a Hann-like skirt of a few points.
+                let toneDb = -12 - 3 * pow((hz - 700) / 15, 2)
+                db = max(db, toneDb)
+                row[q] = Float(db)
             }
-            out.append(ridge)
+            out.append(row)
         }
         return out
     }
