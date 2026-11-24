@@ -290,10 +290,9 @@ Prefs::Prefs(QObject *parent) : QObject(parent) {
         s.value(kWfIdIntervalMin, 0).toInt(), 0, 20);       // #175
     // wfIdEnabled_ is NOT loaded — non-persistent, OFF every session (safety).
     dbAuto_     = s.value(kDbAuto, false).toBool();
-    traceMode_  = std::clamp(s.value(kMode, 1).toInt(), 0, 1);
+    traceMode_  = std::clamp(s.value(kMode, 0).toInt(), 0, 1);
     traceColor_ = s.value(kTrace, QStringLiteral("#5ec8ff")).toString();
-    palette_    = std::max(0, s.value(kPal, lyra::palettes::names().indexOf(
-                                          QStringLiteral("Observatory"))).toInt());
+    palette_    = std::max(0, s.value(kPal, 0).toInt());
     strengthColor_ = s.value(kStr, QStringLiteral("#ff9b30")).toString();
     fillEnabled_ = s.value(kFill, true).toBool();
     fillColor_   = s.value(kFillCol, QStringLiteral("#5ec8ff")).toString();
