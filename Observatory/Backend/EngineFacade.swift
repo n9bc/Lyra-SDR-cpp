@@ -28,6 +28,11 @@ struct EngineSpot: Equatable, Sendable {
     var mode: String
 }
 
+extension EngineFacade {
+    /// The whole state, display included.
+    func readState() -> EngineState { readState(includingDisplay: true) }
+}
+
 /// What the engine draws on the frequency axis for one centre and span.
 struct EngineOverlays: Equatable, Sendable {
     var segments: [EngineSegment] = []
@@ -37,7 +42,10 @@ struct EngineOverlays: Equatable, Sendable {
 
 @MainActor
 protocol EngineFacade: AnyObject {
-    func readState() -> EngineState
+    /// The engine's state. With `includingDisplay` false the display read (which copies the
+    /// waterfall palette) is skipped and `display` is left at its defaults: the caller keeps the
+    /// display it already holds, for changes that cannot have moved it (meters only).
+    func readState(includingDisplay: Bool) -> EngineState
     /// Band-plan segments, landmarks and spots in the window `centreHz` +/- `spanHz` / 2. It is
     /// allocation-heavy, so callers re-read only when the window or a display flag changes.
     func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays

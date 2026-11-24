@@ -116,14 +116,18 @@ final class LiveRadioBackend: RadioBackend {
 
     private func engineChanged(_ change: EngineChange) {
         let t = now()
-        state = facade.readState()
+        let metersOnly = change.subtracting(.meters).isEmpty
+        // Meter ticks (up to 25 Hz) cannot move the display; keep the one already held.
+        var fresh = facade.readState(includingDisplay: !metersOnly)
+        if metersOnly { fresh.display = state.display }
+        state = fresh
         if state.display.smoothing > 0 { lastSmoothing = state.display.smoothing }
         feedTracker(at: t)
         updateCapabilities()
         // Meter ticks never re-read; any other change re-reads only when the key moved or the
         // engine said the overlays changed.
-        if !change.subtracting(.meters).isEmpty { refreshOverlays(force: change.contains(.overlays)) }
-        if change.subtracting(.meters).isEmpty {
+        if !metersOnly { refreshOverlays(force: change.contains(.overlays)) }
+        if metersOnly {
             // Meters only: at most one apply per interval; `tick` applies the deferred one.
             if t.timeIntervalSince(lastApply) < Self.meterInterval {
                 meterPending = true

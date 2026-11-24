@@ -67,6 +67,9 @@ QMetaObject::Connection sConsoleScanFound;
 QMetaObject::Connection sConsoleScanDone;
 constexpr int kRadioLayerRetryMs = 250;
 constexpr int kRadioLayerRetries = 80;  // 20 s
+// SpotStore::changed fires per spot during a cluster burst; each overlay change
+// makes the console re-query and rebuild the overlays.  Coalesce to about 4 Hz.
+constexpr int kSpotOverlayCoalesceMs = 250;
 
 void dropConsoleScan()
 {
@@ -348,9 +351,19 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 
     // The host's spot bank (fed by the cluster, SpotHole and TCI) and band
     // plan: the overlays re-read when either changes.
+    // Spot changes are coalesced: the first one arms a single-shot timer and the
+    // rest until it fires are folded into that one notification (main thread).
     if (SpotStore *spots = host->spotStore()) {
+        auto pending = std::make_shared<bool>(false);
         [self addEngineConnection:QObject::connect(
-            spots, &SpotStore::changed, spots, [fire]() { fire(LyraEngineChangeOverlays); })];
+            spots, &SpotStore::changed, spots, [spots, pending, fire]() {
+                if (*pending) return;
+                *pending = true;
+                QTimer::singleShot(kSpotOverlayCoalesceMs, spots, [pending, fire]() {
+                    *pending = false;
+                    fire(LyraEngineChangeOverlays);
+                });
+            })];
     }
     if (BandPlan *plan = host->bandPlan()) {
         [self addEngineConnection:QObject::connect(

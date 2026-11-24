@@ -18,7 +18,14 @@ final class FakeEngineFacade: EngineFacade {
     private(set) var overlayReads: [(centreHz: Int64, spanHz: Int64)] = []
     private(set) var activatedSpots: [String] = []
 
-    func readState() -> EngineState { state }
+    /// `includingDisplay` of every state read, in order.
+    private(set) var stateReads: [Bool] = []
+    func readState(includingDisplay: Bool) -> EngineState {
+        stateReads.append(includingDisplay)
+        var s = state
+        if !includingDisplay { s.display = EngineState.Display() }
+        return s
+    }
     func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays {
         overlayReads.append((centreHz, spanHz))
         return overlays
@@ -184,6 +191,22 @@ final class LiveRadioBackendTests: XCTestCase {
         advance(8)
         backend.tick()
         XCTAssertEqual(backend.snapshot.connection.phase, .error("No radio answered"))
+    }
+
+    /// The display read copies the palette and builds names: skip it when only meters moved
+    /// (final review, CPU-a), and keep the display already held.
+    func testMeterOnlyChangeSkipsTheDisplayRead() {
+        facade.state.display.spanHz = 96_000
+        facade.state.display.smoothing = 7
+        let backend = make()
+        XCTAssertEqual(facade.stateReads.last, true)
+        facade.state.meters.sMeterDbm = -90
+        facade.fire(.meters)
+        XCTAssertEqual(facade.stateReads.last, false)
+        XCTAssertEqual(backend.snapshot.display.spanHighHz - backend.snapshot.display.spanLowHz, 96_000)
+        XCTAssertEqual(backend.snapshot.display.smoothing, 7)
+        facade.fire([.meters, .dsp])
+        XCTAssertEqual(facade.stateReads.last, true)
     }
 
     func testMeterUpdatesAreCoalesced() {

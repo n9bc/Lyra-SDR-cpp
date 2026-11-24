@@ -5,7 +5,7 @@
 import Foundation
 
 extension LyraEngineFacade: EngineFacade {
-    func readState() -> EngineState {
+    func readState(includingDisplay: Bool) -> EngineState {
         var e = EngineState()
 
         let r = consoleRadio()
@@ -50,7 +50,7 @@ extension LyraEngineFacade: EngineFacade {
         e.meters = EngineState.Meters(
             sMeterDbm: m.sMeterDbm, sMeterDbmRx2: m.sMeterDbmRx2, snrDb: m.snrDb,
             sampleRateHz: m.sampleRateHz)
-        e.display = Self.display(from: consoleDisplay())
+        if includingDisplay { e.display = Self.display(from: consoleDisplay()) }
 
         e.bands = amateurBands().compactMap(Self.band(from:))
 
