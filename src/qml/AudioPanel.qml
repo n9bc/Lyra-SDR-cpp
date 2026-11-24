@@ -26,6 +26,8 @@ import QtQuick.Layouts
 Rectangle {
     id: root
     readonly property bool compact: Qt.platform.os === "osx"
+    // Single monospace family for all readouts (font.family takes one name).
+    readonly property string monoFamily: Qt.platform.os === "osx" ? "Menlo" : "Consolas"
     implicitHeight: compact ? 100 : 118
     implicitWidth:  compact ? 720 : 860
     color: LyraDS.palette.surface
@@ -125,7 +127,7 @@ Rectangle {
             Label {
                 text: (!FrontEnd.p2Active && FrontEnd.value > 0 ? "+" : "")
                       + FrontEnd.value + qsTr(" dB")
-                color: root.cText; font.family: "Menlo, Consolas, monospace"; Layout.preferredWidth: 48
+                color: root.cText; font.family: root.monoFamily; Layout.preferredWidth: 48
             }
             ConsoleChip {
                 id: autoBtn
@@ -135,7 +137,7 @@ Rectangle {
                 enabled: FrontEnd.autoAvailable
                 visible: true
                 onToggled: FrontEnd.setAutoEnabled(checked)
-                                implicitWidth: 46; height: 24
+                implicitWidth: 46; height: 24
                 kind: checked ? "warn" : "plain"
                 LyraHoverHelp {
                     title: FrontEnd.p2Active ? qsTr("Step") : qsTr("Auto")
@@ -182,7 +184,7 @@ Rectangle {
                     visible: FrontEnd.autoEnabled
                     text: qsTr("A-ATT")
                     color: root.cOn
-                    font.family: "Menlo, Consolas, monospace"
+                    font.family: root.monoFamily
                     font.pixelSize: 12
                 }
 
@@ -236,7 +238,7 @@ Rectangle {
                 onMoved: WdspEngine.setAfGainDb(value)
             }
             Label { text: "+" + Math.round(WdspEngine.afGainDb) + qsTr(" dB")
-                    color: root.cText; font.family: "Menlo, Consolas, monospace"
+                    color: root.cText; font.family: root.monoFamily
                     Layout.preferredWidth: 44 }
 
             Item { width: 10 }
@@ -272,7 +274,7 @@ Rectangle {
                 text: WdspEngine.volume <= 0.0
                       ? qsTr("-∞ dB")
                       : Math.round(WdspEngine.volumeDb) + qsTr(" dB")
-                color: root.cText; font.family: "Menlo, Consolas, monospace"
+                color: root.cText; font.family: root.monoFamily
                 Layout.preferredWidth: 44
             }
             ConsoleChip {
@@ -281,7 +283,7 @@ Rectangle {
                 checkable: true
                 checked: WdspEngine.muted
                 onToggled: WdspEngine.setMuted(checked)
-                                implicitWidth: 66; height: 24
+                implicitWidth: 66; height: 24
                 kind: checked ? "hot" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MUTE")
@@ -318,7 +320,7 @@ Rectangle {
                 text: WdspEngine.volumeRx2 <= 0.0
                       ? qsTr("-∞ dB")
                       : Math.round(WdspEngine.volumeDbRx2) + qsTr(" dB")
-                color: root.cText; font.family: "Menlo, Consolas, monospace"
+                color: root.cText; font.family: root.monoFamily
                 Layout.preferredWidth: 44
             }
             ConsoleChip {
@@ -327,7 +329,7 @@ Rectangle {
                 checkable: true
                 checked: WdspEngine.mutedRx2
                 onToggled: WdspEngine.setMutedRx2(checked)
-                                implicitWidth: 66; height: 24
+                implicitWidth: 66; height: 24
                 kind: checked ? "hot" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MUTE2")
@@ -369,7 +371,7 @@ Rectangle {
                 checkable: true
                 checked: WdspEngine.monEnabled
                 onToggled: WdspEngine.setMonEnabled(checked)
-                                implicitWidth: 60; height: 24
+                implicitWidth: 60; height: 24
                 kind: checked ? "on" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MON TX")
@@ -399,7 +401,7 @@ Rectangle {
                       ? qsTr("-∞ dB")
                       : Math.round(20 * Math.log(WdspEngine.monVolume) / Math.LN10) + qsTr(" dB")
                 color: WdspEngine.monEnabled ? root.cText : root.cDim
-                font.family: "Menlo, Consolas, monospace"; Layout.preferredWidth: 48
+                font.family: root.monoFamily; Layout.preferredWidth: 48
             }
 
             Item { Layout.fillWidth: true }
@@ -412,7 +414,7 @@ Rectangle {
             ConsoleChip {
                 id: outBtn
                 text: qsTr("Out")
-                                implicitWidth: 46; height: 24
+                implicitWidth: 46; height: 24
                 onClicked: outPopup.open()
                 LyraHoverHelp {
                     title: qsTr("Out")
@@ -567,7 +569,7 @@ Rectangle {
                       : WdspEngine.notches.length + qsTr(" notches")
                 color: WdspEngine.notches.length > 0 ? root.cText : root.cDim
                 opacity: WdspEngine.notches.length > 0 ? 0.9 : 0.6
-                font.family: "Menlo, Consolas, monospace"; font.pixelSize: 10
+                font.family: root.monoFamily; font.pixelSize: 10
                 Layout.preferredWidth: root.compact ? 64 : 80
             }
 
@@ -609,19 +611,19 @@ Rectangle {
                             }
                     }
                     Label { text: WdspEngine.agcMode.toUpperCase()
-                            color: root.cAccent; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                            color: root.cAccent; font.family: root.monoFamily; font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
                             width: 38 }
                     Label { text: qsTr("thr"); color: root.cMuted; font.pixelSize: 9
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: Math.round(WdspEngine.agcThreshDb) + qsTr(" dBFS")
-                            color: root.cText; font.family: "Menlo, Consolas, monospace"
+                            color: root.cText; font.family: root.monoFamily
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: qsTr("gain"); color: root.cMuted; font.pixelSize: 9
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: WdspEngine.agcMode === "off"
                                   ? "—" : Math.round(WdspEngine.agcGainDb) + qsTr(" dB")
-                            color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"
+                            color: LyraDS.palette.cyan; font.family: root.monoFamily
                             anchors.verticalCenter: parent.verticalCenter
                             width: 48 }
                 }
@@ -667,7 +669,7 @@ Rectangle {
                             checkable: true
                             checked: WdspEngine.autoAgcThresh
                             onToggled: WdspEngine.setAutoAgcThresh(checked)
-                                                        height: 24; implicitWidth: 48
+                            height: 24; implicitWidth: 48
                             kind: checked ? "warn" : "plain"
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -691,7 +693,7 @@ Rectangle {
                             visible: WdspEngine.autoAgcThresh
                             text: qsTr("max ") + (isNaN(WdspEngine.agcMaxGainDb)
                                     ? "—" : Math.round(WdspEngine.agcMaxGainDb) + qsTr(" dB"))
-                            color: root.cText; font.family: "Menlo, Consolas, monospace"
+                            color: root.cText; font.family: root.monoFamily
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -725,7 +727,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.squelchEnabled
                     text: Math.round(WdspEngine.squelchThreshold * 100)
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 26 }
 
             Item { Layout.fillWidth: true }
@@ -766,7 +768,7 @@ Rectangle {
                 }
                 Label {
                     text: Stream.cwSidetoneLevel
-                    color: root.cText; font.family: "Menlo, Consolas, monospace"
+                    color: root.cText; font.family: root.monoFamily
                     Layout.preferredWidth: 28
                 }
             }
@@ -799,7 +801,7 @@ Rectangle {
             }
             Label { visible: !WdspEngine.nnrEnabled
                     text: WdspEngine.nrMode; color: LyraDS.palette.cyan
-                    font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 16
                     HoverHandler { id: nrModeValHov }
                     LyraHoverHelp {
@@ -852,7 +854,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.nnrEnabled
                     text: Math.round(WdspEngine.nnrMaskFloorDb)
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 32
                     HoverHandler { id: nnrMaskValHov }
                     LyraHoverHelp {
@@ -937,7 +939,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.lmsEnabled
                     text: Math.round(WdspEngine.lmsStrength * 100) + "%"
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 34 }
 
             // NB strength — appears only when NB is engaged.
@@ -964,7 +966,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.nbEnabled
                     text: Math.round(WdspEngine.nbStrength * 100) + "%"
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 34 }
 
             // APF gain — appears only when APF is on; stepped in 3 dB
@@ -992,7 +994,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.apfEnabled
                     text: Math.round(WdspEngine.apfGainDb) + qsTr(" dB")
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 40 }
 
             // BIN depth — appears only when BIN is on (0 = mono … 100 = full).
@@ -1019,7 +1021,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.binEnabled
                     text: Math.round(WdspEngine.binDepth * 100) + "%"
-                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: root.monoFamily; font.bold: true
                     Layout.preferredWidth: 34 }
 
             Item { width: 10 }
