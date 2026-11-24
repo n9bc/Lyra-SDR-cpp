@@ -78,9 +78,12 @@ struct WaterfallRowBuilder {
     }
 }
 
-/// When the history must be thrown away: the rows no longer line up with the axis.
+/// When the history must be thrown away: TX took or released the analyzer, or the span width
+/// (zoom or sample rate) changed so old rows no longer have the new scale. A pure centre move,
+/// which every retune makes with CTUN off, keeps the history scrolling, as the Qt waterfall does.
 enum WaterfallHistoryPolicy {
     nonisolated static func shouldClear(old: DisplaySnapshot, new: DisplaySnapshot) -> Bool {
-        old.txAxis != new.txAxis || old.spanLowHz != new.spanLowHz || old.spanHighHz != new.spanHighHz
+        old.txAxis != new.txAxis
+            || old.spanHighHz &- old.spanLowHz != new.spanHighHz &- new.spanLowHz
     }
 }

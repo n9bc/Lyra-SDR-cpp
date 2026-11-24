@@ -82,6 +82,11 @@ struct ConsoleView: View {
         .background(LyraDS.Palette.void)
         .background(ConsoleKeyMonitor(snapshot: { backend.snapshot }, send: backend.send))
         .background(ConsoleWindowAttachment { occlusion.watch($0) })
+        // The pump pulls only from a streaming radio; otherwise the panes go blank and dim.
+        .onChange(of: snapshot.connection.phase == .streaming, initial: true) { _, streaming in
+            spectrum.setStreaming(streaming)
+            subSpectrum.setStreaming(streaming)
+        }
         .environment(spectrum)
         .preferredColorScheme(.dark)
         .frame(minWidth: ConsoleLayout.minWindow.width, minHeight: ConsoleLayout.minWindow.height)

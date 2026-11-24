@@ -36,7 +36,7 @@ final class WaterfallRenderer: LyraMetalRenderer {
     private nonisolated(unsafe) let lut: UnsafeMutablePointer<UInt8>          // 768 bytes
     private nonisolated(unsafe) let rowPixels: UnsafeMutablePointer<UInt8>    // width * 4 BGRA
     private var head = 0
-    private var filled = 0
+    private(set) var filled = 0
     private var history = WaterfallRenderer.minHistory
 
     nonisolated static func history(forDrawableHeight h: Int) -> Int {
@@ -135,7 +135,7 @@ final class WaterfallRenderer: LyraMetalRenderer {
 
         let pump = bridge.pump
         pump.tick(now: now, sub: bridge.pullsSub)
-        let serial = pump.frameSerial
+        let serial = pump.waterfallSerial(bridge.receiver)
         let range = bridge.waterfallRange
         if serial != lastSerial, let frame = pump.waterfallRow(bridge.receiver) {
             lastSerial = serial

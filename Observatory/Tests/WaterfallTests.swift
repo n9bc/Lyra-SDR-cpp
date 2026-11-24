@@ -96,7 +96,7 @@ import Metal
         XCTAssertEqual(Int(ramp[83 * 3 + 2]), Int(255.0 * (83.0 / 255.0 / 0.65)))   // mid-rise blue
     }
 
-    func testHistoryClearsOnTxEdgeAndSpanChange() {
+    func testHistoryClearsOnTxEdgeAndSpanWidthChange() {
         let a = RadioSnapshot.sample.display
         XCTAssertFalse(WaterfallHistoryPolicy.shouldClear(old: a, new: a))
         var tx = a; tx.txAxis.toggle()
@@ -107,6 +107,39 @@ import Metal
         XCTAssertTrue(WaterfallHistoryPolicy.shouldClear(old: a, new: hi))
         var other = a; other.waterfallRowsPerSecond += 5
         XCTAssertFalse(WaterfallHistoryPolicy.shouldClear(old: a, new: other))
+    }
+
+    /// With CTUN off every retune moves the centre; the history scrolls on as in Qt (ruling R6).
+    func testPureCentreMoveKeepsHistory() {
+        let a = RadioSnapshot.sample.display
+        var moved = a; moved.spanLowHz += 2_500; moved.spanHighHz += 2_500
+        XCTAssertFalse(WaterfallHistoryPolicy.shouldClear(old: a, new: moved))
+        var down = a; down.spanLowHz -= 1_000_000; down.spanHighHz -= 1_000_000
+        XCTAssertFalse(WaterfallHistoryPolicy.shouldClear(old: a, new: down))
+    }
+
+    /// Live labels give the age of the row under each label: the visible history (drawable
+    /// pixels, clamped as the renderer clamps them) over the row rate (final review, Important 2).
+    func testLiveGutterLabelsComeFromTheVisibleDepth() {
+        // 300 pt at 2x = 600 rows; 20 rows/s = 30 s deep. Labels centre 14.5 pt from each edge.
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 300, pixelsPerPoint: 2, rowsPerSecond: 20),
+                       ["1s", "15s", "29s"])
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 300, pixelsPerPoint: 2, rowsPerSecond: 10),
+                       ["3s", "30s", "57s"])
+        // 1200 pt at 2x is past the 2048-row history: 2048 / 20 = 102.4 s deep.
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 1200, pixelsPerPoint: 2, rowsPerSecond: 20)[1],
+                       "51s")
+        // Short pane: middle only; 30 pt at 2x is clamped up to 64 rows = 3.2 s deep.
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 30, pixelsPerPoint: 2, rowsPerSecond: 20),
+                       ["2s"])
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 10, pixelsPerPoint: 2, rowsPerSecond: 20), [])
+        XCTAssertEqual(ReceiverDisplayStack.liveWaterfallGutterLabels(height: 300, pixelsPerPoint: 2, rowsPerSecond: 0), [])
+    }
+
+    func testSampleGutterLabelsStayTheSampleOnes() {
+        XCTAssertEqual(ReceiverDisplayStack.waterfallGutterLabels(height: 300), [":25", ":15", ":05"])
+        XCTAssertEqual(ReceiverDisplayStack.waterfallGutterLabels(height: 30), [":15"])
+        XCTAssertEqual(ReceiverDisplayStack.waterfallGutterLabels(height: 10), [])
     }
 
     func testStackUsesLiveWaterfallUnlessMocked() {

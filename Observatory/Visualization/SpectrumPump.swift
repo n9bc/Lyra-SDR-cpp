@@ -24,11 +24,22 @@ final class SpectrumPump {
     /// renderers keep showing the last frame. The engine's analyzer runs regardless.
     var isSuspended = false
 
-    /// Bumps only when a good frame arrived.
-    private(set) var frameSerial: UInt64 = 0
-    /// Bumps when a good spectrum (not waterfall row) arrived for that receiver, so a renderer
-    /// ingests each frame once.
+    /// False unless the connection is streaming. The engine's copy calls return the last frame
+    /// forever, with no new-frame flag, so a pull while not streaming would pass a frozen frame
+    /// off as live. While false `tick` pulls nothing; turning it off also forgets the last frames,
+    /// so the panes go blank instead of showing a stale display.
+    var isStreaming = true {
+        didSet {
+            guard oldValue, !isStreaming else { return }
+            hasSpectrum = [false, false]
+            hasRow = [false, false]
+        }
+    }
+
+    /// Per receiver, bump when a good spectrum / waterfall row arrived for that receiver, so a
+    /// renderer ingests each frame once and a row is never re-ingested because another stream moved.
     private var spectrumSerials: [UInt64] = [0, 0]
+    private var waterfallSerials: [UInt64] = [0, 0]
 
     init(source: any SpectrumSource, minInterval: TimeInterval = 1.0 / 120) {
         self.source = source
@@ -49,7 +60,7 @@ final class SpectrumPump {
     /// Pulls the Main streams, and the Sub streams when `sub`, unless one was pulled less than
     /// `minInterval` ago. Call from the display tick (the MTKView draw callback).
     func tick(now: TimeInterval, sub: Bool) {
-        if isSuspended { return }
+        if isSuspended || !isStreaming { return }
         if let last = lastPull, now - last < minInterval, now >= last { return }
         lastPull = now
         pull(.main, waterfall: false)
@@ -68,12 +79,12 @@ final class SpectrumPump {
         if waterfall {
             rowPointer(i).update(from: staging, count: Self.bins)
             hasRow[i] = true
+            waterfallSerials[i] &+= 1
         } else {
             spectrumPointer(i).update(from: staging, count: Self.bins)
             hasSpectrum[i] = true
             spectrumSerials[i] &+= 1
         }
-        frameSerial &+= 1
     }
 
     /// Good means exactly 4096 bins with at least one above -199 dB. A short or empty return is the
@@ -85,6 +96,7 @@ final class SpectrumPump {
     }
 
     func spectrumSerial(_ rx: ReceiverID) -> UInt64 { spectrumSerials[Self.index(rx)] }
+    func waterfallSerial(_ rx: ReceiverID) -> UInt64 { waterfallSerials[Self.index(rx)] }
 
     /// The last good spectrum for `rx` (4096 dB values), or nil before the first.
     func spectrum(_ rx: ReceiverID) -> UnsafeBufferPointer<Float>? {

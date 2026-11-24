@@ -6,6 +6,7 @@ import SwiftUI
 /// Reads `SpectrumBridge` from the environment (via `NeonSpectrumView`).
 struct ReceiverDisplayStack: View {
     @Environment(SpectrumBridge.self) private var bridge
+    @Environment(\.displayScale) private var displayScale
     let display: DisplaySnapshot
     let receiver: ReceiverSnapshot
     /// "MAIN" / "SUB"; nil when Sub is off and there is nothing to tell apart.
@@ -29,6 +30,30 @@ struct ReceiverDisplayStack: View {
         capabilities.status(.waterfall) != .mocked
     }
 
+    /// Live: ages from the real visible depth. Sample: the sample's labels, under its marker.
+    private var waterfallLabels: [String] {
+        Self.usesLiveWaterfall(capabilities)
+            ? Self.liveWaterfallGutterLabels(height: waterfallHeight, pixelsPerPoint: displayScale,
+                                             rowsPerSecond: display.waterfallRowsPerSecond)
+            : Self.waterfallGutterLabels(height: waterfallHeight)
+    }
+
+    /// Covers a pump-fed pane while the radio is not streaming: the spectrum has gone blank and
+    /// the waterfall history has stopped, and neither is a live reading.
+    @ViewBuilder private func notStreamingCover(_ pane: String) -> some View {
+        if !bridge.isStreaming {
+            ZStack {
+                LyraDS.Palette.void.opacity(0.55)
+                Text("Not streaming")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LyraDS.Palette.textMuted)
+            }
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel("\(pane) paused: the radio is not streaming")
+        }
+    }
+
     private var sampleMarker: some View { SampleMarker(accessibilityName: "Sample spectrum") }
 
     private func tag(_ text: String) -> some View {
@@ -43,11 +68,31 @@ struct ReceiverDisplayStack: View {
             .accessibilityLabel("\(text.capitalized) receiver display")
     }
 
-    /// Time labels that fit the pane: all three when tall, the middle one when short, none when squeezed.
+    /// The sample waterfall's time labels, shown only under its Sample marker: all three when
+    /// tall, the middle one when short, none when squeezed.
     nonisolated static func waterfallGutterLabels(height: CGFloat) -> [String] {
         if height >= 56 { return [":25", ":15", ":05"] }
         if height >= 20 { return [":15"] }
         return []
+    }
+
+    /// Gutter label padding from the pane's top and bottom edges.
+    nonisolated static let gutterLabelPadding: CGFloat = 8
+    /// From the pane edge to the centre of the top or bottom label (padding plus half an 11 pt line).
+    nonisolated static let gutterLabelCentreInset: CGFloat = gutterLabelPadding + 6.5
+
+    /// The live waterfall's labels: how many seconds old the row under each label is. The renderer
+    /// shows `WaterfallRenderer.history(forDrawableHeight:)` rows over the pane, newest on top, and
+    /// pushes `rowsPerSecond` of them a second, so the pane is history / rowsPerSecond seconds deep.
+    /// Same placement as the sample labels (top, middle, bottom; middle only when short).
+    nonisolated static func liveWaterfallGutterLabels(height: CGFloat, pixelsPerPoint: CGFloat,
+                                                      rowsPerSecond: Int) -> [String] {
+        guard rowsPerSecond > 0, height >= 20 else { return [] }
+        let rows = WaterfallRenderer.history(forDrawableHeight: Int((height * pixelsPerPoint).rounded()))
+        let depth = Double(rows) / Double(rowsPerSecond)
+        let edge = Double(gutterLabelCentreInset / height)
+        let fractions: [Double] = height >= 56 ? [edge, 0.5, 1 - edge] : [0.5]
+        return fractions.map { "\(Int((depth * $0).rounded()))s" }
     }
 
     private func gutterLabels(_ labels: [String], padding: EdgeInsets) -> some View {
@@ -95,6 +140,7 @@ struct ReceiverDisplayStack: View {
             Color.clear.frame(width: DisplayAreaLayout.gutter)
             ZStack(alignment: .topLeading) {
                 NeonSpectrumView()
+                notStreamingCover("Spectrum")
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
                                  height: spectrumHeight)
@@ -120,10 +166,13 @@ struct ReceiverDisplayStack: View {
 
     private func waterfall(axis: FrequencyAxis, width w: CGFloat) -> some View {
         HStack(spacing: 0) {
-            gutterLabels(Self.waterfallGutterLabels(height: waterfallHeight), padding: EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 3))
+            gutterLabels(waterfallLabels,
+                         padding: EdgeInsets(top: Self.gutterLabelPadding, leading: 0,
+                                             bottom: Self.gutterLabelPadding, trailing: 3))
             ZStack(alignment: .topLeading) {
                 if Self.usesLiveWaterfall(capabilities) {
                     WaterfallView()
+                    notStreamingCover("Waterfall")
                 } else {
                     SampleWaterfallImage(axis: { FrequencyAxis(lowHz: display.spanLowHz, highHz: display.spanHighHz, width: $0) },
                                          signals: display.spots.map(\.frequencyHz) + [receiver.frequencyHz])

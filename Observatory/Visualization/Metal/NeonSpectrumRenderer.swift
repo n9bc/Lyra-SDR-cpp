@@ -149,7 +149,9 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
             }
         }
         wasAuto = bridge.dbRange.auto
-        // No new frame: keep showing the last trace.
+        // No new frame: keep showing the last trace. No frame at all (before the first, or the
+        // pump forgot it when streaming stopped): draw nothing rather than the -200 dB seed.
+        let traceColumns = Self.traceColumns(columns, hasFrame: pump.spectrum(bridge.receiver) != nil)
 
         let floor = Float(bridge.dbFloor), ceiling = Float(bridge.dbCeiling)
         trace.trace.withUnsafeBufferPointer { processor.ingest($0, floor: floor, ceiling: ceiling) }
@@ -188,13 +190,20 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
 
         let viewport = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) {
-            encode(encoder, heights: buffer, columns: columns, viewport: viewport,
-                   peaks: peakColumns ? peakBuffer : nil)
-            encoder.endEncoding()
+            if traceColumns > 1 {
+                encode(encoder, heights: buffer, columns: traceColumns, viewport: viewport,
+                       peaks: peakColumns ? peakBuffer : nil)
+            }
+            encoder.endEncoding()   // an empty pass still clears the drawable to the void colour
         }
         commandBuffer.present(drawable)
         commandBuffer.commit()   // completion handler signals the semaphore
         bufferIndex = (bufferIndex + 1) % Self.inFlight
+    }
+
+    /// Columns of trace to draw: none until the pump holds a frame for this receiver.
+    nonisolated static func traceColumns(_ columns: Int, hasFrame: Bool) -> Int {
+        hasFrame ? columns : 0
     }
 
     // MARK: - Shared encoding

@@ -31,6 +31,8 @@ final class SpectrumBridge {
     @ObservationIgnored private(set) var waterfallClearEpoch: UInt64 = 0
     @ObservationIgnored private(set) var waterfallColorEpoch: UInt64 = 0
     @ObservationIgnored private var lastDisplay: DisplaySnapshot?
+    /// Whether the connection is streaming; the stack dims its live panes while it is not.
+    private(set) var isStreaming = true
 
     init(pump: SpectrumPump, receiver: ReceiverID = .main) {
         self.pump = pump
@@ -60,6 +62,12 @@ final class SpectrumBridge {
             if dbFloor != r.floor { dbFloor = r.floor }
             if dbCeiling != r.ceiling { dbCeiling = r.ceiling }
         }
+    }
+
+    /// Follows the connection: stops (or resumes) the shared pump and tells the stack to dim.
+    func setStreaming(_ streaming: Bool) {
+        pump.isStreaming = streaming
+        if isStreaming != streaming { isStreaming = streaming }
     }
 
     /// Publishes the auto-fit range for the grid, only when it moved enough to matter.
