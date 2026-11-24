@@ -51,6 +51,37 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertGreaterThan(r.ceilingDb, 6)
     }
 
+    /// A narrow receive filter: most of 0-3 kHz is filter stopband far below the in-band noise,
+    /// so the 20th percentile lands in the stopband and the spread to a strong carrier passes 90 dB.
+    /// The ceiling must stay on the carrier (the floor gives way), so the carrier is not a plateau.
+    func testNarrowFilterCarrierNeverFlatTops() {
+        var row = [Float](repeating: -140, count: 201)          // stopband
+        for p in 20...53 { row[p] = -95 }                       // ~300-800 Hz passband noise
+        row[40] = -10; row[41] = -12                            // a strong CW carrier
+        let r = steadyState([[Float]](repeating: row, count: 30))
+        XCTAssertEqual(r.ceilingDb, -7, accuracy: 0.01)
+        XCTAssertEqual(r.ceilingDb - r.floorDb, 90, accuracy: 0.01)
+        XCTAssertLessThan(r.level(-10), 1)
+        XCTAssertGreaterThan(r.level(-10), r.level(-12))       // the crest keeps its shape
+        XCTAssertLessThanOrEqual(r.level(-95), 0.1)
+    }
+
+    /// While the ceiling is still rising toward a new, much stronger signal, values above it are
+    /// compressed (a soft knee), never clipped: different levels above the ceiling stay different.
+    func testOnsetAboveCeilingIsCompressedNotClipped() {
+        let r = steadyState(grid(noise: -60, peak: -30))       // ceiling settles near -20
+        XCTAssertLessThan(r.ceilingDb, 0)
+        let a = r.level(0), b = r.level(10), c = r.level(30)
+        XCTAssertLessThan(a, b); XCTAssertLessThan(b, c)
+        XCTAssertLessThan(c, 1)
+        XCTAssertGreaterThan(a, TerrainAutoRange.kneeLevel)
+        // Below the knee the mapping is the plain linear scale.
+        XCTAssertEqual(r.level(r.floorDb + 0.5 * (r.ceilingDb - r.floorDb)), 0.5, accuracy: 1e-5)
+        // The curve is continuous at the knee.
+        let kneeDb = r.floorDb + TerrainAutoRange.kneeLevel * (r.ceilingDb - r.floorDb)
+        XCTAssertEqual(r.level(kneeDb + 0.001), TerrainAutoRange.kneeLevel, accuracy: 1e-4)
+    }
+
     func testAutoRangeSlewLimits() {
         var up = TerrainAutoRange()
         up.update(grid: grid(noise: 20, peak: 40), dt: 0.1)
@@ -84,10 +115,11 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(narrow.floorDb, -70, accuracy: 0.01)
         XCTAssertEqual(narrow.ceilingDb - narrow.floorDb, 40, accuracy: 0.01)
 
-        // A 140 dB spread: span held at 90, floor stays on the noise.
+        // A 140 dB spread: span held at 90 by lifting the floor; the ceiling stays on the peak.
         let wide = steadyState(grid(noise: -150, peak: -10))
-        XCTAssertEqual(wide.floorDb, -150, accuracy: 0.01)
+        XCTAssertEqual(wide.ceilingDb, -7, accuracy: 0.01)
         XCTAssertEqual(wide.ceilingDb - wide.floorDb, 90, accuracy: 0.01)
+        XCTAssertLessThan(wide.level(-10), 1)
 
         // The span holds on every step on the way there too.
         var r = TerrainAutoRange()
@@ -218,15 +250,15 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(b[0], 0.55, accuracy: 1e-6)
         XCTAssertEqual(b[1], 0.45, accuracy: 1e-6)
 
-        // levelRows applies it oldest to newest: a step reaches 0.55 on its first row.
+        // levelRows applies it oldest to newest: a step to 0.8 reaches 0.55 x 0.8 on its first row.
         let range = TerrainAutoRange()          // -100 ... -50
-        let quiet = [Float](repeating: -100, count: 41), loud = [Float](repeating: -50, count: 41)
+        let quiet = [Float](repeating: -100, count: 41), loud = [Float](repeating: -60, count: 41)
         let levels = TerrainSurface.levelRows(grid: [loud, quiet], range: range)
         XCTAssertEqual(levels.count, 2)
         XCTAssertEqual(levels[1][20], 0, accuracy: 1e-5)        // oldest
-        XCTAssertEqual(levels[0][20], 0.55, accuracy: 1e-4)     // newest, blended with the older
+        XCTAssertEqual(levels[0][20], 0.55 * 0.8, accuracy: 1e-4)     // newest, blended with the older
         let three = TerrainSurface.levelRows(grid: [loud, loud, quiet], range: range)
-        XCTAssertEqual(three[0][20], 0.55 + 0.45 * 0.55, accuracy: 1e-4)
+        XCTAssertEqual(three[0][20], (0.55 + 0.45 * 0.55) * 0.8, accuracy: 1e-4)
     }
 }
 

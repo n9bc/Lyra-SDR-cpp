@@ -4,9 +4,14 @@ import Foundation
 /// grid) and the ceiling follows the strongest signal (the grid's maximum + 3 dB), so a strong
 /// carrier is absorbed into the scale instead of flat-topping. Pure; one value per terrain.
 ///
-/// The span is held to 40...90 dB by moving the ceiling; the floor stays on the noise. Both ends
-/// are slew-limited: they rise at most 30 dB/s, so a new strong signal is absorbed within about a
-/// second, and fall at most 6 dB/s, so the scale relaxes slowly after the signal goes.
+/// The span is held to 40...90 dB. A span under 40 raises the ceiling; a span over 90 raises the
+/// floor, so the ceiling always stays on the strongest signal. (With a narrow receive filter most
+/// of 0-3 kHz is filter stopband, the percentile floor lands far below the in-band noise, and
+/// pulling the ceiling down to floor + 90 would flat-top every strong carrier.) Both ends are
+/// slew-limited: they rise at most 30 dB/s, so a new strong signal is absorbed within about a
+/// second, and fall at most 6 dB/s, so the scale relaxes slowly after the signal goes. While the
+/// ceiling is still catching up, `level` compresses values above it with a soft knee rather than
+/// clipping them, so a crest never turns into a plateau.
 struct TerrainAutoRange: Equatable, Sendable {
     nonisolated static let minSpanDb: Float = 40
     nonisolated static let maxSpanDb: Float = 90
@@ -14,6 +19,8 @@ struct TerrainAutoRange: Equatable, Sendable {
     nonisolated static let fallDbPerSecond: Float = 6
     nonisolated static let headroomDb: Float = 3
     nonisolated static let floorPercentile: Float = 0.2
+    /// `level` is linear up to here; above it a soft knee approaches (never reaches) 1.
+    nonisolated static let kneeLevel: Float = 0.9
 
     private(set) var floorDb: Float = -100
     private(set) var ceilingDb: Float = -50
@@ -27,26 +34,35 @@ struct TerrainAutoRange: Equatable, Sendable {
         guard !values.isEmpty, dt > 0 else { return }
         values.sort()
         let k = min(Int(Float(values.count - 1) * Self.floorPercentile), values.count - 1)
-        let targetFloor = values[k]
-        let targetCeiling = Self.clampedCeiling(values[values.count - 1] + Self.headroomDb, floor: targetFloor)
+        let peakCeiling = values[values.count - 1] + Self.headroomDb
+        let targetFloor = max(values[k], peakCeiling - Self.maxSpanDb)
+        let targetCeiling = max(peakCeiling, targetFloor + Self.minSpanDb)
 
         let up = Self.riseDbPerSecond * Float(dt), down = Self.fallDbPerSecond * Float(dt)
         let newFloor = Self.slew(floorDb, toward: targetFloor, up: up, down: down)
         let slewedCeiling = Self.slew(ceilingDb, toward: targetCeiling, up: up, down: down)
-        // Holding the span on every step only ever moves the ceiling by as much as the floor moved,
-        // so it stays inside the slew limits while the previous state was a legal span.
-        floorDb = newFloor
-        ceilingDb = Self.clampedCeiling(slewedCeiling, floor: newFloor)
+        // Holding the span on every step only ever moves one end up by as much as the other end
+        // moved up, so it stays inside the slew limits while the previous state was a legal span.
+        floorDb = max(newFloor, slewedCeiling - Self.maxSpanDb)
+        ceilingDb = max(slewedCeiling, floorDb + Self.minSpanDb)
     }
 
-    /// dBFS onto 0...1 of the current scale. Non-finite input is 0. Nothing is capped at 0 dBFS.
+    /// dBFS onto 0..<1 of the current scale. Non-finite input is 0. Nothing is capped at 0 dBFS.
     func level(_ db: Float) -> Float {
         guard db.isFinite else { return 0 }
-        return min(max((db - floorDb) / (ceilingDb - floorDb), 0), 1)
+        return Self.knee((db - floorDb) / (ceilingDb - floorDb))
     }
 
-    nonisolated private static func clampedCeiling(_ ceiling: Float, floor: Float) -> Float {
-        min(max(ceiling, floor + minSpanDb), floor + maxSpanDb)
+    /// The linear scale position `x` with negatives at 0 and a soft knee above `kneeLevel`:
+    /// continuous with slope 1 at the knee, strictly increasing, and always below 1.
+    nonisolated static func knee(_ x: Float) -> Float {
+        guard x > 0 else { return 0 }
+        guard x > kneeLevel else { return x }
+        let room = 1 - kneeLevel
+        // u / (1 + u) rather than tanh: tanh rounds to 1 in Float a few spans above the ceiling,
+        // which would bring the plateau back for a large onset.
+        let u = (x - kneeLevel) / room
+        return kneeLevel + room * u / (1 + u)
     }
 
     nonisolated private static func slew(_ value: Float, toward target: Float, up: Float, down: Float) -> Float {
