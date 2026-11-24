@@ -106,7 +106,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         self.fullWidth = fullWidth
     }
 
-    private var text: Color {
+    var text: Color {
         switch kind {
         case .plain: LyraDS.Palette.chipText
         case .active: LyraDS.Palette.yellow
@@ -116,7 +116,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         }
     }
 
-    private var border: Color {
+    var border: Color {
         switch kind {
         case .plain: LyraDS.Palette.vchipBorder
         case .active: LyraDS.Palette.yellow
@@ -125,7 +125,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         }
     }
 
-    private var fill: Color {
+    var fill: Color {
         switch kind {
         case .plain: LyraDS.Palette.vchipFill
         case .active: LyraDS.Palette.yellow.opacity(0.08)
@@ -135,7 +135,7 @@ struct VFOChipButtonStyle: ButtonStyle {
         }
     }
 
-    private var glow: (color: Color, radius: CGFloat)? {
+    var glow: (color: Color, radius: CGFloat)? {
         switch kind {
         case .cyan: (LyraDS.Palette.cyan.opacity(0.2), 5)
         case .tx: (LyraDS.Palette.pink.opacity(0.45), 6)
@@ -171,6 +171,27 @@ struct VFOChipButtonStyle: ButtonStyle {
                 .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.45)
                 .contentShape(shape)
         }
+    }
+}
+
+/// A VFO chip that is not a control: the RX/TX tag, drawn like a chip but never dimmed or pressed.
+struct VFOChipLabel: View {
+    let text: String
+    let kind: VFOChipStyle
+
+    var body: some View {
+        let style = VFOChipButtonStyle(kind)
+        let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        Text(text)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .tracking(0.55)
+            .foregroundStyle(style.text)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .background(shape.fill(style.fill))
+            .overlay(shape.strokeBorder(style.border, lineWidth: 1))
+            .shadow(color: style.glow?.color ?? .clear, radius: style.glow?.radius ?? 0)
     }
 }
 

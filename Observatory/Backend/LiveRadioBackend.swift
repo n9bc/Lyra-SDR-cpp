@@ -195,6 +195,8 @@ extension BackendCapabilities {
         controls[.profile] = later
         controls[.tools] = later
         controls[.displaySettings] = .unavailable("Display settings arrive in Milestone 4")
+        controls[.tuningStep] = .unavailable("Tuning step arrives in Milestone 4")
+        controls[.vfoBandwidth] = .unavailable("Use the filter chips to change the bandwidth")
         return BackendCapabilities(statuses: statuses, controls: controls,
                                    fallback: .unavailable("Not available"))
     }

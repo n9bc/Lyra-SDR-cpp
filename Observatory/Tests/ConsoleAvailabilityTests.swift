@@ -134,6 +134,8 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         .transmit: "Transmit arrives in Milestone 5",
         .profile: "Arrives in a later milestone",
         .displaySettings: "Display settings arrive in Milestone 4",
+        .tuningStep: "Tuning step arrives in Milestone 4",
+        .vfoBandwidth: "Use the filter chips to change the bandwidth",
     ]
 
     func testLiveCapabilitiesDisableControlsWithoutAnEnginePath() {

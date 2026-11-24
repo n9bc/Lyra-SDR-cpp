@@ -48,6 +48,7 @@ enum ConsoleControl: Hashable, Sendable {
     case mode, filterPreset, bwLock, filterEdges, txBandwidth, bandTabs, band
     case agcMode, agcLevels, dsp(DSPFunction), dspLevels, noiseCapture
     case frontEnd, attenuator, audio, transmit, txDSP, rxEqualizer, profile, tools, displaySettings
+    case tuningStep, vfoBandwidth
 }
 
 struct BackendCapabilities: Equatable, Sendable {

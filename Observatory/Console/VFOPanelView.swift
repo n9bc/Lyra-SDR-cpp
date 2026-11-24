@@ -118,12 +118,13 @@ struct VFOPanelView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            chip(receiver.isTxVFO ? "TX" : "RX",
-                 receiver.isTxVFO ? "Transmit VFO" : "Receive-only VFO",
-                 VFOChipStyle.txTag(isTxVFO: receiver.isTxVFO, state: transmitState))
-            chip(receiver.antenna, "Select antenna input")
-            chip("BW \(filterText.uppercased())", "Set filter bandwidth")
-            chip("STEP \(receiver.stepHz)", "Set tuning step")
+            VFOChipLabel(text: receiver.isTxVFO ? "TX" : "RX",
+                         kind: VFOChipStyle.txTag(isTxVFO: receiver.isTxVFO, state: transmitState))
+                .accessibilityLabel(receiver.isTxVFO ? "Transmit VFO" : "Receive-only VFO")
+            chip(receiver.antenna, "Select antenna input", status: capabilities.control(.frontEnd))
+            chip("BW \(filterText.uppercased())", "Set filter bandwidth",
+                 status: capabilities.control(.vfoBandwidth))
+            chip("STEP \(receiver.stepHz)", "Set tuning step", status: capabilities.control(.tuningStep))
             Spacer(minLength: 0)
             Text(title)
                 .font(mono(13)).tracking(1.82).lineLimit(1)
