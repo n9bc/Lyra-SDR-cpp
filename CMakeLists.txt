@@ -665,6 +665,7 @@ qt_add_qml_module(lyra
         src/qml/VfoStyleClassicLcd.qml
         src/qml/VfoStyleLyraMac.qml
         src/qml/VfoStyleNixie.qml
+        src/qml/VfoStyleObservatory.qml
         src/qml/VfoStyleVfd.qml
         src/qml/VfoStyleWidget.qml
         src/qml/LyraSpinBox.qml

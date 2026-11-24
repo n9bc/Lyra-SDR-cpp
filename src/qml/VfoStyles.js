@@ -8,9 +8,10 @@
 // (first run, or a removed style) to defaultId.
 // scratch/test_vfo_styles.cpp loads every entry and checks the contract.
 
-var defaultId = "lyraMac"
+var defaultId = "observatory"
 
 var styles = [
+    { id: "observatory", name: "Observatory", group: "Modern", file: "VfoStyleObservatory.qml" },
     { id: "lyraMac", name: "Lyra (Mac)", group: "Modern",  file: "VfoStyleLyraMac.qml" },
     { id: "amber",   name: "Amber LED",  group: "Classic", file: "VfoStyleAmber.qml" },
     { id: "classicLcd", name: "Classic LCD", group: "Classic", file: "VfoStyleClassicLcd.qml" },

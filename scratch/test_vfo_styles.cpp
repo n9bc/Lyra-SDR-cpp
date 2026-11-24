@@ -21,7 +21,9 @@
 #include <QJSValue>
 #include <QQmlComponent>
 #include <QQmlEngine>
+#include <QFile>
 #include <QRectF>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QVariant>
 
@@ -48,6 +50,9 @@ static QVariant plain(const QVariant &v)
 int main(int argc, char **argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // Styles use Controls-based components (ConsoleChip); a native style cannot
+    // customise them, so run the same style the app does.
+    qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     QGuiApplication app(argc, argv);
     std::printf("test_vfo_styles\n");
 
@@ -64,7 +69,22 @@ int main(int argc, char **argv)
     }
 #endif
 
-    const QString dir = QStringLiteral(LYRA_QML_DIR);
+    // Styles read the LyraDS design-token singleton, which the app resolves
+    // through the Lyra QML module.  From the bare source tree it needs a
+    // qmldir, so test against a scratch copy of src/qml that has one.
+    QTemporaryDir scratchDir;
+    check(QStringLiteral("scratch copy of src/qml"), scratchDir.isValid());
+    if (!scratchDir.isValid()) return 1;
+    const QString dir = scratchDir.path();
+    {
+        const QDir src(QStringLiteral(LYRA_QML_DIR));
+        for (const QString &f : src.entryList({QStringLiteral("*.qml"), QStringLiteral("*.js")},
+                                              QDir::Files))
+            QFile::copy(src.filePath(f), dir + QLatin1Char('/') + f);
+        QFile qd(dir + QStringLiteral("/qmldir"));
+        if (qd.open(QIODevice::WriteOnly))
+            qd.write("singleton LyraDS 1.0 LyraDS.qml\n");
+    }
     QQmlEngine engine;
     QList<QQmlError> warnings;
     QObject::connect(&engine, &QQmlEngine::warnings,
