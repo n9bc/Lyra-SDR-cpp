@@ -227,4 +227,13 @@ final class NotchModelTests: XCTestCase {
         XCTAssertEqual(SpectrumGestureModel.hitTarget(x: 500, y: 5, notches: list, width: w, spanHz: span,
                                                       notchesEnabled: false), .tune)
     }
+
+    func testNoDbOrEdgeGrabWhileTxOwnsTheAxis() {
+        let g = SpectrumGestureModel.self
+        XCTAssertTrue(g.grabsEnabled(stack: .main, surface: .spectrum, live: true, txAxis: false))
+        XCTAssertFalse(g.grabsEnabled(stack: .main, surface: .spectrum, live: true, txAxis: true))
+        XCTAssertFalse(g.grabsEnabled(stack: .sub, surface: .spectrum, live: true, txAxis: false))
+        XCTAssertFalse(g.grabsEnabled(stack: .main, surface: .waterfall, live: true, txAxis: false))
+        XCTAssertFalse(g.grabsEnabled(stack: .main, surface: .spectrum, live: false, txAxis: false))
+    }
 }

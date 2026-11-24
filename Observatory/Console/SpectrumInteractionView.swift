@@ -162,7 +162,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
             return SpectrumGestureModel.hitTarget(
                 x: p.x, y: p.y, notches: n?.notches ?? [], width: width, spanHz: span,
                 notchesEnabled: n != nil, height: Double(bounds.height),
-                dbZoneEnabled: stack == .main && surface == .spectrum && live != nil, edges: edgeXs())
+                dbZoneEnabled: SpectrumGestureModel.grabsEnabled(stack: stack, surface: surface, live: live != nil,
+                                                                 txAxis: display?.txAxis ?? true),
+                edges: edgeXs())
         }
 
         /// Starts a dB-scale or passband-edge drag when a plain left press lands on one.

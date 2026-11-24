@@ -174,6 +174,13 @@ enum SpectrumGestureModel {
         return Int(min(max(bw + 0.5, 50), 20_000))
     }
 
+    /// Whether the dB scale and passband edges can be grabbed: the live Main spectrum, and never
+    /// while TX owns the axis (ruling R4).
+    nonisolated static func grabsEnabled(stack: ReceiverID, surface: SpectrumSurface, live: Bool,
+                                         txAxis: Bool) -> Bool {
+        stack == .main && surface == .spectrum && live && !txAxis
+    }
+
     /// What a press on the spectrum grabs, in controller ruling R1's priority order: dB-scale
     /// zone, passband-edge handle, notch, then the CTUN pan strip and click-to-tune.
     /// `dbZoneEnabled` and `edges` are off for surfaces without them (the waterfall, the Sub stack).
