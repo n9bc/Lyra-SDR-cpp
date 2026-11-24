@@ -1,7 +1,7 @@
 import Foundation
 
 /// The audio terrain's dB scale. The floor follows the noise (the 20th percentile of the visible
-/// grid) and the ceiling follows the strongest signal (the grid's maximum + 3 dB), so a strong
+/// grid) and the ceiling follows the strongest signal as drawn (the peak + 3 dB), so a strong
 /// carrier is absorbed into the scale instead of flat-topping. Pure; one value per terrain.
 ///
 /// The span is held to 40...90 dB. A span under 40 raises the ceiling; a span over 90 raises the
@@ -34,16 +34,30 @@ struct TerrainAutoRange: Equatable, Sendable {
         advance(dt: dt)
     }
 
-    /// Points the scale at `grid` (any row order) without moving it. A grid with no finite value
-    /// keeps the previous targets.
-    mutating func retarget(grid: [[Float]]) {
+    /// Points the scale at `grid` as the terrain draws it, without moving it. The floor comes from
+    /// the raw noise, the ceiling from the peak of the smoothed, blended heights (`TerrainSurface
+    /// .heightRows` measured from `referenceDb`). Smoothing lowers a narrow peak by about 14 dB, so
+    /// a ceiling set from the raw peak would leave the strongest signal well short of the top. The floor
+    /// stays raw: a floor read from heights clamped at the reference
+    /// would sit on the reference and drag it lower on every row.
+    mutating func retarget(drawnGrid grid: [[Float]], referenceDb: Float) {
+        let heights = TerrainSurface.heightRows(grid: grid, referenceDb: referenceDb)
+        let peak = heights.lazy.compactMap { $0.max() }.max()
+        retarget(grid: grid, peakDb: peak.map { $0 + referenceDb })
+    }
+
+    /// Points the scale at `grid` (any row order) without moving it. The ceiling sits `headroomDb`
+    /// above `peakDb` when given, else above the grid's maximum. A grid with no finite value keeps
+    /// the previous targets.
+    mutating func retarget(grid: [[Float]], peakDb: Float? = nil) {
         var values: [Float] = []
         values.reserveCapacity(grid.reduce(0) { $0 + $1.count })
         for row in grid { for v in row where v.isFinite { values.append(v) } }
         guard !values.isEmpty else { return }
         values.sort()
         let k = min(Int(Float(values.count - 1) * Self.floorPercentile), values.count - 1)
-        let peakCeiling = values[values.count - 1] + Self.headroomDb
+        let peak = peakDb.flatMap { $0.isFinite ? $0 : nil } ?? values[values.count - 1]
+        let peakCeiling = peak + Self.headroomDb
         targetFloorDb = max(values[k], peakCeiling - Self.maxSpanDb)
         targetCeilingDb = max(peakCeiling, targetFloorDb + Self.minSpanDb)
     }
@@ -92,12 +106,21 @@ enum TerrainSurface {
     /// Weight of the new row in the temporal blend; the rest is the previous smoothed row.
     nonisolated static let newRowWeight: Float = 0.55
 
-    /// A Gaussian across frequency (radius 3 sigma) with clamped edges. A flat row stays flat and
-    /// the total of an interior impulse is kept.
-    nonisolated static func smoothRow(_ levels: [Float], sigmaPoints: Float = 3) -> [Float] {
+    /// The power-smoothed peak path in `heightRows`: its sigma in points (15 Hz each), how far its
+    /// kernel reaches in sigmas, and how many dB below the dB-smoothed surface it is weighted. A
+    /// Gaussian on power falls 2.17 r^2 dB r sigmas out, so the kernel runs to 8 sigma (139 dB
+    /// down): heights stay under that even while the scale is still catching up with a sudden
+    /// strong signal, so the kernel leaves no step where it stops.
+    nonisolated static let peakSigmaPoints: Float = 1
+    nonisolated static let peakRadiusSigmas: Float = 8
+    nonisolated static let peakWeightDb: Float = 10
+
+    /// A Gaussian across frequency (radius `radiusSigmas` sigma) with clamped edges. A flat row
+    /// stays flat and the total of an interior impulse is kept.
+    nonisolated static func smoothRow(_ levels: [Float], sigmaPoints: Float = 3, radiusSigmas: Float = 3) -> [Float] {
         let n = levels.count
         guard n > 1, sigmaPoints > 0 else { return levels }
-        let radius = max(1, Int((sigmaPoints * 3).rounded(.up)))
+        let radius = max(1, Int((sigmaPoints * radiusSigmas).rounded(.up)))
         var kernel = [Float](repeating: 0, count: radius * 2 + 1)
         var sum: Float = 0
         for i in -radius...radius {
@@ -126,19 +149,46 @@ enum TerrainSurface {
     }
 
     /// `grid` (dBFS, newest row first) as smoothed, temporally blended heights in dB above
-    /// `referenceDb` (clamped at 0; non-finite is 0), newest first. The blend runs oldest to newest,
-    /// so each row carries its predecessors as the stored rows would. The level mapping happens
-    /// later, per frame, in the shader (`TerrainAutoRange.level` of height + reference): smoothing
-    /// and blending are affine, so mapping afterwards matches mapping first wherever the knee is
-    /// not reached, and it lets the scale glide every frame without rebuilding these rows.
-    nonisolated static func heightRows(grid: [[Float]], referenceDb: Float, sigmaPoints: Float = 3) -> [[Float]] {
+    /// `referenceDb` (clamped at 0; non-finite is 0), newest first. The blend runs oldest to newest
+    /// on dB, so each row carries its predecessors as the stored rows would and a signal that stops
+    /// fades by 0.45 of its height per row. The level mapping happens later, per frame, in the
+    /// shader (`TerrainAutoRange.level` of height + reference), so the scale glides every frame
+    /// without rebuilding these rows.
+    ///
+    /// Each row is `shapeRow`: smoothed on dB for the noise, with a narrow power-smoothed path that
+    /// keeps a strong signal's crest.
+    nonisolated static func heightRows(grid: [[Float]], referenceDb: Float, sigmaPoints: Float = 3,
+                                       peakSigmaPoints: Float = TerrainSurface.peakSigmaPoints) -> [[Float]] {
         var out = [[Float]](repeating: [], count: grid.count)
         var previous: [Float]?
         for age in stride(from: grid.count - 1, through: 0, by: -1) {
             let above = grid[age].map { $0.isFinite ? max($0 - referenceDb, 0) : 0 }
-            let blended = blend(new: smoothRow(above, sigmaPoints: sigmaPoints), previous: previous)
+            let blended = blend(new: shapeRow(above, sigmaPoints: sigmaPoints, peakSigmaPoints: peakSigmaPoints),
+                                previous: previous)
             out[age] = blended
             previous = blended
+        }
+        return out
+    }
+
+    /// One row of dB heights (>= 0) smoothed across frequency. An average of dB is a geometric
+    /// mean: it gives the noise a smooth, even surface, but pulls a narrow peak most of the way down
+    /// to the noise around it (a CW note 70 dB over the noise stood barely 22 dB high). An average
+    /// of power keeps the crest within a few dB, but on its own it makes the noise rough and gives
+    /// strong signals wide skirts. So the two are mixed on power: the dB-smoothed row plus a narrow
+    /// power-smoothed row weighted `peakWeightDb` down, normalised so a flat row stays exactly
+    /// where it is (and 0 stays 0). The noise follows the dB path and a strong crest follows the
+    /// power path; the mix is smooth everywhere, so it adds no crease where one takes over.
+    nonisolated static func shapeRow(_ above: [Float], sigmaPoints: Float = 3,
+                                     peakSigmaPoints: Float = TerrainSurface.peakSigmaPoints) -> [Float] {
+        let smooth = smoothRow(above, sigmaPoints: sigmaPoints)
+        // Heights are measured from the reference, so these powers start at 1 and stay in range.
+        let peak = smoothRow(above.map { powf(10, $0 / 10) }, sigmaPoints: peakSigmaPoints,
+                             radiusSigmas: peakRadiusSigmas)
+        let c = powf(10, -peakWeightDb / 10)
+        var out = smooth
+        for i in out.indices {
+            out[i] = max(10 * log10f((powf(10, smooth[i] / 10) + c * peak[i]) / (1 + c)), 0)
         }
         return out
     }

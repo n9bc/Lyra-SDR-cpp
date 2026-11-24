@@ -44,6 +44,39 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertLessThanOrEqual(wide.level(5), 0.97)
     }
 
+    /// An S9+ CW note: 70 dB over the noise and three points wide, as the audio STFT draws a tone.
+    /// Smoothing lowers a peak that narrow by about 14 dB, so a ceiling set from the raw peak would
+    /// leave the drawn crest short of the top. The scale follows the drawn peak, so it reaches it.
+    func testStrongNarrowSignalReachesTheTopAsDrawn() {
+        var row = [Float](repeating: -100, count: 201)
+        row[99] = -36; row[100] = -30; row[101] = -36
+        let g = [[Float]](repeating: row, count: 30)
+        func drawnPeakLevel(_ r: TerrainAutoRange) -> Float {
+            let ref = min(r.floorDb, r.targetFloorDb) - TerrainAutoRange.fallDbPerSecond
+            let peak = TerrainSurface.heightRows(grid: g, referenceDb: ref).compactMap { $0.max() }.max()!
+            return r.level(peak + ref)
+        }
+
+        var drawn = TerrainAutoRange()
+        for _ in 0..<200 {
+            drawn.retarget(drawnGrid: g, referenceDb: min(drawn.floorDb, drawn.targetFloorDb)
+                                                      - TerrainAutoRange.fallDbPerSecond)
+            drawn.advance(dt: 0.1)
+        }
+        XCTAssertGreaterThanOrEqual(drawnPeakLevel(drawn), 0.9)
+        XCTAssertLessThan(drawnPeakLevel(drawn), 1)
+        XCTAssertEqual(drawn.floorDb, -100, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(drawn.level(-100), 0.1)
+
+        // The drawn crest stands well above what dB smoothing alone left (about 22 dB)...
+        let ref = min(drawn.floorDb, drawn.targetFloorDb) - TerrainAutoRange.fallDbPerSecond
+        let drawnPeak = TerrainSurface.heightRows(grid: g, referenceDb: ref).compactMap { $0.max() }.max()! + ref
+        XCTAssertGreaterThan(drawnPeak, -50)
+        XCTAssertLessThan(drawnPeak, -30)
+        // ...and a scale topped from the raw peak would leave it short of the top.
+        XCTAssertLessThan(drawnPeakLevel(steadyState(g)), 0.85)
+    }
+
     func testStrongSignalNeverFlatTops() {
         let r = steadyState(grid(noise: -30, peak: 6))
         XCTAssertLessThan(r.level(6), 1)
@@ -363,8 +396,8 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(b[0], 0.55, accuracy: 1e-6)
         XCTAssertEqual(b[1], 0.45, accuracy: 1e-6)
 
-        // heightRows applies it oldest to newest, in dB above the reference: a 40 dB step reaches
-        // 0.55 x 40 on its first row.
+        // heightRows applies it oldest to newest, on dB above the reference: a 40 dB step reaches
+        // 0.55 x 40 on its first row, and when it stops it fades by 0.45 of its height per row.
         let quiet = [Float](repeating: -100, count: 41), loud = [Float](repeating: -60, count: 41)
         let rows = TerrainSurface.heightRows(grid: [loud, quiet], referenceDb: -100)
         XCTAssertEqual(rows.count, 2)
@@ -372,30 +405,50 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(rows[0][20], 0.55 * 40, accuracy: 1e-3)         // newest, blended with the older
         let three = TerrainSurface.heightRows(grid: [loud, loud, quiet], referenceDb: -100)
         XCTAssertEqual(three[0][20], (0.55 + 0.45 * 0.55) * 40, accuracy: 1e-3)
+        let fading = TerrainSurface.heightRows(grid: [quiet, quiet, loud], referenceDb: -100)
+        XCTAssertEqual(fading[0][20], 0.45 * 0.45 * 40, accuracy: 1e-3) // two rows after it stopped
     }
 
     /// The height rows are dB above a reference, clamped at it, so the level mapping can run per
-    /// frame on the GPU. Smoothing and blending are affine-invariant, so mapping afterwards gives
-    /// what mapping first gave, wherever nothing is clipped.
+    /// frame on the GPU. A flat row stays exactly flat; a narrow peak keeps most of its height
+    /// instead of being averaged down toward the noise in dB, and falls away smoothly.
     func testHeightRowsAreDbAboveTheReference() {
         var row = [Float](repeating: -200, count: 41)                   // floor-clamped stopband
         row[20] = -40
         row[3] = .nan
-        let h = TerrainSurface.heightRows(grid: [row], referenceDb: -90, sigmaPoints: 0.0001)
+        let h = TerrainSurface.heightRows(grid: [row], referenceDb: -90, sigmaPoints: 0.0001,
+                                          peakSigmaPoints: 0.0001)
         XCTAssertEqual(h[0][0], 0)                                      // below the reference: 0
         XCTAssertEqual(h[0][3], 0)                                      // non-finite: 0
         XCTAssertEqual(h[0][20], 50, accuracy: 1e-3)
 
-        let range = TerrainAutoRange()                                  // -100 ... -50
-        let g: [[Float]] = [(0..<41).map { -100 + Float($0) }, (0..<41).map { -95 + Float($0) / 2 }]
-        let heights = TerrainSurface.heightRows(grid: g, referenceDb: range.floorDb)
-        // What the shader does per texel: the level of (height + reference) dBFS.
-        let levels = heights.map { $0.map { range.level($0 + range.floorDb) } }
-        var expected: [Float]?
-        for age in [1, 0] {
-            let smoothed = TerrainSurface.smoothRow(g[age].map { range.level($0) })
-            expected = TerrainSurface.blend(new: smoothed, previous: expected)
-            for i in 0..<41 { XCTAssertEqual(levels[age][i], expected![i], accuracy: 1e-4, "row \(age) bin \(i)") }
+        let flat = TerrainSurface.heightRows(grid: [[Float](repeating: -70, count: 41)], referenceDb: -100)
+        for v in flat[0] { XCTAssertEqual(v, 30, accuracy: 1e-3) }
+
+        // One point 60 dB over the noise: it keeps a crest of over 40 dB (averaged on dB alone it
+        // stood 8 dB high), falls away monotonically, and past the peak path's reach it eases into
+        // the dB-smoothed shoulder with no step where either kernel ends.
+        var spike = [Float](repeating: -100, count: 201)
+        spike[100] = -40
+        let s = TerrainSurface.heightRows(grid: [spike], referenceDb: -100)[0]
+        XCTAssertGreaterThan(s[100], 40)
+        for x in 100..<200 { XCTAssertLessThanOrEqual(s[x + 1], s[x] + 1e-4, "falls away at \(x)") }
+        for x in 106..<200 { XCTAssertLessThan(s[x] - s[x + 1], 1, "no step at \(x)") }
+        XCTAssertEqual(s[150], 0, accuracy: 0.01)
+
+        // A spike 140 dB high, as an onset can be while the scale is still catching up: the cut-off
+        // peak kernel draws the same flank as one that never stops (radius 20 sigma), so there is no
+        // step where it ends.
+        var tall = [Float](repeating: 0, count: 201)
+        tall[100] = 140
+        let cut = TerrainSurface.shapeRow(tall)
+        let c = powf(10, -TerrainSurface.peakWeightDb / 10)
+        let smooth = TerrainSurface.smoothRow(tall)
+        let full = TerrainSurface.smoothRow(tall.map { powf(10, $0 / 10) },
+                                            sigmaPoints: TerrainSurface.peakSigmaPoints, radiusSigmas: 20)
+        for x in 0..<201 {
+            let untruncated = max(10 * log10f((powf(10, smooth[x] / 10) + c * full[x]) / (1 + c)), 0)
+            XCTAssertEqual(cut[x], untruncated, accuracy: 0.1, "flank at \(x)")
         }
     }
 

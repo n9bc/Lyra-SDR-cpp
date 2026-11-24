@@ -11,7 +11,8 @@ enum TerrainRendererError: Error {
 }
 
 /// Draws the audio terrain as one smooth, lit surface: the feed's rows are smoothed across
-/// frequency and time in dB, upsampled with a monotone cubic onto a 320 x 120 height texture, and
+/// frequency (`TerrainSurface.shapeRow`) and blended over time in dB, upsampled with a monotone
+/// cubic onto a 320 x 120 height texture, and
 /// mapped through a following dB scale (`TerrainAutoRange`) in the shader, every frame, so a
 /// rescale glides rather than jumping at each row. The surface is a static 320 x 140 mesh drawn
 /// with 4x MSAA, per-pixel lighting, an inferno-style colour map and depth fog.
@@ -149,7 +150,11 @@ final class TerrainRenderer: LyraMetalRenderer {
         lastFrame = nil
         range = TerrainAutoRange()
         if case .sample(let grid) = newSource {
-            for _ in 0..<20 { range.update(grid: grid, dt: 1) }
+            for _ in 0..<20 {
+                range.retarget(drawnGrid: grid,
+                               referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb)
+                range.advance(dt: 1)
+            }
         }
         wake()
     }
@@ -270,7 +275,12 @@ final class TerrainRenderer: LyraMetalRenderer {
         lastCount = grid.count
         lastNewest = newest
 
-        if case .feed = source { range.retarget(grid: grid) }
+        if case .feed = source {
+            // The peak is read from the heights as drawn, measured from the same reference the rows
+            // below are built from (it moves only when the floor does, by a few dB at most).
+            range.retarget(drawnGrid: grid,
+                           referenceDb: min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb)
+        }
         // Measured from below both where the floor is and where it is heading (with a second of
         // fall to spare), so nothing the scale shows before the next row is clamped away and the
         // flat padding rows stay at level 0.
