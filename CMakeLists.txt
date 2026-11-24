@@ -640,12 +640,16 @@ qt_add_executable(lyra
     src/qrv/QrvPanel.cpp
 )
 
+# LyraDS is a QML singleton (design tokens); must be flagged before the module is created.
+set_source_files_properties(src/qml/LyraDS.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 # QML module — keeps Main.qml inside the binary as a Qt resource so
 # we don't have to ship loose .qml files alongside the .exe.
 qt_add_qml_module(lyra
     URI Lyra
     VERSION 1.0
     QML_FILES
+        src/qml/LyraDS.qml
         src/qml/LyraSlider.qml
         src/qml/LyraButton.qml
         src/qml/VfoBox.qml
