@@ -85,14 +85,15 @@ Item {
     }
 
     Row {   // header chips (read-only: the Step/Mode controls live in VfoBox)
+        id: header
         x: 10; y: 6
         spacing: 6
         ConsoleChip {
             height: 22
             title: qsTr("VFO %1").arg(st.vfoLetter)
             kind: st.live ? "on" : "plain"
-            enabled: false
-            opacity: 1
+            hoverEnabled: false
+            focusPolicy: Qt.NoFocus
         }
         Rectangle {   // role tag: filled while transmitting, chip otherwise
             visible: st.isTx
@@ -114,24 +115,31 @@ Item {
             height: 22
             title: st.roleText
             kind: "plain"
-            enabled: false
-            opacity: 1
+            hoverEnabled: false
+            focusPolicy: Qt.NoFocus
         }
         ConsoleChip {
             height: 22
             title: st.stepLabel
             kind: "dim"
-            enabled: false
-            opacity: 1
+            hoverEnabled: false
+            focusPolicy: Qt.NoFocus
         }
         ConsoleChip {
             visible: st.showMode && st.modeText !== ""
             height: 22
             title: st.modeText
             kind: "sub"
-            enabled: false
-            opacity: 1
+            hoverEnabled: false
+            focusPolicy: Qt.NoFocus
         }
+    }
+
+    // Chips stay enabled so they draw their kind (live glow, dim, ...); this
+    // swallows presses so they are display-only.
+    MouseArea {
+        anchors.fill: header
+        acceptedButtons: Qt.AllButtons
     }
 
     Item {
