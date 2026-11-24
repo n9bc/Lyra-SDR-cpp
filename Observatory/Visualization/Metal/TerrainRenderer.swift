@@ -11,14 +11,14 @@ enum TerrainRendererError: Error {
 }
 
 /// Draws the audio terrain as one smooth, lit surface: the feed's rows are smoothed across
-/// frequency and time in dB, upsampled with Catmull-Rom onto a 320 x 120 height texture, and
+/// frequency and time in dB, upsampled with a monotone cubic onto a 320 x 120 height texture, and
 /// mapped through a following dB scale (`TerrainAutoRange`) in the shader, every frame, so a
 /// rescale glides rather than jumping at each row. The surface is a static 320 x 140 mesh drawn
 /// with 4x MSAA, per-pixel lighting, an inferno-style colour map and depth fog.
 ///
 /// Main thread only. The renderer draws only what its source holds: an empty grid is a flat
-/// surface at level 0, and missing (young) rows are flat at the back. The scroll fraction runs
-/// only while the feed is live; otherwise it freezes and the MTKView is paused after one frame,
+/// surface at level 0, and missing (young) rows are flat at the back. The scroll runs only while
+/// the feed is live; otherwise it freezes and the MTKView is paused after one frame,
 /// until `wake()` (the feed went live again, the grid changed, or the size changed).
 @MainActor
 final class TerrainRenderer: LyraMetalRenderer {
@@ -140,17 +140,22 @@ final class TerrainRenderer: LyraMetalRenderer {
 
     // MARK: - Source and pausing
 
-    /// Switches what is drawn. A sample grid's scale is settled at once (it never changes).
+    /// Switches what is drawn. A sample grid's scale is settled at once (it never changes); the
+    /// live feed starts from the scale's start values, not from whatever the last source left.
     func setSource(_ newSource: Source) {
         source = newSource
         lastNewest = nil
         lastCount = -1
         lastFrame = nil
+        range = TerrainAutoRange()
         if case .sample(let grid) = newSource {
             for _ in 0..<20 { range.update(grid: grid, dt: 1) }
         }
         wake()
     }
+
+    /// The scale the next frame maps through. Tests only.
+    var autoRange: TerrainAutoRange { range }
 
     /// Resumes drawing; `draw` pauses again after one frame while the source is not live.
     func wake() {
@@ -248,12 +253,20 @@ final class TerrainRenderer: LyraMetalRenderer {
 
     // MARK: - Frame preparation
 
+    /// How many rows landed between `previousNewest` and `grid` (newest first): where the old
+    /// newest row now sits, or 1 when it cannot be found; 0 when the newest row is unchanged or
+    /// there was nothing before.
+    nonisolated static func arrivedRows(_ grid: [[Float]], previousNewest: [Float]?) -> Int {
+        guard let previousNewest, let newest = grid.first, newest != previousNewest else { return 0 }
+        return grid.indices.dropFirst().first { grid[$0] == previousNewest } ?? 1
+    }
+
     /// Takes a new grid into the scale's targets and the cached rows. Only runs when the grid
     /// changed. The scale itself moves per frame, in `prepare`.
     private func ingest(_ grid: [[Float]], now: TimeInterval) {
         let newest = grid.first
         guard grid.count != lastCount || newest != lastNewest else { return }
-        let isNewRow = newest != nil && newest != lastNewest
+        let arrived = Self.arrivedRows(grid, previousNewest: lastNewest)
         lastCount = grid.count
         lastNewest = newest
 
@@ -265,7 +278,7 @@ final class TerrainRenderer: LyraMetalRenderer {
         let heights = TerrainSurface.heightRows(grid: grid, referenceDb: referenceDb)
         columns = Self.padded(heights, rows: TerrainHistory.rows, points: Self.points)
             .map { TerrainSurface.upsampleRow($0, width: Self.textureWidth) }
-        if isNewRow { clock.rowArrived(at: now) }
+        if arrived > 0 { clock.rowsArrived(arrived, at: now) }
     }
 
     private func prepare(now: TimeInterval, viewSize: CGSize) -> Bool {
@@ -273,13 +286,13 @@ final class TerrainRenderer: LyraMetalRenderer {
         ingest(grid, now: now)
         // The scale glides only while live (a dim, paused terrain holds still). A long gap (the
         // view was paused) is capped at one row period, so waking never jumps the scale.
-        let dt = lastFrame.map { min(max(now - $0, 0), TerrainScrollClock.rowPeriod) } ?? 0
+        let dt = lastFrame.map { min(max(now - $0, 0), TerrainScrollClock.nominalPeriod) } ?? 0
         lastFrame = now
         if live { range.advance(dt: dt) }
         uniforms.range = Self.rangeUniform(range, referenceDb: referenceDb)
-        let fraction = clock.fraction(now: now, live: live)
+        let lag = clock.advance(now: now, live: live)
         heights.withUnsafeMutableBufferPointer {
-            TerrainSurface.upsampleTime(columns: columns, fraction: fraction, height: Self.textureHeight, into: $0)
+            TerrainSurface.upsampleTime(columns: columns, lag: lag, height: Self.textureHeight, into: $0)
         }
         heights.withUnsafeBytes {
             heightTexture.replace(region: MTLRegionMake2D(0, 0, Self.textureWidth, Self.textureHeight),

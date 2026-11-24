@@ -202,12 +202,12 @@ final class TerrainSurfaceTests: XCTestCase {
     // MARK: - Upsampling
 
     func testUpsampleHitsKnotsAndIsContinuous() {
-        // 4 rows x 5 points onto 9 x 7: knots at x = 0, 2, 4, 6, 8 and y = 0, 2, 4, 6.
+        // 4 rows x 5 points onto 9 x 7 over all 3 row gaps: knots at x = 0, 2, 4, 6, 8 and y = 0, 2, 4, 6.
         let rows: [[Float]] = [[0.1, 0.5, 0.9, 0.3, 0.2],
                                [0.4, 0.8, 0.2, 0.6, 0.1],
                                [0.7, 0.3, 0.5, 0.9, 0.4],
                                [0.2, 0.6, 0.8, 0.1, 0.5]]
-        let out = TerrainSurface.upsample(rows: rows, fraction: 0, width: 9, height: 7)
+        let out = TerrainSurface.upsample(rows: rows, lag: 0, span: 3, width: 9, height: 7)
         XCTAssertEqual(out.count, 63)
         for (r, row) in rows.enumerated() {
             for (p, v) in row.enumerated() {
@@ -221,7 +221,7 @@ final class TerrainSurfaceTests: XCTestCase {
                 0.5 + 0.4 * sin(Float(p) / 200 * 2 * .pi * 2) * cos(Float(r) / 29 * .pi)
             }
         }
-        let big = TerrainSurface.upsample(rows: smooth, fraction: 0.37)
+        let big = TerrainSurface.upsample(rows: smooth, lag: 1.37)
         XCTAssertEqual(big.count, 320 * 120)
         var worst: Float = 0
         for y in 0..<120 {
@@ -234,34 +234,124 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertLessThanOrEqual(worst, 0.05)
     }
 
-    func testUpsampleFractionShiftsTime() {
-        // Newest row (0) at 1, all older rows at 0. Width 2 keeps x trivial; height 4 = 1 knot/row.
-        let rows: [[Float]] = [[1, 1], [0, 0], [0, 0], [0, 0]]
-        let still = TerrainSurface.upsample(rows: rows, fraction: 0, width: 2, height: 4)
-        XCTAssertEqual(still[0], 1, accuracy: 1e-4)
-        XCTAssertEqual(still[2], 0, accuracy: 1e-4)
-        // Half a row later the newest row has moved half way back: output row 1 lies between.
-        let half = TerrainSurface.upsample(rows: rows, fraction: 0.5, width: 2, height: 4)
-        XCTAssertGreaterThan(half[2], 0.2)
-        XCTAssertLessThan(half[2], 0.8)
-        // The front stays on the newest row (clamped, nothing invented ahead of it).
-        XCTAssertEqual(half[0], 1, accuracy: 1e-4)
+    func testUpsampleLagShiftsTime() {
+        // Newest row (0) at 1, all older rows at 0. Width 2 keeps x trivial; 1 output row per row.
+        let rows: [[Float]] = [[1, 1], [0, 0], [0, 0], [0, 0], [0, 0]]
+        let front = TerrainSurface.upsample(rows: rows, lag: 0, span: 3, width: 2, height: 4)
+        XCTAssertEqual(front[0], 1, accuracy: 1e-4)
+        XCTAssertEqual(front[2], 0, accuracy: 1e-4)
+        // Half a row behind the newest row: the front lies between rows 0 and 1.
+        let half = TerrainSurface.upsample(rows: rows, lag: 0.5, span: 3, width: 2, height: 4)
+        XCTAssertGreaterThan(half[0], 0.2)
+        XCTAssertLessThan(half[0], 0.8)
+        // A row landing adds 1 to the lag, and the picture is unchanged: what was row k is now row k + 1.
+        // From one row back the interpolation does not depend on the newest row (only the newest
+        // gap's tangent at old row 0 would change), so with the front at lag >= 1 nothing moves.
+        let landed = [[Float]]([[0.3, 0.3]]) + rows
+        let before = TerrainSurface.upsample(rows: rows, lag: 1.2, span: 2, width: 2, height: 4)
+        let after = TerrainSurface.upsample(rows: landed, lag: 2.2, span: 2, width: 2, height: 4)
+        for i in before.indices { XCTAssertEqual(after[i], before[i], accuracy: 1e-6) }
     }
 
     func testUpsampleNeverNegative() {
-        // An impulse makes Catmull-Rom undershoot; the output is clamped at zero.
+        // An impulse made the old Catmull-Rom undershoot below 0; the monotone cubic cannot, so the
+        // output stays >= 0 without any clamp.
         var row = [Float](repeating: 0, count: 21)
         row[10] = 1
-        var rows = [[Float]](repeating: [Float](repeating: 0, count: 21), count: 6)
+        var rows = [[Float]](repeating: [Float](repeating: 0, count: 21), count: 8)
         rows[2] = row
-        for f: Float in [0, 0.25, 0.5, 0.75] {
-            let out = TerrainSurface.upsample(rows: rows, fraction: f, width: 64, height: 32)
-            XCTAssertTrue(out.allSatisfy { $0 >= 0 })
+        rows[5] = [Float](repeating: 0.7, count: 21)
+        for lag: Float in [0, 0.25, 0.5, 0.75, 1, 1.5, 2.25, 3] {
+            let out = TerrainSurface.upsample(rows: rows, lag: lag, width: 64, height: 32)
+            XCTAssertTrue(out.allSatisfy { $0 >= 0 }, "lag \(lag)")
+        }
+        // Every segment of the interpolant stays between its two knots, for arbitrary knots >= 0.
+        var seed: UInt64 = 0x1234_5678
+        func rnd() -> Float {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Float(seed >> 40) / Float(1 << 24)
+        }
+        for _ in 0..<2000 {
+            let p = (0..<4).map { _ in rnd() < 0.3 ? 0 : rnd() }
+            for k in 0...20 {
+                let t = Float(k) / 20
+                let v = TerrainSurface.monotoneCubic(p[0], p[1], p[2], p[3], t)
+                XCTAssertGreaterThanOrEqual(v, min(p[1], p[2]) - 1e-6)
+                XCTAssertLessThanOrEqual(v, max(p[1], p[2]) + 1e-6)
+            }
         }
     }
 
+    /// The largest jump in first difference along `samples`, relative to the step squared. A C1
+    /// curve sampled at step h has second differences of about h^2 f'', so this stays near |f''|;
+    /// a kink (a slope break of J) gives about J / h, which grows without bound as h shrinks.
+    private func kinkiness(_ samples: [Float], step: Float) -> Float {
+        var worst: Float = 0
+        for i in 1..<(samples.count - 1) {
+            let d2 = (samples[i + 1] - samples[i]) - (samples[i] - samples[i - 1])
+            worst = max(worst, abs(d2) / (step * step))
+        }
+        return worst
+    }
+
+    /// The front of the surface is real data, not the newest row extruded: no flat band and no
+    /// slope break anywhere near the front edge, at any lag the clock can produce.
+    func testFrontEdgeHasNoFlatBandOrKink() {
+        // A straight ramp in time is reproduced exactly: every first difference along time is the
+        // same, right up to the front edge.
+        let ramp: [[Float]] = (0..<10).map { r in [Float](repeating: 2 - 0.2 * Float(r), count: 3) }
+        let height = 200
+        for lag: Float in stride(from: 0, through: TerrainScrollClock.maxLag, by: 0.125) {
+            let out = TerrainSurface.upsample(rows: ramp, lag: lag, width: 3, height: height)
+            let column = (0..<height).map { out[$0 * 3 + 1] }
+            let first = column[1] - column[0]
+            XCTAssertLessThan(first, 0, "lag \(lag): the front is not a flat extrusion")
+            for y in 1..<(height - 1) {
+                XCTAssertEqual(column[y + 1] - column[y], first, accuracy: 1e-5, "lag \(lag) y \(y)")
+            }
+        }
+
+        // A sharp onset at the newest row (loud newest row over quiet history): the time profile
+        // near the front stays C1, with no crease where a clamp or extrusion would have been.
+        var onset = [[Float]](repeating: [Float](repeating: 0.05, count: 3), count: 10)
+        onset[0] = [Float](repeating: 1, count: 3)
+        onset[1] = [Float](repeating: 0.6, count: 3)
+        let fine = 1201
+        let span = TerrainSurface.visibleRows(count: onset.count)
+        let step = span / Float(fine - 1)
+        for lag: Float in [0, 0.1, 0.5, 0.9, 1, 1.5, 2.5] {
+            let out = TerrainSurface.upsample(rows: onset, lag: lag, width: 3, height: fine)
+            let column = (0..<fine).map { out[$0 * 3 + 1] }
+            // |f''| of these Hermite segments is at most a few units per row^2; a slope break of
+            // even 0.05 would read 0.05 / step ~ 17 here.
+            XCTAssertLessThan(kinkiness(column, step: step), 8, "lag \(lag)")
+            XCTAssertTrue(column.allSatisfy { $0 >= 0 })
+        }
+    }
+
+    /// The foot of a sharp onset across frequency: the monotone cubic goes flat into the floor
+    /// instead of undershooting and being clamped, so there is no crease there.
+    func testSharpOnsetHasNoKinkAndNoUndershoot() {
+        var row = [Float](repeating: 0, count: 41)
+        for p in 20...24 { row[p] = 1 }               // a narrow plateau: a hard onset either side
+        row[19] = 0.02; row[25] = 0.4
+        let width = 4001
+        let step = Float(40) / Float(width - 1)
+        let up = TerrainSurface.upsampleRow(row, width: width)
+        XCTAssertTrue(up.allSatisfy { $0 >= 0 })
+        XCTAssertLessThan(kinkiness(up, step: step), 8)
+        // The same in time.
+        let rows = row.map { [Float](repeating: $0, count: 2) }
+        let fine = 2001
+        let span = TerrainSurface.visibleRows(count: rows.count)
+        let out = TerrainSurface.upsample(rows: rows, lag: 1.3, width: 2, height: fine)
+        let column = (0..<fine).map { out[$0 * 2] }
+        XCTAssertTrue(column.allSatisfy { $0 >= 0 })
+        XCTAssertLessThan(kinkiness(column, step: span / Float(fine - 1)), 8)
+    }
+
     func testUpsampleOfNoRowsIsFlat() {
-        let out = TerrainSurface.upsample(rows: [], fraction: 0.3, width: 8, height: 4)
+        let out = TerrainSurface.upsample(rows: [], lag: 0.3, width: 8, height: 4)
         XCTAssertEqual(out, [Float](repeating: 0, count: 32))
     }
 
@@ -309,6 +399,12 @@ final class TerrainSurfaceTests: XCTestCase {
         }
     }
 
+}
+
+/// A terrain source that never delivers audio.
+@MainActor private final class SilentTerrainSource: TerrainAudioSource {
+    func setConsoleAudioStreaming(_ on: Bool) {}
+    func onConsoleAudio(_ handler: (@Sendable (UnsafeBufferPointer<Float>, Int) -> Void)?) {}
 }
 
 @MainActor final class TerrainRendererTests: XCTestCase {
@@ -392,16 +488,88 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(TerrainRenderer.padded([], rows: 2, points: 3), [[0, 0, 0], [0, 0, 0]])
     }
 
-    func testScrollFractionFreezesWhenNotLive() {
+    func testScrollLagFreezesWhenNotLive() {
         var clock = TerrainScrollClock()
-        clock.rowArrived(at: 10)
-        XCTAssertEqual(clock.fraction(now: 10 + TerrainScrollClock.rowPeriod / 2, live: true), 0.5, accuracy: 1e-6)
-        let frozen = clock.fraction(now: 10 + TerrainScrollClock.rowPeriod * 0.6, live: false)
-        XCTAssertEqual(frozen, 0.5, accuracy: 1e-6)
-        XCTAssertEqual(clock.fraction(now: 50, live: false), 0.5, accuracy: 1e-6)
+        let p = TerrainScrollClock.nominalPeriod
+        XCTAssertEqual(clock.advance(now: 10, live: true), TerrainScrollClock.targetLag)
+        let moving = clock.advance(now: 10 + p / 2, live: true)
+        XCTAssertEqual(moving, TerrainScrollClock.targetLag - 0.5, accuracy: 1e-3)
+        XCTAssertEqual(clock.advance(now: 10 + p, live: false), moving)
+        XCTAssertEqual(clock.advance(now: 50, live: false), moving)
         // Resuming continues from the frozen value rather than jumping.
-        XCTAssertEqual(clock.fraction(now: 60, live: true), 0.5, accuracy: 1e-6)
-        XCTAssertLessThan(clock.fraction(now: 1_000, live: true), 1)
+        XCTAssertEqual(clock.advance(now: 60, live: true), moving)
+        XCTAssertLessThan(clock.advance(now: 60 + 1.0 / 60, live: true), moving)
+    }
+
+    /// A row landing grows the lag by one row, so the picture holds still at the arrival; bursts
+    /// are counted by row.
+    func testRowArrivalTakesUpTheLag() {
+        var clock = TerrainScrollClock()
+        _ = clock.advance(now: 0, live: true)
+        let before = clock.advance(now: 0.1, live: true)
+        clock.rowsArrived(at: 0.1)
+        XCTAssertEqual(clock.lag, before + 1, accuracy: 1e-6)
+        clock.rowsArrived(5, at: 0.11)
+        XCTAssertEqual(clock.lag, TerrainScrollClock.maxLag)
+
+        let a: [Float] = [1, 2], b: [Float] = [3, 4], c: [Float] = [5, 6]
+        XCTAssertEqual(TerrainRenderer.arrivedRows([b, a], previousNewest: a), 1)
+        XCTAssertEqual(TerrainRenderer.arrivedRows([c, b, a], previousNewest: a), 2)
+        XCTAssertEqual(TerrainRenderer.arrivedRows([b, a], previousNewest: b), 0)
+        XCTAssertEqual(TerrainRenderer.arrivedRows([b], previousNewest: nil), 0)
+        XCTAssertEqual(TerrainRenderer.arrivedRows([c, b], previousNewest: a), 1)
+    }
+
+    /// Rows that arrive slower than the nominal 4/30 s (and with jitter): the measured period
+    /// follows them, the scroll position only ever moves forward, it moves every frame at a
+    /// near-constant speed, and the lag never runs dry (it does not sit at its stop and wait).
+    func testScrollKeepsRollingWhenRowsArriveSlow() {
+        for nominal in [0.18, 0.2, 0.1] {
+            var clock = TerrainScrollClock()
+            let frame = 1.0 / 60
+            var nextRow = nominal, arrived = 0
+            var seed: UInt64 = 42
+            var lastPosition: Float?
+            var steps: [Float] = []
+            var minLag = Float.infinity, maxLag = -Float.infinity
+            var t = 0.0
+            while t < 12 {
+                t += frame
+                while t >= nextRow {
+                    clock.rowsArrived(at: nextRow)
+                    arrived += 1
+                    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                    let jitter = (Double(seed >> 40) / Double(1 << 24) - 0.5) * 0.2 * nominal
+                    nextRow += nominal + jitter
+                }
+                let lag = clock.advance(now: t, live: true)
+                // Where the front is in the stream of rows: rows arrived minus the lag.
+                let position = Float(arrived) - lag
+                if t > 4 {                                      // after the period has settled
+                    if let lastPosition { steps.append(position - lastPosition) }
+                    minLag = min(minLag, lag); maxLag = max(maxLag, lag)
+                }
+                lastPosition = position
+            }
+            XCTAssertEqual(clock.period, nominal, accuracy: nominal * 0.1, "\(nominal)")
+            XCTAssertTrue(steps.allSatisfy { $0 > 0 }, "\(nominal): moves forward every frame")
+            let expected = Float(frame / nominal)
+            XCTAssertGreaterThan(steps.min()!, expected * 0.7, "\(nominal): no stall")
+            XCTAssertLessThan(steps.max()!, expected * 1.3, "\(nominal): no lurch")
+            XCTAssertGreaterThan(minLag, 0.2, "\(nominal): never sits at its stop")
+            XCTAssertLessThan(maxLag, TerrainScrollClock.maxLag, "\(nominal): never fills up")
+        }
+    }
+
+    func testSwitchingToTheFeedRestartsTheScale() throws {
+        guard let ctx = MetalContext.shared else { throw XCTSkip("No Metal device") }
+        let r = try TerrainRenderer(context: ctx)
+        r.setSource(.sample([[Float]](repeating: [Float](repeating: -20, count: 201), count: 30)))
+        XCTAssertNotEqual(r.autoRange, TerrainAutoRange())
+        r.setSource(.feed(TerrainFeed(source: SilentTerrainSource())))
+        XCTAssertEqual(r.autoRange, TerrainAutoRange())
+        XCTAssertEqual(r.autoRange.floorDb, -100)
+        XCTAssertEqual(r.autoRange.ceilingDb, -50)
     }
 
     func testShaderCompilesAndOffscreenFrameRenders() throws {
