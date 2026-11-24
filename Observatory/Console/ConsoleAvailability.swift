@@ -2,6 +2,9 @@ import SwiftUI
 
 /// The decision behind every gated control, kept pure so it can be tested.
 enum ConsoleAvailability {
+    /// The reason every transmit-owned control shows until Milestone 5b wires transmit.
+    nonisolated static let transmitReason = "Arrives with transmit (Milestone 5b)"
+
     /// Only an unavailable control is disabled; mocked controls stay usable (they are
     /// labelled as sample data elsewhere).
     nonisolated static func isDisabled(_ status: CapabilityStatus) -> Bool {

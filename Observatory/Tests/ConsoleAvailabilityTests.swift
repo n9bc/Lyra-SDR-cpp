@@ -133,13 +133,15 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
 
     /// Every control the live console has no engine path for, with the reason it shows.
     private let noEnginePath: [ConsoleControl: String] = [
-        .frontEnd: "Arrives in Milestone 5",
+        .frontEnd: "Front-end controls arrive in a later milestone",
         .noiseCapture: "Arrives in a later milestone",
-        .rxEqualizer: "The receive equaliser arrives in Milestone 5",
+        .rxEqualizer: "The receive equaliser arrives in a later milestone",
         .tools: "Arrives in a later milestone",
-        .txDSP: "Transmit arrives in Milestone 5",
-        .transmit: "Transmit arrives in Milestone 5",
-        .profile: "Arrives in a later milestone",
+        .txDSP: ConsoleAvailability.transmitReason,
+        .transmit: ConsoleAvailability.transmitReason,
+        .txBandwidth: ConsoleAvailability.transmitReason,
+        .profile: ConsoleAvailability.transmitReason,
+        .filterEdges: "Drag the passband edges on the spectrum to change them",
         .vfoBandwidth: "Use the filter chips to change the bandwidth",
     ]
 
@@ -194,10 +196,41 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         }
     }
 
+    /// Milestone 5a Task 7: every receive-side control M5a wired is live, on both radio families.
+    func testNoReceiveControlLeftUnavailable() {
+        var controls: [ConsoleControl] = [
+            .audio, .agcMode, .agcLevels, .dspLevels, .notches, .spectrumTuning, .displaySettings,
+            .tuningStep, .filterPreset, .bwLock, .mode, .band, .focus, .subReceiver,
+        ]
+        controls += [DSPFunction.nb, .bin, .nr, .anf, .lms, .sq, .apf, .nf].map { ConsoleControl.dsp($0) }
+        for isP2 in [false, true] {
+            let caps = BackendCapabilities.live(nnrAvailable: true, isP2: isP2)
+            for c in controls { XCTAssertEqual(caps.control(c), .available, "\(c) isP2=\(isP2)") }
+            XCTAssertEqual(caps.status(.audioTerrain), .available)
+        }
+    }
+
+    /// Every transmit-owned control carries the one Milestone 5b reason; no reason says a bare
+    /// unversioned Milestone-five mention.
+    func testTransmitControlsPointAtMilestone5b() {
+        XCTAssertEqual(ConsoleAvailability.transmitReason, "Arrives with transmit (Milestone 5b)")
+        for isP2 in [false, true] {
+            let caps = BackendCapabilities.live(nnrAvailable: true, isP2: isP2)
+            for c in [ConsoleControl.transmit, .txDSP, .txBandwidth, .profile] {
+                XCTAssertEqual(caps.control(c), .unavailable(ConsoleAvailability.transmitReason), "\(c)")
+            }
+            for c in [ConsoleControl.frontEnd, .attenuator, .rxEqualizer, .filterEdges, .vfoBandwidth] {
+                if case .unavailable(let r) = caps.control(c) {
+                    XCTAssertFalse(r.contains("Milestone"), "\(c): \(r)")
+                }
+            }
+        }
+    }
+
     func testMOXKeyIsDisabledWithTheMilestoneFiveReasonOnLive() {
         let live = BackendCapabilities.live(nnrAvailable: false, isP2: false).control(.transmit)
         XCTAssertTrue(ConsoleAvailability.isDisabled(live))
-        XCTAssertEqual(MOXButton.help(live), "Transmit arrives in Milestone 5")
+        XCTAssertEqual(MOXButton.help(live), "Arrives with transmit (Milestone 5b)")
         XCTAssertFalse(MOXButton.help(live).contains("Transmit (Space)"))
         XCTAssertEqual(MOXButton.help(.mocked), MOXButton.normalHelp)
         XCTAssertTrue(MOXButton.normalHelp.hasPrefix("Transmit (Space)"))

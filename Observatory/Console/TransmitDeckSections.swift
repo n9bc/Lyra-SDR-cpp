@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Protection toggles (ATT on TX, SWR prot, PA cap, PS on) plus the PureSignal feedback readout.
-/// Read straight from the snapshot; the actions do not reach an engine before Milestone 5.
+/// Read straight from the snapshot; the actions do not reach an engine before Milestone 5b.
 /// MON TX is not here: it is the audio snapshot's `monitorTx`, shared with the receiver column.
 struct TransmitProtectionState: Equatable {
     var attOnTx: Bool

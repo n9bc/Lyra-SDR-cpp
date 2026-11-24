@@ -392,12 +392,12 @@ final class LiveRadioBackendTests: XCTestCase {
                        .unavailable("Hermes-Lite 2 has no attenuator; use LNA"))
         XCTAssertEqual(hl2.control(.zeroBeat),
                        .unavailable("Zero beat arrives in a later milestone"))
-        XCTAssertEqual(hl2.control(.transmit), .unavailable("Transmit arrives in Milestone 5"))
+        XCTAssertEqual(hl2.control(.transmit), .unavailable("Arrives with transmit (Milestone 5b)"))
         XCTAssertEqual(hl2.control(.bandTabs), .unavailable("Only Ham bands in this version"))
 
         let p2 = BackendCapabilities.live(nnrAvailable: true, isP2: true)
         XCTAssertEqual(p2.control(.dsp(.nnr)), .available)
-        XCTAssertEqual(p2.control(.attenuator), .unavailable("Arrives in Milestone 5"))
+        XCTAssertEqual(p2.control(.attenuator), .unavailable("Front-end controls arrive in a later milestone"))
     }
 
     /// Final review, Important 1: readings show only while the radio streams, and clear when the

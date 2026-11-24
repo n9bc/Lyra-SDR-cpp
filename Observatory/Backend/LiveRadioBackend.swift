@@ -214,24 +214,24 @@ extension BackendCapabilities {
         controls[.dsp(.snb)] = .unavailable("The engine has no SNB")
         if !nnrAvailable { controls[.dsp(.nnr)] = .unavailable("NNR model files are not installed") }
 
-        let m5 = CapabilityStatus.unavailable("Arrives in Milestone 5")
         let later = CapabilityStatus.unavailable("Arrives in a later milestone")
-        let edges = CapabilityStatus.unavailable("Filter edges arrive in Milestone 5")
-        let tx = CapabilityStatus.unavailable("Transmit arrives in Milestone 5")
+        let frontEnd = CapabilityStatus.unavailable("Front-end controls arrive in a later milestone")
+        let tx = CapabilityStatus.unavailable(ConsoleAvailability.transmitReason)
         controls[.memory] = .unavailable("Memories arrive in a later milestone")
         controls[.zeroBeat] = .unavailable("Zero beat arrives in a later milestone")
-        controls[.filterEdges] = edges
-        controls[.txBandwidth] = edges
+        // The receive edges move by dragging them on the spectrum; the text fields have no write path.
+        controls[.filterEdges] = .unavailable("Drag the passband edges on the spectrum to change them")
+        controls[.txBandwidth] = tx
         controls[.bandTabs] = .unavailable("Only Ham bands in this version")
         controls[.agcLevels] = .available
         controls[.dspLevels] = .available
         controls[.noiseCapture] = later
-        controls[.frontEnd] = m5
-        controls[.attenuator] = isP2 ? m5 : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
+        controls[.frontEnd] = frontEnd
+        controls[.attenuator] = isP2 ? frontEnd : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
         controls[.transmit] = tx
         controls[.txDSP] = tx
-        controls[.rxEqualizer] = .unavailable("The receive equaliser arrives in Milestone 5")
-        controls[.profile] = later
+        controls[.rxEqualizer] = .unavailable("The receive equaliser arrives in a later milestone")
+        controls[.profile] = tx
         controls[.tools] = later
         controls[.vfoBandwidth] = .unavailable("Use the filter chips to change the bandwidth")
         return BackendCapabilities(statuses: statuses, controls: controls,

@@ -5,7 +5,7 @@ import SwiftUI
 /// MOX fill, glow, caption, header detail and meter liveness come only from `MOXPresentation`,
 /// so nothing indicates transmission until the radio reports `.onAir`. Every control reads the
 /// snapshot directly (constant bindings, no local copies) and is gated on the backend's
-/// `.transmit` availability; nothing here reaches the engine before Milestone 5.
+/// `.transmit` availability; nothing here reaches the engine before Milestone 5b.
 struct TransmitDeckView: View {
     let transmit: TransmitSnapshot
     let keyer: KeyerSnapshot
@@ -95,8 +95,8 @@ struct TransmitDeckView: View {
 }
 
 /// 92 x 92 MOX key. Lit (filled, glowing) only when the presentation says so.
-/// The action is empty until Milestone 5, so the key is gated on `.transmit`: the live console
-/// disables it with the Milestone 5 reason as its only tooltip.
+/// The action is empty until Milestone 5b, so the key is gated on `.transmit`: the live console
+/// disables it with the Milestone 5b reason as its only tooltip.
 struct MOXButton: View {
     let presentation: MOXPresentation
     let status: CapabilityStatus

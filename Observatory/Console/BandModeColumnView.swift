@@ -150,7 +150,7 @@ struct BandModeColumnContent: View {
                           status: capabilities.control(.filterEdges))
                     fieldLabel("TX lo").frame(width: 44, alignment: .leading)
                     field(.constant("\(snapshot.filter.txLowHz) Hz"), "TX low cut",
-                          status: capabilities.control(.filterEdges))
+                          status: capabilities.control(.txBandwidth))
                 }
             }
             .padding(.top, 8)
