@@ -89,6 +89,45 @@ final class TerrainFeedTests: XCTestCase {
         feed.stop()
     }
 
+    func testOnlyPlainRxCountsAsReceiving() {
+        XCTAssertTrue(TerrainFeed.receives(.idle))
+        XCTAssertFalse(TerrainFeed.receives(.requested))
+        XCTAssertFalse(TerrainFeed.receives(.onAir))
+        XCTAssertFalse(TerrainFeed.receives(.releasing))
+    }
+
+    func testNotLiveAndBlocksDiscardedWhileTransmitting() async throws {
+        let source = FakeTerrainSource()
+        let feed = TerrainFeed(source: source)
+        feed.isStreaming = true
+        feed.start()
+        source.feedTone()
+        feed.refreshLiveness()
+        XCTAssertTrue(feed.isLive)
+        feed.isReceiving = false
+        XCTAssertFalse(feed.isLive, "TX audio is not received audio")
+        // Blocks arriving while keyed are dropped: no row is ever made from them.
+        let until = Date().addingTimeInterval(0.6)
+        while Date() < until {
+            source.feedTone(count: 2_048)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        feed.refreshLiveness()
+        XCTAssertFalse(feed.isLive)
+        XCTAssertTrue(feed.grid.isEmpty)
+        // Confirmed RX again: rows resume from fresh blocks only.
+        feed.isReceiving = true
+        feed.refreshLiveness()
+        XCTAssertFalse(feed.isLive, "nothing received yet since RX returned")
+        let resume = Date().addingTimeInterval(0.6)
+        while Date() < resume {
+            source.feedTone(count: 2_048)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        feed.stop()
+        XCTAssertFalse(feed.grid.isEmpty)
+    }
+
     func testTerrainLabelAlwaysMain() {
         XCTAssertTrue(AudioTerrainView.detailText(focused: .sub).contains("MAIN"))
         XCTAssertFalse(AudioTerrainView.detailText(focused: .sub).contains("SUB"))

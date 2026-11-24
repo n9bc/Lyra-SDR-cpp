@@ -96,6 +96,9 @@ struct ConsoleView: View {
             subSpectrum.setStreaming(streaming)
             terrain?.isStreaming = streaming
         }
+        .onChange(of: TerrainFeed.receives(snapshot.transmit.state), initial: true) { _, receiving in
+            terrain?.isReceiving = receiving
+        }
         .onChange(of: displayStore.terrainExpanded, initial: true) { _, expanded in
             terrain?.isExpanded = expanded
         }

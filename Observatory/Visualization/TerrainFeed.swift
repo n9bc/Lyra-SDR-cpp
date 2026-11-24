@@ -38,6 +38,27 @@ final class TerrainFeed {
     var isOccluded = false { didSet { apply() } }
     /// The connection phase is streaming.
     var isStreaming = false { didSet { apply() } }
+    /// The radio's confirmed transmit state is plain RX. While false the tap carries the TX monitor
+    /// (or zeros), not received audio: blocks are discarded, no rows are made and the view says so.
+    var isReceiving = true {
+        didSet {
+            guard isReceiving != oldValue else { return }
+            arrivals.setReceiving(isReceiving)
+            // Nothing from either side of the change may pass for current received audio.
+            ring.reset()
+            arrivals.reset()
+            isLive = false
+        }
+    }
+
+    /// Only `.idle` is plain RX. `.blocked` is TX inhibit while not keyed, so the radio is still
+    /// receiving; keying, on-air and releasing are not.
+    nonisolated static func receives(_ state: TransmitState) -> Bool {
+        switch state {
+        case .idle, .blocked: true
+        case .requested, .onAir, .releasing: false
+        }
+    }
 
     @ObservationIgnored private let source: any TerrainAudioSource
     @ObservationIgnored private let clock: @Sendable () -> TimeInterval
@@ -62,6 +83,7 @@ final class TerrainFeed {
         started = true
         let ring = ring, arrivals = arrivals, clock = clock
         source.onConsoleAudio { samples, rate in
+            guard arrivals.receiving else { return }
             ring.append(samples)
             arrivals.record(at: clock(), rate: rate)
         }
@@ -102,7 +124,7 @@ final class TerrainFeed {
 
     /// Re-evaluates `isLive` against the clock (the row task does this each tick).
     func refreshLiveness() {
-        let live = tapOn && arrivals.isRecent(now: clock(), within: Self.liveWindow)
+        let live = tapOn && isReceiving && arrivals.isRecent(now: clock(), within: Self.liveWindow)
         if live != isLive { isLive = live }
     }
 
@@ -139,7 +161,7 @@ final class TerrainFeed {
 
     private func ingest(_ row: [Float]?) {
         refreshLiveness()
-        guard let row, tapOn else { return }
+        guard let row, tapOn, isReceiving else { return }
         history.push(row)
         grid = history.grid
     }
@@ -149,6 +171,10 @@ final class TerrainFeed {
         private let lock = NSLock()
         private var last: TimeInterval?
         private var rateHz: Int?
+        private var isReceiving = true
+
+        var receiving: Bool { lock.lock(); defer { lock.unlock() }; return isReceiving }
+        func setReceiving(_ on: Bool) { lock.lock(); isReceiving = on; lock.unlock() }
 
         func record(at time: TimeInterval, rate: Int) {
             lock.lock(); last = time; rateHz = rate; lock.unlock()

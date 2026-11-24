@@ -132,9 +132,10 @@ struct AudioTerrainView: View {
                 .opacity(liveFeed.map { $0.isLive ? 1 : 0.35 } ?? 1)
                 .overlay {
                     if let liveFeed, !liveFeed.isLive {
-                        Text("No audio").font(.system(size: 12, weight: .medium))
+                        let label = liveFeed.isReceiving ? "No audio" : "Paused \u{2014} transmitting"
+                        Text(label).font(.system(size: 12, weight: .medium))
                             .foregroundStyle(LyraDS.Palette.textMuted)
-                            .accessibilityLabel("No audio")
+                            .accessibilityLabel(label)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
