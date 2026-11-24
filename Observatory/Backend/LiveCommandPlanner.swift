@@ -122,6 +122,32 @@ enum LiveCommandPlanner {
         case .setMonitor(let on): return [.setMonEnabled(on)]
         case .setMonitorLevel(let v): return [.setMonVolume(clampAudio(v, 0, 1))]
         case .setOutputDevice(let index): return index >= 0 ? [.setAudioOutputDevice(index)] : []
+
+        case .setDSPLevel(let level, let v): return dspLevel(level, v)
+        case .setNRMode(let mode): return [.setNrMode(min(max(mode, 1), 4))]
+        case .setNNRModel(let model): return [.setNnrModel(min(max(model, 0), 1))]
+        // Only the threshold: the engine releases Auto AGC-T itself (map section 2).
+        case .setAGCThreshold(let db): return finite(db).map { [.setAgcThreshDb(min(max($0, -160), 2))] } ?? []
+        case .setAutoAGC(let on): return [.setAutoAgcThresh(on)]
+        case .setAutoAGCMargin(let db): return finite(db).map { [.setAutoAgcMarginDb(min(max($0, -30), 30))] } ?? []
+        }
+    }
+
+    // MARK: - DSP levels
+
+    private nonisolated static func finite(_ v: Double) -> Double? { v.isFinite ? v : nil }
+
+    /// Clamps to the engine's range (map section 2). A NaN or infinity is never written.
+    private nonisolated static func dspLevel(_ level: DSPLevel, _ raw: Double) -> [EngineCall] {
+        guard let v = finite(raw) else { return [] }
+        func unit() -> Double { min(max(v, 0), 1) }
+        switch level {
+        case .nb: return [.setNbStrength(unit())]
+        case .lms: return [.setLmsStrength(unit())]
+        case .squelch: return [.setSquelchThreshold(unit())]
+        case .binDepth: return [.setBinDepth(unit())]
+        case .apfGainDb: return [.setApfGainDb(min(max(v, 0), 24))]
+        case .nnrMaskFloorDb: return [.setNnrMaskFloorDb(min(max(v.rounded(), -50), -10))]
         }
     }
 

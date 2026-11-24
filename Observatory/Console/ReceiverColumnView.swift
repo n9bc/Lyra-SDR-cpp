@@ -47,6 +47,22 @@ struct ReceiverColumnContent: View {
         String(format: "%+.0f %@", v, unit).replacingOccurrences(of: "-", with: "\u{2212}")
     }
 
+    /// One throttled level row for a value both receivers share: reads the engine value (a dash
+    /// when it has not reported one) and names both receivers in its help (map H13).
+    private func levelRow(
+        _ label: String, help: String, value: Double?, range: ClosedRange<Double>, step: Double,
+        tint: Color = LyraDS.Palette.cyan, dimmed: Bool = false, status: CapabilityStatus,
+        readout: @escaping (Double) -> String, command: @escaping (Double) -> RadioCommand
+    ) -> some View {
+        ConsoleThrottledSliderRow(
+            label: label, help: ConsoleFormat.sharedHelp(help), value: value ?? range.lowerBound,
+            range: range, step: step,
+            readout: { shown in value == nil ? "\u{2014}" : readout(shown) },
+            tint: tint, dimmed: dimmed, status: status) { send(command($0)) }
+    }
+
+    private static func percent(_ v: Double) -> String { String(format: "%.0f%%", v * 100) }
+
     private var nbOn: Bool { snapshot.dsp.toggles.first { $0.id == "NB" }?.isOn ?? false }
     nonisolated static func balanceText(_ balance: Double) -> String {
         abs(balance) < 0.02 ? "C" : String(format: "%@%.0f", balance < 0 ? "L" : "R", abs(balance) * 100)
@@ -161,7 +177,6 @@ struct ReceiverColumnContent: View {
     // MARK: AGC
 
     private var agcSection: some View {
-        let threshold = snapshot.dsp.agcThresholdDbfs.map(Double.init)
         let levels = capabilities.control(.agcLevels)
         return VStack(alignment: .leading, spacing: 0) {
             ConsoleSectionHeader("AGC", detail: ConsoleFormat.agcGainDetail(snapshot.dsp.agcGainDb))
@@ -170,17 +185,24 @@ struct ReceiverColumnContent: View {
                                  title: { $0.rawValue }, accent: LyraDS.Palette.cyan,
                                  help: ConsoleAvailability.help(agcStatus, normal: "AGC mode: \(snapshot.focusedReceiver.agc.rawValue)"))
                 .disabled(ConsoleAvailability.isDisabled(agcStatus))
-            ConsoleSliderRow(label: "Thresh", help: "AGC threshold", value: .constant(threshold ?? -140),
-                             range: -140...0, step: 1,
-                             readout: threshold.map { Self.signed($0, "dBFS") } ?? "\u{2014}", status: levels)
+            levelRow("Thresh", help: "AGC threshold", value: snapshot.dsp.agcThresholdDbfs, range: -160...2,
+                     step: 1, status: levels, readout: { Self.signed($0, "dBFS") },
+                     command: { .setAGCThreshold($0) })
                 .padding(.top, 6)
             HStack(spacing: 5) {
-                ConsoleChip(title: "Auto threshold", help: "Set AGC threshold automatically", status: levels)
+                ConsoleChip(title: "Auto threshold",
+                            help: ConsoleFormat.sharedHelp("Set AGC threshold automatically"),
+                            kind: snapshot.dsp.autoAgc ? .on : .plain, status: levels) {
+                    send(.setAutoAGC(!snapshot.dsp.autoAgc))
+                }
                 Spacer(minLength: 0)
                 Text("Squelch").font(.system(size: 12)).foregroundStyle(LyraDS.Palette.textMuted)
                 ConsoleChip(title: "SQ", help: "Squelch", kind: snapshot.dsp.squelchOn ? .on : .plain,
                             status: capabilities.control(.dsp(.sq))) { send(.setDSP(.sq, !snapshot.dsp.squelchOn)) }
             }
+            levelRow("Margin", help: "Auto AGC threshold margin", value: snapshot.dsp.autoAgcMarginDb,
+                     range: -30...30, step: 1, dimmed: !snapshot.dsp.autoAgc, status: levels,
+                     readout: { Self.signed($0, "dB") }, command: { .setAutoAGCMargin($0) })
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .consolePanel()
@@ -204,13 +226,30 @@ struct ReceiverColumnContent: View {
             }
             let levels = capabilities.control(.dspLevels)
             let capture = capabilities.control(.noiseCapture)
-            ConsoleSliderRow(label: "NR mode", help: "NR mode", value: .constant(Double(d.nrMode)), range: 1...4,
-                             step: 1, readout: "\(d.nrMode) of 4", status: levels).padding(.top, 8)
+            let nnrStatus = levels == .available ? capabilities.control(.dsp(.nnr)) : levels
+            levelRow("NR mode", help: "NR mode", value: Double(d.nrMode), range: 1...4, step: 1,
+                     status: levels, readout: { "\(Int($0)) of 4" }, command: { .setNRMode(Int($0)) })
+                .padding(.top, 8)
+            levelRow("NNR", help: "NNR model, 0 Standard or 1 Premium", value: Double(d.nnrModel), range: 0...1,
+                     step: 1, status: nnrStatus, readout: { $0 >= 0.5 ? "Premium" : "Standard" },
+                     command: { .setNNRModel(Int($0)) })
+            levelRow("NNR floor", help: "NNR mask floor", value: d.nnrMaskFloorDb, range: -50 ... -10, step: 1,
+                     status: nnrStatus, readout: { Self.signed($0, "dB") },
+                     command: { .setDSPLevel(.nnrMaskFloorDb, $0) })
             ConsoleSliderRow(label: "ANF", help: "ANF level", value: .constant(Double(d.anfLevel)), range: 0...100,
-                             step: 1, readout: "\(d.anfLevel)", status: levels)
-            ConsoleSliderRow(label: "NB", help: "Noise blanker level", value: .constant(Double(d.nbLevel ?? 0)),
-                             range: 0...100, step: 1, readout: d.nbLevel.map { "\($0)" } ?? "\u{2014}",
-                             dimmed: !nbOn, status: levels)
+                             step: 1, readout: "\u{2014}",
+                             status: .unavailable("The engine's ANF has no adjustable level"))
+            levelRow("NB", help: "Noise blanker level", value: d.nbLevel, range: 0...1, step: 0.01,
+                     dimmed: !nbOn, status: levels, readout: Self.percent, command: { .setDSPLevel(.nb, $0) })
+            levelRow("LMS", help: "LMS strength", value: d.lmsLevel, range: 0...1, step: 0.01,
+                     status: levels, readout: Self.percent, command: { .setDSPLevel(.lms, $0) })
+            levelRow("SQ", help: "Squelch threshold", value: d.squelchLevel, range: 0...1, step: 0.01,
+                     dimmed: !d.squelchOn, status: levels, readout: Self.percent,
+                     command: { .setDSPLevel(.squelch, $0) })
+            levelRow("APF", help: "Audio peak filter gain, CW only", value: d.apfGainDb, range: 0...24, step: 1,
+                     status: levels, readout: { Self.signed($0, "dB") }, command: { .setDSPLevel(.apfGainDb, $0) })
+            levelRow("BIN", help: "Binaural depth", value: d.binDepth, range: 0...1, step: 0.01,
+                     status: levels, readout: Self.percent, command: { .setDSPLevel(.binDepth, $0) })
             HStack(spacing: 5) {
                 ConsoleChip(title: "Capture noise", help: "Capture a noise profile", status: capture)
                 ConsoleMenuChip(label: captureLength, help: "Capture length", options: ["5 s", "10 s", "20 s"],

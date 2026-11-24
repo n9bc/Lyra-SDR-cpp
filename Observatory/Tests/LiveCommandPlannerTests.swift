@@ -241,6 +241,58 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.setDSP(.nb, true), e), [.setDsp(.nb, true)])
     }
 
+    // MARK: - DSP and AGC levels (M5a Task 2)
+
+    func testDspLevelClamps() {
+        let e = state()
+        XCTAssertEqual(plan(.setDSPLevel(.nb, 1.4), e), [.setNbStrength(1)])
+        XCTAssertEqual(plan(.setDSPLevel(.nb, -0.2), e), [.setNbStrength(0)])
+        XCTAssertEqual(plan(.setDSPLevel(.lms, 0.4), e), [.setLmsStrength(0.4)])
+        XCTAssertEqual(plan(.setDSPLevel(.squelch, 2), e), [.setSquelchThreshold(1)])
+        XCTAssertEqual(plan(.setDSPLevel(.binDepth, 0.7), e), [.setBinDepth(0.7)])
+        XCTAssertEqual(plan(.setDSPLevel(.apfGainDb, 30), e), [.setApfGainDb(24)])
+        XCTAssertEqual(plan(.setDSPLevel(.apfGainDb, -3), e), [.setApfGainDb(0)])
+        XCTAssertEqual(plan(.setDSPLevel(.nb, .nan), e), [], "a NaN is never written")
+    }
+
+    func testNnrFloorRounds() {
+        let e = state()
+        XCTAssertEqual(plan(.setDSPLevel(.nnrMaskFloorDb, -33.6), e), [.setNnrMaskFloorDb(-34)])
+        XCTAssertEqual(plan(.setDSPLevel(.nnrMaskFloorDb, -80), e), [.setNnrMaskFloorDb(-50)])
+        XCTAssertEqual(plan(.setDSPLevel(.nnrMaskFloorDb, 0), e), [.setNnrMaskFloorDb(-10)])
+    }
+
+    func testNrAndNnrModeClamp() {
+        let e = state()
+        XCTAssertEqual(plan(.setNRMode(9), e), [.setNrMode(4)])
+        XCTAssertEqual(plan(.setNRMode(0), e), [.setNrMode(1)])
+        XCTAssertEqual(plan(.setNNRModel(5), e), [.setNnrModel(1)])
+        XCTAssertEqual(plan(.setNNRModel(-1), e), [.setNnrModel(0)])
+    }
+
+    func testAgcThresholdClamp() {
+        let e = state()
+        XCTAssertEqual(plan(.setAGCThreshold(-200), e), [.setAgcThreshDb(-160)])
+        XCTAssertEqual(plan(.setAGCThreshold(10), e), [.setAgcThreshDb(2)])
+        XCTAssertEqual(plan(.setAGCThreshold(-92), e), [.setAgcThreshDb(-92)])
+        XCTAssertEqual(plan(.setAGCThreshold(.nan), e), [])
+    }
+
+    /// The engine itself releases Auto on a manual threshold (map section 2); the planner must
+    /// not also send `setAutoAgcThresh(false)`.
+    func testAgcThresholdSendsOnlyTheThreshold() {
+        var e = state()
+        e.dsp.autoAgcThresh = true
+        XCTAssertEqual(plan(.setAGCThreshold(-100), e), [.setAgcThreshDb(-100)])
+    }
+
+    func testAutoAgcAndMargin() {
+        let e = state()
+        XCTAssertEqual(plan(.setAutoAGC(true), e), [.setAutoAgcThresh(true)])
+        XCTAssertEqual(plan(.setAutoAGCMargin(45), e), [.setAutoAgcMarginDb(30)])
+        XCTAssertEqual(plan(.setAutoAGCMargin(-31), e), [.setAutoAgcMarginDb(-30)])
+    }
+
     func testConnect() {
         XCTAssertEqual(plan(.connect, state()), [.connect])
         XCTAssertEqual(plan(.disconnect, state()), [.disconnect])

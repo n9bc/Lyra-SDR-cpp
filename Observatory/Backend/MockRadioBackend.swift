@@ -156,6 +156,26 @@ final class MockRadioBackend: RadioBackend {
             s.audio.balance = abs(b) < 0.06 ? 0 : b
         case .setMonitor(let on): s.audio.monitorTx = on
         case .setMonitorLevel(let v): s.audio.monLevel = v.isNaN ? 0 : min(max(v, 0), 1)
+        case .setDSPLevel(let level, let v):
+            guard v.isFinite else { return s }
+            switch level {
+            case .nb: s.dsp.nbLevel = min(max(v, 0), 1)
+            case .lms: s.dsp.lmsLevel = min(max(v, 0), 1)
+            case .squelch: s.dsp.squelchLevel = min(max(v, 0), 1)
+            case .binDepth: s.dsp.binDepth = min(max(v, 0), 1)
+            case .apfGainDb: s.dsp.apfGainDb = min(max(v, 0), 24)
+            case .nnrMaskFloorDb: s.dsp.nnrMaskFloorDb = min(max(v.rounded(), -50), -10)
+            }
+        case .setNRMode(let mode): s.dsp.nrMode = min(max(mode, 1), 4)
+        case .setNNRModel(let model): s.dsp.nnrModel = min(max(model, 0), 1)
+        case .setAGCThreshold(let db):
+            guard db.isFinite else { return s }
+            s.dsp.agcThresholdDbfs = min(max(db, -160), 2)
+            s.dsp.autoAgc = false     // the engine releases Auto on a manual threshold
+        case .setAutoAGC(let on): s.dsp.autoAgc = on
+        case .setAutoAGCMargin(let db):
+            guard db.isFinite else { return s }
+            s.dsp.autoAgcMarginDb = min(max(db, -30), 30)
         case .setOutputDevice(let index):
             guard s.audio.outputDevices.indices.contains(index) else { return s }
             s.audio.outputDeviceIndex = index

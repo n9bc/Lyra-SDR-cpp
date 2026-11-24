@@ -90,6 +90,15 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 @property (nonatomic) BOOL apfEnabled;
 @property (nonatomic) BOOL notchEnabled;
 @property (nonatomic) NSInteger notchCount;
+// Levels shared by both receivers.  NaN means the engine has not reported one.
+@property (nonatomic) double lmsStrength;
+@property (nonatomic) double squelchThreshold;
+@property (nonatomic) double apfGainDb;
+@property (nonatomic) double binDepth;
+@property (nonatomic) double nnrMaskFloorDb;
+@property (nonatomic) double autoAgcMarginDb;
+@property (nonatomic) NSInteger nnrModel;
+@property (nonatomic) BOOL autoAgcThresh;
 @end
 
 @interface LyraFrontEndReading : NSObject
@@ -418,6 +427,22 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 // Index 0 = HL2 jack, n = PC device n-1. Briefly blocks the main thread
 // while the sink restarts.
 - (void)setAudioOutputDevice:(NSInteger)index;
+
+#pragma mark DSP level calls
+
+// WdspEngine setters; each clamps and persists itself. Main thread.
+- (void)setNbStrength:(double)strength;
+- (void)setLmsStrength:(double)strength;
+- (void)setSquelchThreshold:(double)threshold;
+- (void)setApfGainDb:(double)db;
+- (void)setBinDepth:(double)depth;
+- (void)setNnrMaskFloorDb:(double)db;
+- (void)setNrMode:(NSInteger)mode;
+- (void)setNnrModel:(NSInteger)model;
+// Clamps to -160...+2; the engine itself releases Auto AGC-T.
+- (void)setAgcThreshDb:(double)db;
+- (void)setAutoAgcThresh:(BOOL)on;
+- (void)setAutoAgcMarginDb:(double)db;
 
 #pragma mark Display calls
 

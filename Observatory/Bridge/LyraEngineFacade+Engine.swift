@@ -34,7 +34,10 @@ extension LyraEngineFacade: EngineFacade {
             nrEnabled: d.nrEnabled, nrMode: d.nrMode, nnrEnabled: d.nnrEnabled,
             nnrAvailable: d.nnrAvailable, anfEnabled: d.anfEnabled, lmsEnabled: d.lmsEnabled,
             squelchEnabled: d.squelchEnabled, apfEnabled: d.apfEnabled,
-            notchEnabled: d.notchEnabled, notchCount: d.notchCount)
+            notchEnabled: d.notchEnabled, notchCount: d.notchCount,
+            lmsStrength: d.lmsStrength, squelchThreshold: d.squelchThreshold, apfGainDb: d.apfGainDb,
+            binDepth: d.binDepth, nnrMaskFloorDb: d.nnrMaskFloorDb, autoAgcMarginDb: d.autoAgcMarginDb,
+            nnrModel: d.nnrModel, autoAgcThresh: d.autoAgcThresh)
 
         let fe = consoleFrontEnd()
         e.frontEnd = EngineState.FrontEnd(
@@ -135,6 +138,17 @@ extension LyraEngineFacade: EngineFacade {
             case .setMonEnabled(let on): setMonEnabled(on)
             case .setMonVolume(let v): setMonVolume(v)
             case .setAudioOutputDevice(let index): setAudioOutputDevice(index)
+            case .setNbStrength(let v): setNbStrength(v)
+            case .setLmsStrength(let v): setLmsStrength(v)
+            case .setSquelchThreshold(let v): setSquelchThreshold(v)
+            case .setApfGainDb(let v): setApfGainDb(v)
+            case .setBinDepth(let v): setBinDepth(v)
+            case .setNnrMaskFloorDb(let v): setNnrMaskFloorDb(v)
+            case .setNrMode(let v): setNrMode(v)
+            case .setNnrModel(let v): setNnrModel(v)
+            case .setAgcThreshDb(let v): setAgcThreshDb(v)
+            case .setAutoAgcThresh(let on): setAutoAgcThresh(on)
+            case .setAutoAgcMarginDb(let v): setAutoAgcMarginDb(v)
             }
         }
     }

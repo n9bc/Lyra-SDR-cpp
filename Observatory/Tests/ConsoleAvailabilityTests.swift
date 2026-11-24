@@ -61,6 +61,16 @@ final class ConsoleAvailabilityTests: XCTestCase {
         XCTAssertEqual(ConsoleFormat.agcGainDetail(nil), "Gain \u{2014}")
     }
 
+    /// R2: the console has no Sub-column DSP control, so every shared level says in its help
+    /// text that it acts on both receivers (map H13).
+    func testSharedLevelsHelpNamesBothReceivers() {
+        for base in ["Noise blanker level", "AGC threshold", "LMS strength"] {
+            let help = ConsoleFormat.sharedHelp(base)
+            XCTAssertTrue(help.hasPrefix(base))
+            XCTAssertTrue(help.contains("both receivers"), help)
+        }
+    }
+
     func testQuickToggleIdsAreStable() {
         let ids = RadioSnapshot.sample.main.quickToggles.map(\.id)
         XCTAssertEqual(ids, ["ATT", "LNA", "AUTO", "NB", "NR", "ANF", "NOTCH", "SQ", "APF", "BIN"])
@@ -124,9 +134,7 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
     /// Every control the live console has no engine path for, with the reason it shows.
     private let noEnginePath: [ConsoleControl: String] = [
         .frontEnd: "Arrives in Milestone 5",
-        .agcLevels: "DSP levels arrive in Milestone 5",
-        .dspLevels: "DSP levels arrive in Milestone 5",
-        .noiseCapture: "DSP levels arrive in Milestone 5",
+        .noiseCapture: "Arrives in a later milestone",
         .rxEqualizer: "The receive equaliser arrives in Milestone 5",
         .tools: "Arrives in a later milestone",
         .txDSP: "Transmit arrives in Milestone 5",
@@ -153,6 +161,15 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
     func testLiveAudioControlsAreAvailable() {
         for isP2 in [false, true] {
             XCTAssertEqual(BackendCapabilities.live(nnrAvailable: true, isP2: isP2).control(.audio), .available)
+        }
+    }
+
+    /// Milestone 5a Task 2 wired the DSP and AGC levels to the engine.
+    func testLiveLevelControlsAreAvailable() {
+        for isP2 in [false, true] {
+            let caps = BackendCapabilities.live(nnrAvailable: true, isP2: isP2)
+            XCTAssertEqual(caps.control(.agcLevels), .available)
+            XCTAssertEqual(caps.control(.dspLevels), .available)
         }
     }
 

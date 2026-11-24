@@ -216,7 +216,6 @@ extension BackendCapabilities {
 
         let m5 = CapabilityStatus.unavailable("Arrives in Milestone 5")
         let later = CapabilityStatus.unavailable("Arrives in a later milestone")
-        let levels = CapabilityStatus.unavailable("DSP levels arrive in Milestone 5")
         let edges = CapabilityStatus.unavailable("Filter edges arrive in Milestone 5")
         let tx = CapabilityStatus.unavailable("Transmit arrives in Milestone 5")
         controls[.memory] = .unavailable("Memories arrive in a later milestone")
@@ -224,9 +223,9 @@ extension BackendCapabilities {
         controls[.filterEdges] = edges
         controls[.txBandwidth] = edges
         controls[.bandTabs] = .unavailable("Only Ham bands in this version")
-        controls[.agcLevels] = levels
-        controls[.dspLevels] = levels
-        controls[.noiseCapture] = levels
+        controls[.agcLevels] = .available
+        controls[.dspLevels] = .available
+        controls[.noiseCapture] = later
         controls[.frontEnd] = m5
         controls[.attenuator] = isP2 ? m5 : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
         controls[.transmit] = tx

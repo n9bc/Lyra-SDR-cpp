@@ -183,6 +183,8 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     LYRA_CHANGE(we, &WdspEngine::bandwidthRx2Changed, dsp);
     LYRA_CHANGE(we, &WdspEngine::agcModeChanged, dsp);
     LYRA_CHANGE(we, &WdspEngine::agcThreshDbChanged, dsp);
+    LYRA_CHANGE(we, &WdspEngine::autoAgcThreshChanged, dsp);
+    LYRA_CHANGE(we, &WdspEngine::autoAgcMarginDbChanged, dsp);
     LYRA_CHANGE(we, &WdspEngine::nrChanged, dsp);
     LYRA_CHANGE(we, &WdspEngine::nbChanged, dsp);
     LYRA_CHANGE(we, &WdspEngine::binChanged, dsp);
@@ -436,6 +438,8 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     LyraDspReading *d = [LyraDspReading new];
     d.agcMode = @"";
     d.nrMode = 1;
+    d.lmsStrength = d.squelchThreshold = d.apfGainDb = d.binDepth = NAN;
+    d.nnrMaskFloorDb = d.autoAgcMarginDb = NAN;
     if (WdspEngine *we = [self engineDsp]) {
         d.agcMode = we->agcMode().toNSString();
         d.agcThreshDb = we->agcThreshDb();
@@ -453,6 +457,14 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
         d.apfEnabled = we->apfEnabled();
         d.notchEnabled = we->notchEnabled();
         d.notchCount = we->notchCount();
+        d.lmsStrength = we->lmsStrength();
+        d.squelchThreshold = we->squelchThreshold();
+        d.apfGainDb = we->apfGainDb();
+        d.binDepth = we->binDepth();
+        d.nnrMaskFloorDb = we->nnrMaskFloorDb();
+        d.autoAgcMarginDb = we->autoAgcMarginDb();
+        d.nnrModel = we->nnrModel();
+        d.autoAgcThresh = we->autoAgcThresh();
     }
     return d;
 }
@@ -791,6 +803,29 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 - (void)setAudioOutputDevice:(NSInteger)index
 {
     if (WdspEngine *we = [self engineDsp]) we->setAudioOutputDevice(static_cast<int>(index));
+}
+
+#pragma mark DSP level calls
+
+- (void)setNbStrength:(double)strength { if (WdspEngine *we = [self engineDsp]) we->setNbStrength(strength); }
+- (void)setLmsStrength:(double)strength { if (WdspEngine *we = [self engineDsp]) we->setLmsStrength(strength); }
+- (void)setSquelchThreshold:(double)threshold
+{
+    if (WdspEngine *we = [self engineDsp]) we->setSquelchThreshold(threshold);
+}
+- (void)setApfGainDb:(double)db { if (WdspEngine *we = [self engineDsp]) we->setApfGainDb(db); }
+- (void)setBinDepth:(double)depth { if (WdspEngine *we = [self engineDsp]) we->setBinDepth(depth); }
+- (void)setNnrMaskFloorDb:(double)db { if (WdspEngine *we = [self engineDsp]) we->setNnrMaskFloorDb(db); }
+- (void)setNrMode:(NSInteger)mode { if (WdspEngine *we = [self engineDsp]) we->setNrMode(static_cast<int>(mode)); }
+- (void)setNnrModel:(NSInteger)model
+{
+    if (WdspEngine *we = [self engineDsp]) we->setNnrModel(static_cast<int>(model));
+}
+- (void)setAgcThreshDb:(double)db { if (WdspEngine *we = [self engineDsp]) we->setAgcThreshDb(db); }
+- (void)setAutoAgcThresh:(BOOL)on { if (WdspEngine *we = [self engineDsp]) we->setAutoAgcThresh(on); }
+- (void)setAutoAgcMarginDb:(double)db
+{
+    if (WdspEngine *we = [self engineDsp]) we->setAutoAgcMarginDb(db);
 }
 
 #pragma mark Display calls

@@ -67,4 +67,27 @@ enum RadioCommand: Equatable, Sendable {
     case setMonitorLevel(Double)
     /// An index into `AudioSnapshot.outputDevices` (0 is the HL2 jack).
     case setOutputDevice(Int)
+
+    // DSP and AGC levels. Every one is shared by both receivers (map H13).
+    case setDSPLevel(DSPLevel, Double)
+    /// 1...4
+    case setNRMode(Int)
+    /// 0 Standard, 1 Premium.
+    case setNNRModel(Int)
+    /// A manual AGC threshold in dBFS. The engine itself releases Auto AGC-T.
+    case setAGCThreshold(Double)
+    case setAutoAGC(Bool)
+    case setAutoAGCMargin(Double)
+}
+
+/// The continuous DSP levels, one command shape for all of them.
+enum DSPLevel: Equatable, Sendable, CaseIterable {
+    /// 0...1
+    case nb, lms, squelch
+    /// 0...24 dB
+    case apfGainDb
+    /// 0...1
+    case binDepth
+    /// -50...-10 dB, whole numbers
+    case nnrMaskFloorDb
 }

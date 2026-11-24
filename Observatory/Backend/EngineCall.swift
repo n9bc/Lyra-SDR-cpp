@@ -47,4 +47,8 @@ enum EngineCall: Equatable, Sendable {
     case setBalance(Double)
     case setMonEnabled(Bool), setMonVolume(Double)
     case setAudioOutputDevice(Int)
+    case setNbStrength(Double), setLmsStrength(Double), setSquelchThreshold(Double)
+    case setApfGainDb(Double), setBinDepth(Double), setNnrMaskFloorDb(Double)
+    case setNrMode(Int), setNnrModel(Int)
+    case setAgcThreshDb(Double), setAutoAgcThresh(Bool), setAutoAgcMarginDb(Double)
 }

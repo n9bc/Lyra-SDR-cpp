@@ -130,12 +130,24 @@ struct DSPSnapshot: Equatable, Sendable {
     var toggles: [QuickToggle]
     var nrMode: Int
     var anfLevel: Int
-    /// The engine's AGC and noise-blanker levels; nil when it has not reported them (NaN).
-    var nbLevel: Int?
-    var agcThresholdDbfs: Int?
+    /// The engine's levels as it reports them; nil when it has not (NaN). Shared by both receivers.
+    /// `nbLevel`, `lmsLevel`, `squelchLevel` and `binDepth` are 0...1.
+    var nbLevel: Double?
+    var agcThresholdDbfs: Double?
     var agcGainDb: Int?
     var notchCount: Int
     var squelchOn: Bool
+    var lmsLevel: Double? = 0.5
+    var squelchLevel: Double? = 0.2
+    /// 0...24 dB
+    var apfGainDb: Double? = 12
+    var binDepth: Double? = 0.7
+    /// -50...-10 dB
+    var nnrMaskFloorDb: Double? = -40
+    /// 0 Standard, 1 Premium.
+    var nnrModel: Int = 0
+    var autoAgc: Bool = false
+    var autoAgcMarginDb: Double? = 0
 }
 
 struct BandSnapshot: Equatable, Sendable {
@@ -383,7 +395,7 @@ extension RadioSnapshot {
             toggles: toggles(
                 ["NB", "BIN", "NR", "NNR", "ANF", "LMS", "SQ", "APF", "NF 2", "SNB"],
                 on: ["NR", "ANF", "NF 2"]),
-            nrMode: 2, anfLevel: 40, nbLevel: 30, agcThresholdDbfs: -92, agcGainDb: 88,
+            nrMode: 2, anfLevel: 40, nbLevel: 0.3, agcThresholdDbfs: -92, agcGainDb: 88,
             notchCount: 2, squelchOn: false),
         band: BandSnapshot(
             tabs: ["Ham", "BC", "Gen", "Time", "Xvtr", "Mem"], selectedTab: "Ham",

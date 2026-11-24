@@ -120,10 +120,14 @@ enum LiveSnapshotMapper {
                     QuickToggle(id: f.rawValue, label: dspLabel(f, e), isOn: dspOn(f, e.dsp))
                 },
                 nrMode: e.dsp.nrMode, anfLevel: sample.dsp.anfLevel,
-                nbLevel: wholeNumber(e.dsp.nbStrength * 100),
-                agcThresholdDbfs: wholeNumber(e.dsp.agcThreshDb),
+                nbLevel: reported(e.dsp.nbStrength),
+                agcThresholdDbfs: reported(e.dsp.agcThreshDb),
                 agcGainDb: wholeNumber(e.dsp.agcMaxGainDb),
-                notchCount: e.dsp.notchCount, squelchOn: e.dsp.squelchEnabled),
+                notchCount: e.dsp.notchCount, squelchOn: e.dsp.squelchEnabled,
+                lmsLevel: reported(e.dsp.lmsStrength), squelchLevel: reported(e.dsp.squelchThreshold),
+                apfGainDb: reported(e.dsp.apfGainDb), binDepth: reported(e.dsp.binDepth),
+                nnrMaskFloorDb: reported(e.dsp.nnrMaskFloorDb), nnrModel: e.dsp.nnrModel,
+                autoAgc: e.dsp.autoAgcThresh, autoAgcMarginDb: reported(e.dsp.autoAgcMarginDb)),
             band: BandSnapshot(
                 tabs: sample.band.tabs, selectedTab: sample.band.selectedTab,
                 bands: visibleBands.map { bandLabel($0.name) }, selectedBand: selected),
@@ -241,6 +245,11 @@ enum LiveSnapshotMapper {
     }
 
     /// Rounded to a whole number; nil for NaN or infinity, which `Int(_:)` would trap on.
+    /// An engine level as reported: nil for NaN or infinity (the engine has not reported it).
+    private nonisolated static func reported(_ v: Double) -> Double? {
+        v.isFinite ? v : nil
+    }
+
     private nonisolated static func wholeNumber(_ v: Double) -> Int? {
         guard v.isFinite, abs(v) < 1e9 else { return nil }
         return Int(v.rounded())

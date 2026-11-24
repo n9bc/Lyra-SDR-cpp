@@ -347,4 +347,31 @@ private final class Flag: @unchecked Sendable {
         b.send(.setOutputDevice(n))
         XCTAssertEqual(b.snapshot.audio.outputDeviceIndex, 1, "an out-of-range index is ignored")
     }
+
+    func testMockAppliesDspAndAgcLevels() {
+        let b = MockRadioBackend()
+        b.send(.setDSPLevel(.nb, 1.4))
+        XCTAssertEqual(b.snapshot.dsp.nbLevel, 1)
+        b.send(.setDSPLevel(.lms, 0.25))
+        b.send(.setDSPLevel(.squelch, 0.6))
+        b.send(.setDSPLevel(.apfGainDb, 30))
+        b.send(.setDSPLevel(.binDepth, 0.3))
+        b.send(.setDSPLevel(.nnrMaskFloorDb, -33.6))
+        XCTAssertEqual(b.snapshot.dsp.lmsLevel, 0.25)
+        XCTAssertEqual(b.snapshot.dsp.squelchLevel, 0.6)
+        XCTAssertEqual(b.snapshot.dsp.apfGainDb, 24)
+        XCTAssertEqual(b.snapshot.dsp.binDepth, 0.3)
+        XCTAssertEqual(b.snapshot.dsp.nnrMaskFloorDb, -34)
+        b.send(.setNRMode(7))
+        b.send(.setNNRModel(1))
+        XCTAssertEqual(b.snapshot.dsp.nrMode, 4)
+        XCTAssertEqual(b.snapshot.dsp.nnrModel, 1)
+        b.send(.setAutoAGC(true))
+        b.send(.setAutoAGCMargin(-50))
+        XCTAssertTrue(b.snapshot.dsp.autoAgc)
+        XCTAssertEqual(b.snapshot.dsp.autoAgcMarginDb, -30)
+        b.send(.setAGCThreshold(-200))
+        XCTAssertEqual(b.snapshot.dsp.agcThresholdDbfs, -160)
+        XCTAssertFalse(b.snapshot.dsp.autoAgc, "a manual threshold releases Auto, as the engine does")
+    }
 }

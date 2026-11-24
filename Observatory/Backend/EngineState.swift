@@ -67,6 +67,16 @@ struct EngineState: Equatable, Sendable {
         var apfEnabled = false
         var notchEnabled = false
         var notchCount = 0
+        /// The levels below are NaN until the engine reports them.
+        var lmsStrength = Double.nan
+        var squelchThreshold = Double.nan
+        var apfGainDb = Double.nan
+        var binDepth = Double.nan
+        var nnrMaskFloorDb = Double.nan
+        var autoAgcMarginDb = Double.nan
+        /// 0 Standard, 1 Premium.
+        var nnrModel = 0
+        var autoAgcThresh = false
     }
 
     struct FrontEnd: Equatable, Sendable {

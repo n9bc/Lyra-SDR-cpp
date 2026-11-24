@@ -55,6 +55,17 @@ enum ConsoleFormat {
         return "SNR \(Int(min(max(db.rounded(), -1e9), 1e9))) dB"
     }
 
+    /// A level's readout; an em dash when the engine has not reported it.
+    nonisolated static func level(_ value: Double?, _ format: (Double) -> String) -> String {
+        value.map(format) ?? "\u{2014}"
+    }
+
+    /// Help text for a DSP or AGC value shared by both receivers (map H13): the console has no
+    /// separate Sub control, so the help says what the one control acts on.
+    nonisolated static func sharedHelp(_ base: String) -> String {
+        base + ", both receivers"
+    }
+
     /// AGC header: the AGC settings are shared by both receivers, so no focus prefix.
     /// "Gain —" when the engine has not reported a gain.
     nonisolated static func agcGainDetail(_ gainDb: Int?) -> String {

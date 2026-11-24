@@ -322,8 +322,50 @@ final class LiveSnapshotMapperTests: XCTestCase {
         e.dsp.nbStrength = 0.3
         let d = map(e).dsp
         XCTAssertEqual(d.agcGainDb, 88)
-        XCTAssertEqual(d.agcThresholdDbfs, -92)
-        XCTAssertEqual(d.nbLevel, 30)
+        XCTAssertEqual(d.agcThresholdDbfs, -92.2, "the engine value, not a rounded copy")
+        XCTAssertEqual(d.nbLevel, 0.3)
+    }
+
+    /// An engine that has not reported a level (NaN) gives nil, which the console shows as a dash.
+    func testLevelsNilUntilReported() {
+        var e = EngineState.idle
+        e.dsp.lmsStrength = .nan
+        e.dsp.squelchThreshold = .nan
+        e.dsp.apfGainDb = .nan
+        e.dsp.binDepth = .nan
+        e.dsp.nnrMaskFloorDb = .nan
+        e.dsp.autoAgcMarginDb = .nan
+        let d = map(e).dsp
+        XCTAssertNil(d.lmsLevel)
+        XCTAssertNil(d.squelchLevel)
+        XCTAssertNil(d.apfGainDb)
+        XCTAssertNil(d.binDepth)
+        XCTAssertNil(d.nnrMaskFloorDb)
+        XCTAssertNil(d.autoAgcMarginDb)
+        XCTAssertEqual(ConsoleFormat.level(d.lmsLevel) { String(format: "%.0f%%", $0 * 100) }, "\u{2014}")
+    }
+
+    func testDspLevelsReported() {
+        var e = EngineState.idle
+        e.dsp.lmsStrength = 0.5
+        e.dsp.squelchThreshold = 0.2
+        e.dsp.apfGainDb = 12
+        e.dsp.binDepth = 0.7
+        e.dsp.nnrMaskFloorDb = -40
+        e.dsp.nnrModel = 1
+        e.dsp.nrMode = 3
+        e.dsp.autoAgcThresh = true
+        e.dsp.autoAgcMarginDb = -6
+        let d = map(e).dsp
+        XCTAssertEqual(d.lmsLevel, 0.5)
+        XCTAssertEqual(d.squelchLevel, 0.2)
+        XCTAssertEqual(d.apfGainDb, 12)
+        XCTAssertEqual(d.binDepth, 0.7)
+        XCTAssertEqual(d.nnrMaskFloorDb, -40)
+        XCTAssertEqual(d.nnrModel, 1)
+        XCTAssertEqual(d.nrMode, 3)
+        XCTAssertTrue(d.autoAgc)
+        XCTAssertEqual(d.autoAgcMarginDb, -6)
     }
 
     func testIdleEngineReportsNoAgcGain() {
