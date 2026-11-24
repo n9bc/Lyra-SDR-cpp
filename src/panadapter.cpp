@@ -22,20 +22,20 @@
 namespace lyra::ui {
 
 namespace {
-// Glassy background — a 4-stop vertical gradient that reads as a
-// dark glass panel: a faint top SHEEN highlight, a quick falloff,
-// a deep mid body, and a near-black floor.  Stops are (fraction of
-// height, R, G, B).  Palette tinting lands in step 7; these neutral
-// cool-dark values keep an amber/any trace popping on top.
+// Glassy background — a 4-stop vertical gradient.  Observatory theme:
+// every stop is the flat "void" ground (#05060B); the separate sheen
+// node still adds the optional top highlight.  Stops are (fraction of
+// height, R, G, B).
 struct BgStop { float f; int r, g, b; };
 constexpr BgStop kBgStops[4] = {
-    { 0.00f, 30, 40, 54 },   // top sheen highlight
-    { 0.07f, 17, 23, 33 },   // sheen falloff
-    { 0.55f,  9, 12, 18 },   // deep body
-    { 1.00f,  3,  4,  7 },   // near-black floor
+    { 0.00f,  5,  6, 11 },   // Observatory void (#05060B)
+    { 0.07f,  5,  6, 11 },
+    { 0.55f,  5,  6, 11 },
+    { 1.00f,  5,  6, 11 },
 };
-// Gridlines: cool blue-grey, alpha scaled by the operator brightness.
-constexpr int kGridR = 90, kGridG = 120, kGridB = 150;
+// Gridlines: Observatory textDim (#4F5675), alpha scaled by the operator
+// brightness.
+constexpr int kGridR = 79, kGridG = 86, kGridB = 117;
 constexpr int kGridMaxA = 150;     // alpha at gridLevel == 100
 constexpr int kGridHLines = 8;     // horizontal (dB) divisions
 constexpr int kGridVLines = 10;    // vertical (frequency) divisions

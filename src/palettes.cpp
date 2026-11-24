@@ -85,6 +85,12 @@ const Registry &registry() {
         add("Amber", {
             {0.00,  12,   6,   0}, {0.35,  90,  40,   0}, {0.65, 200, 110,  10},
             {0.85, 245, 175,  40}, {1.00, 255, 230, 130} });
+        // Observatory — the neon 5-stop ramp shared with the macOS
+        // frontend (LyraDesignSystem.swift spectrum stops; mirrored in
+        // LyraDS.palette.spectrumStops).  Keep the values byte-identical.
+        add("Observatory", {
+            {0.00,  46, 107, 255}, {0.30,   0, 229, 255}, {0.55, 139,  92, 246},
+            {0.80, 255,  43, 214}, {1.00, 255, 210,  63} });
         return r;
     }();
     return reg;
