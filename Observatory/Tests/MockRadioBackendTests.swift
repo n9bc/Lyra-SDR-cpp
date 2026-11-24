@@ -289,8 +289,9 @@ private final class Flag: @unchecked Sendable {
         XCTAssertEqual(n.snapshot.display.smoothing, 5)
     }
 
-    func testClickSnapAndWheelShareOneStep() {
-        for (step, exact, grid) in [(500, false, 500), (50, true, 100), (1000, true, 1000), (50, false, 50)] {
+    func testClickSnapAndWheelShareTheScrollStepSource() {
+        for (step, exact, clickGrid, wheelGrid) in [(500, false, 500, 500), (50, true, 100, 100),
+                                                    (1000, true, 100, 1000), (50, false, 50, 50)] {
             var snap = RadioSnapshot.sample
             snap.display.wheelStepHz = step
             snap.display.exactTuning = exact
@@ -300,13 +301,14 @@ private final class Flag: @unchecked Sendable {
                 inputs: SpectrumGestureInputs(ctuneEnabled: false, subEnabled: false, splitEnabled: false,
                                               focused: .main, status: .mocked, send: { _ in }),
                 width: 1000)
+            // Both read the display's one step; Exact only changes how each applies it (Qt rules).
+            XCTAssertEqual(ctx.stepHz, step)
+            XCTAssertEqual(ctx.round100, exact)
             let snapped = SpectrumGestureModel.snapCarrier(14_201_333, stepHz: ctx.stepHz, round100: ctx.round100)
-            XCTAssertEqual(snapped % Int64(grid), 0, "\(step) \(exact)")
-            // The first sticky wheel notch from an off-grid carrier lands on the same grid.
+            XCTAssertEqual(snapped % Int64(clickGrid), 0, "\(step) \(exact)")
             let m = MockRadioBackend(snapshot: snap)
             m.send(.wheelTune(.main, ticks: 1))
-            XCTAssertEqual(m.snapshot.main.frequencyHz % Int64(grid), 0, "\(step) \(exact)")
-            XCTAssertEqual(SpectrumGestureModel.effectiveStep(stepHz: ctx.stepHz, round100: ctx.round100), grid)
+            XCTAssertEqual(m.snapshot.main.frequencyHz % Int64(wheelGrid), 0, "\(step) \(exact)")
         }
     }
 }

@@ -20,9 +20,8 @@ final class SpectrumGestureModelTests: XCTestCase {
 
     func testClickSnapsToStep() {
         XCTAssertEqual(M.snapCarrier(14_201_420, stepHz: 1000, round100: false), 14_201_000)
-        // Exact tuning never goes finer than 100 Hz but follows a coarser step, as the wheel does.
+        XCTAssertEqual(M.snapCarrier(14_201_420, stepHz: 1000, round100: true), 14_201_400)
         XCTAssertEqual(M.snapCarrier(14_201_420, stepHz: 50, round100: true), 14_201_400)
-        XCTAssertEqual(M.snapCarrier(14_201_420, stepHz: 1000, round100: true), 14_201_000)
         XCTAssertEqual(M.snapCarrier(14_201_420, stepHz: 1, round100: false), 14_201_420)
         XCTAssertEqual(M.snapCarrier(14_201_500, stepHz: 1000, round100: false), 14_202_000)
     }
