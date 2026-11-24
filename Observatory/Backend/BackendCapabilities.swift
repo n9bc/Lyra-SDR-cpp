@@ -51,6 +51,8 @@ enum ConsoleControl: Hashable, Sendable {
     case tuningStep, vfoBandwidth
     /// Click, drag, wheel and zoom gestures on the spectrum and waterfall.
     case spectrumTuning
+    /// Add, move, widen and remove the manual notches on the Main spectrum.
+    case notches
 }
 
 struct BackendCapabilities: Equatable, Sendable {

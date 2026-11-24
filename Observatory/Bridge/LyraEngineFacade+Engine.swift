@@ -34,7 +34,8 @@ extension LyraEngineFacade: EngineFacade {
             nrEnabled: d.nrEnabled, nrMode: d.nrMode, nnrEnabled: d.nnrEnabled,
             nnrAvailable: d.nnrAvailable, anfEnabled: d.anfEnabled, lmsEnabled: d.lmsEnabled,
             squelchEnabled: d.squelchEnabled, apfEnabled: d.apfEnabled,
-            notchEnabled: d.notchEnabled, notchCount: d.notchCount,
+            notchEnabled: d.notchEnabled,
+            notches: notches().map { NotchInfo(offsetHz: $0.offsetHz, widthHz: $0.widthHz, active: $0.active) },
             lmsStrength: d.lmsStrength, squelchThreshold: d.squelchThreshold, apfGainDb: d.apfGainDb,
             binDepth: d.binDepth, nnrMaskFloorDb: d.nnrMaskFloorDb, autoAgcMarginDb: d.autoAgcMarginDb,
             nnrModel: d.nnrModel, autoAgcThresh: d.autoAgcThresh)
@@ -149,6 +150,10 @@ extension LyraEngineFacade: EngineFacade {
             case .setAgcThreshDb(let v): setAgcThreshDb(v)
             case .setAutoAgcThresh(let on): setAutoAgcThresh(on)
             case .setAutoAgcMarginDb(let v): setAutoAgcMarginDb(v)
+            case .addNotch(let offset, let width): addNotch(offset, width: width)
+            case .moveNotch(let index, let offset): moveNotch(index, offset: offset)
+            case .setNotchWidth(let index, let width): setNotchWidth(index, width: width)
+            case .removeNotch(let index): removeNotch(index)
             }
         }
     }

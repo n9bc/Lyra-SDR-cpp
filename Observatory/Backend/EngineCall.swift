@@ -51,4 +51,8 @@ enum EngineCall: Equatable, Sendable {
     case setApfGainDb(Double), setBinDepth(Double), setNnrMaskFloorDb(Double)
     case setNrMode(Int), setNnrModel(Int)
     case setAgcThreshDb(Double), setAutoAgcThresh(Bool), setAutoAgcMarginDb(Double)
+    case addNotch(offsetHz: Double, widthHz: Double)
+    case moveNotch(index: Int, offsetHz: Double)
+    case setNotchWidth(index: Int, widthHz: Double)
+    case removeNotch(index: Int)
 }

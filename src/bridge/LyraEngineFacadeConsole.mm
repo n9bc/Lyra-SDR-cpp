@@ -115,6 +115,8 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 @end
 @implementation LyraSpotReading
 @end
+@implementation LyraNotchReading
+@end
 @implementation LyraOverlayReading
 @end
 
@@ -826,6 +828,46 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 - (void)setAutoAgcMarginDb:(double)db
 {
     if (WdspEngine *we = [self engineDsp]) we->setAutoAgcMarginDb(db);
+}
+
+#pragma mark Notch calls
+
+- (NSArray<LyraNotchReading *> *)notches
+{
+    NSMutableArray<LyraNotchReading *> *list = [NSMutableArray array];
+    if (WdspEngine *we = [self engineDsp]) {
+        const QString kOffset = QStringLiteral("offsetHz"), kWidth = QStringLiteral("widthHz"),
+                      kActive = QStringLiteral("active");
+        for (const QVariant &v : we->notches()) {
+            const QVariantMap m = v.toMap();
+            LyraNotchReading *n = [LyraNotchReading new];
+            n.offsetHz = m.value(kOffset).toDouble();
+            n.widthHz = m.value(kWidth).toDouble();
+            n.active = m.value(kActive).toBool();
+            [list addObject:n];
+        }
+    }
+    return list;
+}
+
+- (void)addNotch:(double)offsetHz width:(double)widthHz
+{
+    if (WdspEngine *we = [self engineDsp]) we->addNotch(offsetHz, widthHz);
+}
+
+- (void)moveNotch:(NSInteger)index offset:(double)offsetHz
+{
+    if (WdspEngine *we = [self engineDsp]) we->moveNotch(static_cast<int>(index), offsetHz);
+}
+
+- (void)setNotchWidth:(NSInteger)index width:(double)widthHz
+{
+    if (WdspEngine *we = [self engineDsp]) we->setNotchWidth(static_cast<int>(index), widthHz);
+}
+
+- (void)removeNotch:(NSInteger)index
+{
+    if (WdspEngine *we = [self engineDsp]) we->removeNotch(static_cast<int>(index));
 }
 
 #pragma mark Display calls

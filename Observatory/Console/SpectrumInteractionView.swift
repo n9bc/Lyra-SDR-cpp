@@ -10,6 +10,10 @@ struct SpectrumGestureInputs {
     /// Availability of `ConsoleControl.spectrumTuning`.
     var status: CapabilityStatus
     var send: (RadioCommand) -> Void
+    /// The engine's manual notches (Main stack only; the Sub stack never sees them) and the
+    /// availability of `ConsoleControl.notches`.
+    var notches: [NotchInfo] = []
+    var notchStatus: CapabilityStatus = .available
 
     var isEnabled: Bool { status == .available || status == .mocked }
 
@@ -20,6 +24,25 @@ struct SpectrumGestureInputs {
     }
 
     static let help = "Click to tune, drag to pan, scroll to step, Command-scroll or pinch to zoom, middle or Option click to switch receiver"
+    static let notchHelp = "Right-click to add or remove a notch, drag a notch to move it, scroll over it to change its width"
+
+    /// The notch gestures' availability on `stack`.
+    func notchAvailability(on stack: ReceiverID) -> CapabilityStatus {
+        NotchModel.availability(stack: stack, status: notchStatus)
+    }
+
+    func notchesEnabled(on stack: ReceiverID) -> Bool {
+        let s = notchAvailability(on: stack)
+        return s == .available || s == .mocked
+    }
+
+    /// The surface's tooltip: the tuning help (or why tuning is off), then the notch help (or why
+    /// notches are off here).
+    func help(for stack: ReceiverID) -> String {
+        let tuning = disabledReason ?? Self.help
+        if case .unavailable(let reason) = notchAvailability(on: stack) { return tuning + "\n" + reason }
+        return tuning + "\n" + Self.notchHelp
+    }
 }
 
 extension SpectrumGestureModel {
@@ -62,7 +85,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         view.stack = stack
         view.display = display
         view.inputs = inputs
-        view.toolTip = inputs.disabledReason ?? SpectrumGestureInputs.help
+        view.toolTip = inputs.help(for: stack)
     }
 
     final class SurfaceView: NSView {
@@ -71,6 +94,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
         var inputs: SpectrumGestureInputs?
 
         private var session: SpectrumGestureSession?
+        /// A press that began on a notch, or a right press that may add one.
+        private var notchGesture: NotchGesture?
+        private var notchWidth = NotchWidthAccumulator()
         private var zoom = SpectrumZoomAccumulator()
         private var optionClick = false
         private var scrollAccumulator = 0.0
@@ -91,12 +117,54 @@ struct SpectrumInteractionView: NSViewRepresentable {
             return (ctx, inputs)
         }
 
+        /// What notch gestures need: the Main stack's notches, its width and span. Nil when notch
+        /// gestures are off (Sub stack, `.notches` unavailable) or there is no axis.
+        private func notchContext() -> (notches: [NotchInfo], width: Double, span: Double, inputs: SpectrumGestureInputs)? {
+            guard let display, let inputs, inputs.notchesEnabled(on: stack) else { return nil }
+            let span = Double(display.spanHighHz - display.spanLowHz)
+            guard span > 0, bounds.width > 0 else { return nil }
+            return (NotchModel.visible(inputs.notches, on: stack), Double(bounds.width), span, inputs)
+        }
+
+        /// Starts a notch gesture when the press lands on a notch (any button) or is a right press.
+        private func beginNotchGesture(_ event: NSEvent, button: NotchGesture.Button) -> Bool {
+            guard let n = notchContext() else { return false }
+            let p = point(event)
+            // Controller ruling R1: the dB-scale zone and the passband-edge handles (Task 4) are
+            // checked before this, through `SpectrumGestureModel.hitTarget`.
+            if button == .left,
+               case .tune = SpectrumGestureModel.hitTarget(x: p.x, y: p.y, notches: n.notches, width: n.width,
+                                                           spanHz: n.span, notchesEnabled: true) {
+                return false
+            }
+            notchGesture = NotchGesture(button: button, x: p.x, notches: n.notches, width: n.width, spanHz: n.span)
+            return notchGesture != nil
+        }
+
+        private func moveNotchGesture(_ event: NSEvent) {
+            guard notchGesture != nil, let n = notchContext() else { return }
+            if let command = notchGesture?.moved(toX: point(event).x, at: event.timestamp, notches: n.notches) {
+                n.inputs.send(command)
+            }
+        }
+
+        private func endNotchGesture(_ event: NSEvent) {
+            defer { notchGesture = nil }
+            guard notchGesture != nil, let n = notchContext() else { return }
+            if let command = notchGesture?.ended(atX: point(event).x, at: event.timestamp, notches: n.notches) {
+                n.inputs.send(command)
+            }
+        }
+
         private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
         /// Where an Option press began, so a release after a drag does not switch receivers.
         private var optionDownAt = CGPoint.zero
 
         override func mouseDown(with event: NSEvent) {
+            // A drag that starts on a notch moves it (Control-click is a right click).
+            let control = event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.option)
+            if beginNotchGesture(event, button: control ? .right : .left) { return }
             guard let (ctx, _) = context() else { return super.mouseDown(with: event) }
             let p = point(event)
             optionClick = event.modifierFlags.contains(.option)
@@ -105,6 +173,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         override func mouseDragged(with event: NSEvent) {
+            if notchGesture != nil { return moveNotchGesture(event) }
             guard let (_, inputs) = context() else { return super.mouseDragged(with: event) }
             guard session != nil else { return }
             if let command = session?.moved(toX: point(event).x, at: event.timestamp) {
@@ -113,6 +182,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         override func mouseUp(with event: NSEvent) {
+            if notchGesture != nil { return endNotchGesture(event) }
             defer { session = nil; optionClick = false }
             guard let (ctx, inputs) = context() else { return super.mouseUp(with: event) }
             let p = point(event)
@@ -124,6 +194,18 @@ struct SpectrumInteractionView: NSViewRepresentable {
             } else if let command = session?.ended(atX: p.x) {
                 inputs.send(command)
             }
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            if !beginNotchGesture(event, button: .right) { super.rightMouseDown(with: event) }
+        }
+
+        override func rightMouseDragged(with event: NSEvent) {
+            if notchGesture != nil { moveNotchGesture(event) } else { super.rightMouseDragged(with: event) }
+        }
+
+        override func rightMouseUp(with event: NSEvent) {
+            if notchGesture != nil { endNotchGesture(event) } else { super.rightMouseUp(with: event) }
         }
 
         override func otherMouseUp(with event: NSEvent) {
@@ -142,6 +224,14 @@ struct SpectrumInteractionView: NSViewRepresentable {
                 deltaY: Double(event.scrollingDeltaY), deltaX: Double(event.scrollingDeltaX),
                 precise: event.hasPreciseScrollingDeltas, accumulator: &scrollAccumulator)
             guard ticks != 0 else { return }
+            // The wheel over a notch widens or narrows it and is not a tune.
+            if !event.modifierFlags.contains(.command), let n = notchContext(),
+               let command = NotchModel.scrollCommand(ticks: ticks, x: point(event).x, notches: n.notches,
+                                                      width: n.width, spanHz: n.span,
+                                                      accumulator: &notchWidth, now: event.timestamp) {
+                inputs.send(command)
+                return
+            }
             if event.modifierFlags.contains(.command) {
                 inputs.send(.setZoom(zoom.next(snapshotZoom: display.zoom,
                                                factor: SpectrumGestureModel.zoomFactor(ticks: ticks),

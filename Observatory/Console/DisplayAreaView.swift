@@ -82,6 +82,8 @@ struct DisplayAreaLayout: Equatable {
 /// for Main; the Sub stack injects its own bridge. Sample imagery only in Milestone 1.
 struct DisplayAreaView: View {
     let display: DisplaySnapshot
+    /// The engine's manual notches (RX1 only; the Main stack draws and edits them).
+    var notches: [NotchInfo] = []
     let main: ReceiverSnapshot
     let sub: ReceiverSnapshot
     /// Gates the toolbar's controls.
@@ -100,13 +102,14 @@ struct DisplayAreaView: View {
     let subSpectrum: SpectrumBridge
     @Environment(SpectrumBridge.self) private var mainSpectrum
 
-    init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot,
+    init(display: DisplaySnapshot, notches: [NotchInfo] = [], main: ReceiverSnapshot, sub: ReceiverSnapshot,
          capabilities: BackendCapabilities, focused: ReceiverID,
          store: DisplayStore, subSpectrum: SpectrumBridge = .mock(receiver: .sub),
          sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool,
          ctunEnabled: Bool, send: @escaping (RadioCommand) -> Void) {
         self.subSpectrum = subSpectrum
         self.display = display
+        self.notches = notches
         self.main = main
         self.sub = sub
         self.capabilities = capabilities
@@ -136,7 +139,8 @@ struct DisplayAreaView: View {
                                                 subVisible: subStack, terrainExpanded: store.terrainExpanded)
             let inputs = SpectrumGestureInputs(
                 ctuneEnabled: ctunEnabled, subEnabled: sub.enabled, splitEnabled: main.splitTx,
-                focused: focused, status: capabilities.control(.spectrumTuning), send: send)
+                focused: focused, status: capabilities.control(.spectrumTuning), send: send,
+                notches: notches, notchStatus: capabilities.control(.notches))
             VStack(spacing: 0) {
                 DisplayToolbarView(display: display, capabilities: capabilities, send: send)
                 ReceiverDisplayStack(display: display, receiver: main, label: subStack ? "MAIN" : nil,

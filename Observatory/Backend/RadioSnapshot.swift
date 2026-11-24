@@ -126,6 +126,14 @@ struct AudioSnapshot: Equatable, Sendable {
     var outputDeviceIndex: Int = 0
 }
 
+/// One manual notch as the engine reports it.
+struct NotchInfo: Equatable, Sendable {
+    /// From the display centre (not the dial: H17).
+    var offsetHz: Double
+    var widthHz: Double
+    var active: Bool
+}
+
 struct DSPSnapshot: Equatable, Sendable {
     var toggles: [QuickToggle]
     var nrMode: Int
@@ -135,7 +143,9 @@ struct DSPSnapshot: Equatable, Sendable {
     var nbLevel: Double?
     var agcThresholdDbfs: Double?
     var agcGainDb: Int?
-    var notchCount: Int
+    /// The engine's manual notches, offsets from the display centre; they act on RX1 only.
+    var notches: [NotchInfo]
+    var notchCount: Int { notches.count }
     var squelchOn: Bool
     var lmsLevel: Double? = 0.5
     var squelchLevel: Double? = 0.2
@@ -396,7 +406,9 @@ extension RadioSnapshot {
                 ["NB", "BIN", "NR", "NNR", "ANF", "LMS", "SQ", "APF", "NF 2", "SNB"],
                 on: ["NR", "ANF", "NF 2"]),
             nrMode: 2, anfLevel: 40, nbLevel: 0.3, agcThresholdDbfs: -92, agcGainDb: 88,
-            notchCount: 2, squelchOn: false),
+            notches: [NotchInfo(offsetHz: -1_500, widthHz: 200, active: true),
+                     NotchInfo(offsetHz: 2_400, widthHz: 120, active: true)],
+            squelchOn: false),
         band: BandSnapshot(
             tabs: ["Ham", "BC", "Gen", "Time", "Xvtr", "Mem"], selectedTab: "Ham",
             bands: ["160", "80", "60", "40", "30", "20", "17", "15", "12", "10", "6", "WWV"],

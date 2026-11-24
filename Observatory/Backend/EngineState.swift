@@ -66,7 +66,9 @@ struct EngineState: Equatable, Sendable {
         var squelchEnabled = false
         var apfEnabled = false
         var notchEnabled = false
-        var notchCount = 0
+        /// The manual notch list, offsets from the display centre.
+        var notches: [NotchInfo] = []
+        var notchCount: Int { notches.count }
         /// The levels below are NaN until the engine reports them.
         var lmsStrength = Double.nan
         var squelchThreshold = Double.nan

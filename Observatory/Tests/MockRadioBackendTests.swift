@@ -240,6 +240,36 @@ private final class Flag: @unchecked Sendable {
         XCTAssertEqual(m.snapshot.sub.frequencyHz, 7_140_000)
     }
 
+    func testFocusToggleIsBlockedByTheVfoLock() {
+        let m = MockRadioBackend()
+        m.send(.setSubEnabled(true))
+        m.send(.setVFOLock(true))
+        m.send(.spectrumFocusToggle(hz: 7_140_000))
+        XCTAssertEqual(m.snapshot.session.focused, .main)
+        XCTAssertNotEqual(m.snapshot.sub.frequencyHz, 7_140_000)
+    }
+
+    func testNotchEditsFollowTheEngineRules() {
+        let m = MockRadioBackend()
+        let before = m.snapshot.dsp.notches
+        XCTAssertEqual(before.count, 2)
+        m.send(.addNotch(offsetHz: 3_000))
+        XCTAssertEqual(m.snapshot.dsp.notches.last, NotchInfo(offsetHz: 3_000, widthHz: 200, active: true))
+        XCTAssertEqual(m.snapshot.dsp.notchCount, 3)
+        XCTAssertEqual(m.snapshot.dsp.toggles.first { $0.id == "NF" }?.label, "NF 3")
+        m.send(.moveNotch(index: 0, offsetHz: -700))
+        XCTAssertEqual(m.snapshot.dsp.notches[0].offsetHz, -700)
+        m.send(.setNotchWidth(index: 0, widthHz: 5))
+        XCTAssertEqual(m.snapshot.dsp.notches[0].widthHz, 10)
+        m.send(.setNotchWidth(index: 0, widthHz: 99_999))
+        XCTAssertEqual(m.snapshot.dsp.notches[0].widthHz, 20_000)
+        m.send(.removeNotch(index: 0))
+        XCTAssertEqual(m.snapshot.dsp.notchCount, 2)
+        m.send(.removeNotch(index: 9))
+        m.send(.moveNotch(index: -1, offsetHz: 1))
+        XCTAssertEqual(m.snapshot.dsp.notchCount, 2)
+    }
+
     func testSetZoomScalesSpanAroundItsCentre() {
         let m = MockRadioBackend()
         let d = m.snapshot.display

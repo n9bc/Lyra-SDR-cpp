@@ -198,6 +198,13 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 @property (nonatomic, copy) NSString *mode;
 @end
 
+// One WdspEngine::notches() entry; offsets are from the display centre.
+@interface LyraNotchReading : NSObject
+@property (nonatomic) double offsetHz;
+@property (nonatomic) double widthHz;
+@property (nonatomic) BOOL active;
+@end
+
 @interface LyraOverlayReading : NSObject
 @property (nonatomic, copy) NSArray<LyraSegmentReading *> *segments;
 @property (nonatomic, copy) NSArray<LyraLandmarkReading *> *landmarks;
@@ -443,6 +450,18 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (void)setAgcThreshDb:(double)db;
 - (void)setAutoAgcThresh:(BOOL)on;
 - (void)setAutoAgcMarginDb:(double)db;
+
+#pragma mark Notch calls
+
+// WdspEngine manual notches (RX1 only).  Offsets are Hz from the display centre.
+// Indices shift down on removal; every edit rebuilds the WDSP notch database.
+- (NSArray<LyraNotchReading *> *)notches;
+// Adds a notch and turns the notch filter on; the width is floored at 10 Hz.
+- (void)addNotch:(double)offsetHz width:(double)widthHz;
+- (void)moveNotch:(NSInteger)index offset:(double)offsetHz;
+// Clamped by the engine to 10...20000 Hz.
+- (void)setNotchWidth:(NSInteger)index width:(double)widthHz;
+- (void)removeNotch:(NSInteger)index;
 
 #pragma mark Display calls
 

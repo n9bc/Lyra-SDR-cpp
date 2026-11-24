@@ -7,6 +7,8 @@ struct SpectrumOverlays: View {
     let display: DisplaySnapshot
     let main: ReceiverSnapshot
     let axis: FrequencyAxis
+    /// The manual notches to draw (Main stack only; the caller passes none for Sub).
+    var notches: [NotchInfo] = []
     /// Room kept clear at the right end of the band-plan strip (for the "Sample" marker).
     var bandPlanTrailingInset: CGFloat = 0
 
@@ -86,6 +88,20 @@ struct SpectrumOverlays: View {
         }
     }
 
+    /// Each notch as a translucent band centred on its offset from the display centre (H17: no
+    /// CTUN dial offset), brighter while active.
+    @ViewBuilder
+    private func notchOverlay(width w: CGFloat) -> some View {
+        let span = Double(display.spanHighHz - display.spanLowHz)
+        ForEach(span > 0 ? Array(notches.enumerated()) : [], id: \.offset) { i, n in
+            let bandWidth = NotchModel.drawWidth(widthHz: n.widthHz, width: Double(w), spanHz: span)
+            let cx = NotchModel.x(offsetHz: n.offsetHz, width: Double(w), spanHz: span)
+            Rectangle().fill(LyraDS.Palette.magenta.opacity(n.active ? 0.16 : 0.08))
+                .frame(width: bandWidth).offset(x: cx - bandWidth / 2, y: Self.bandPlanHeight)
+                .accessibilityLabel("Notch \(i + 1), \(Int(n.widthHz.rounded())) hertz wide, \(Int(n.offsetHz.rounded())) hertz from the centre")
+        }
+    }
+
     var body: some View {
         let w = axis.width
         let pb = display.mainPassband
@@ -98,6 +114,7 @@ struct SpectrumOverlays: View {
                     .frame(width: pbEnd - pbX).offset(x: pbX, y: Self.bandPlanHeight)
             }
             if let sub = display.subOverlay { subOverlay(sub, width: w) }
+            notchOverlay(width: w)
             if display.bandPlanVisible {
                 ForEach(Array(display.bandPlan.enumerated()), id: \.offset) { _, seg in
                     let x0 = max(axis.x(for: seg.lowHz), 0)

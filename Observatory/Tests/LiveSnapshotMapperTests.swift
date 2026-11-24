@@ -181,7 +181,8 @@ final class LiveSnapshotMapperTests: XCTestCase {
         var e = EngineState.idle
         e.dsp.nrEnabled = true
         e.dsp.nrMode = 2
-        e.dsp.notchCount = 2
+        e.dsp.notches = [NotchInfo(offsetHz: -1_000, widthHz: 200, active: true),
+                       NotchInfo(offsetHz: 500, widthHz: 100, active: true)]
         e.frontEnd.lnaDb = 20
         let t = map(e).main.quickToggles
         let nr = t.first { $0.id == "NR" }
@@ -191,6 +192,9 @@ final class LiveSnapshotMapperTests: XCTestCase {
         XCTAssertEqual(t.first { $0.id == "LNA" }?.label, "LNA +20")
         XCTAssertEqual(t.map(\.id), ["ATT", "LNA", "AUTO", "NB", "NR", "ANF", "NOTCH", "SQ", "APF", "BIN"])
         XCTAssertEqual(map(e).dsp.toggles.map(\.id), DSPFunction.allCases.map(\.rawValue))
+        // The list reaches the snapshot as the engine reported it.
+        XCTAssertEqual(map(e).dsp.notches, e.dsp.notches)
+        XCTAssertEqual(map(e).dsp.notchCount, 2)
     }
 
     func testConnectionFields() {

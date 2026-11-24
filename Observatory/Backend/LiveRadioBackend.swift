@@ -207,7 +207,7 @@ extension BackendCapabilities {
         let live: [ConsoleControl] = [
             .connect, .focus, .subReceiver, .copyAB, .swapAB, .split, .ctun, .vfoLock, .rit, .xit,
             .mode, .filterPreset, .bwLock, .band, .agcMode, .audio,
-            .displaySettings, .tuningStep, .spectrumTuning,
+            .displaySettings, .tuningStep, .spectrumTuning, .notches,
         ]
         for c in live { controls[c] = .available }
         for f in DSPFunction.allCases { controls[.dsp(f)] = .available }

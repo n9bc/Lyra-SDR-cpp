@@ -189,7 +189,7 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
         XCTAssertFalse(ConsoleAvailability.isDisabled(caps.status(.spots)))
         XCTAssertEqual(ConsoleAvailability.help(caps.status(.spots), normal: "Show spots"),
                        "Show spots")
-        for control in [ConsoleControl.displaySettings, .tuningStep, .spectrumTuning] {
+        for control in [ConsoleControl.displaySettings, .tuningStep, .spectrumTuning, .notches] {
             XCTAssertEqual(caps.control(control), .available, "\(control)")
         }
     }

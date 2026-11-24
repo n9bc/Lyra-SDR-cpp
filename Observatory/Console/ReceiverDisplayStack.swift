@@ -130,7 +130,7 @@ struct ReceiverDisplayStack: View {
     /// Above the display-only overlays; only `SpectrumOverlayControls` sits higher.
     private var gestureSurface: some View {
         SpectrumInteractionView(stack: receiverID, display: display, inputs: gestures)
-            .help(gestures.disabledReason ?? SpectrumGestureInputs.help)
+            .help(gestures.help(for: receiverID))
             .accessibilityLabel("\(receiverID == .sub ? "Sub" : "Main") spectrum tuning surface")
     }
 
@@ -142,6 +142,7 @@ struct ReceiverDisplayStack: View {
                 NeonSpectrumView()
                 notStreamingCover("Spectrum")
                 SpectrumOverlays(display: display, main: receiver, axis: axis,
+                                 notches: NotchModel.visible(gestures.notches, on: receiverID),
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
                                  height: spectrumHeight)
                 gestureSurface

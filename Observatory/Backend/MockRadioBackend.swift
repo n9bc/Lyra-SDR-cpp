@@ -107,6 +107,7 @@ final class MockRadioBackend: RadioBackend {
             retune(&s, .main, to: s.main.frequencyHz + delta)
             announceTuning(&s, .main)
         case .spectrumFocusToggle(let hz):
+            guard !s.session.vfoLocked else { return s }
             if s.session.focused == .sub {
                 s.session.focused = .main
             } else {
@@ -166,6 +167,20 @@ final class MockRadioBackend: RadioBackend {
             case .apfGainDb: s.dsp.apfGainDb = min(max(v, 0), 24)
             case .nnrMaskFloorDb: s.dsp.nnrMaskFloorDb = min(max(v.rounded(), -50), -10)
             }
+        case .addNotch(let offset):
+            guard offset.isFinite else { return s }
+            s.dsp.notches.append(NotchInfo(offsetHz: offset, widthHz: NotchModel.defaultWidthHz, active: true))
+            setNotchFilterOn(&s)    // the engine turns NF on with the first notch
+        case .moveNotch(let index, let offset):
+            guard s.dsp.notches.indices.contains(index), offset.isFinite else { return s }
+            s.dsp.notches[index].offsetHz = offset
+        case .setNotchWidth(let index, let width):
+            guard s.dsp.notches.indices.contains(index), width.isFinite else { return s }
+            s.dsp.notches[index].widthHz = NotchModel.clampedWidth(width)
+        case .removeNotch(let index):
+            guard s.dsp.notches.indices.contains(index) else { return s }
+            s.dsp.notches.remove(at: index)
+            relabelNotchToggles(&s)
         case .setNRMode(let mode): s.dsp.nrMode = min(max(mode, 1), 4)
         case .setNNRModel(let model): s.dsp.nnrModel = min(max(model, 0), 1)
         case .setAGCThreshold(let db):
@@ -209,6 +224,26 @@ final class MockRadioBackend: RadioBackend {
     ]
 
     /// Sets one receiver's frequency (never below 0), moving its span to keep it in view.
+    /// The notch toggles carry the notch count, as the live mapper labels them.
+    private nonisolated static func relabelNotchToggles(_ s: inout RadioSnapshot) {
+        let n = s.dsp.notchCount
+        for i in s.dsp.toggles.indices where s.dsp.toggles[i].id == "NF" {
+            s.dsp.toggles[i].label = n > 0 ? "NF \(n)" : "NF"
+        }
+        for i in s.main.quickToggles.indices where s.main.quickToggles[i].id == "NOTCH" {
+            s.main.quickToggles[i].label = n > 0 ? "NOTCH \(n)" : "NOTCH"
+        }
+    }
+
+    /// Adding a notch forces the notch filter on, as the engine does.
+    private nonisolated static func setNotchFilterOn(_ s: inout RadioSnapshot) {
+        for i in s.dsp.toggles.indices where s.dsp.toggles[i].id == "NF" { s.dsp.toggles[i].isOn = true }
+        for i in s.main.quickToggles.indices where s.main.quickToggles[i].id == "NOTCH" {
+            s.main.quickToggles[i].isOn = true
+        }
+        relabelNotchToggles(&s)
+    }
+
     private nonisolated static func retune(_ s: inout RadioSnapshot, _ id: ReceiverID, to hz: Int64) {
         let f = max(0, hz)
         var low = id == .main ? s.display.spanLowHz : s.display.subSpanLowHz

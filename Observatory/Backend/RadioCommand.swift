@@ -78,6 +78,15 @@ enum RadioCommand: Equatable, Sendable {
     case setAGCThreshold(Double)
     case setAutoAGC(Bool)
     case setAutoAGCMargin(Double)
+
+    // Manual notches. They act on RX1 only (map H13) and are relative to the display centre (H17).
+    /// Adds a notch `offsetHz` from the display centre, 200 Hz wide. The engine turns NF on.
+    case addNotch(offsetHz: Double)
+    /// Indices are those of `DSPSnapshot.notches`; they shift on every removal (H16).
+    case moveNotch(index: Int, offsetHz: Double)
+    /// Clamped to 10...20000 Hz.
+    case setNotchWidth(index: Int, widthHz: Double)
+    case removeNotch(index: Int)
 }
 
 /// The continuous DSP levels, one command shape for all of them.

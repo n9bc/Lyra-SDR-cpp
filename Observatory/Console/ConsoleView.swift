@@ -58,7 +58,8 @@ struct ConsoleView: View {
 
             HStack(spacing: gap) {
                 ReceiverColumnView(snapshot: snapshot, capabilities: backend.capabilities, send: backend.send)
-                DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
+                DisplayAreaView(display: snapshot.display, notches: snapshot.dsp.notches,
+                                main: snapshot.main, sub: snapshot.sub,
                                 capabilities: backend.capabilities,
                                 focused: snapshot.session.focused, store: displayStore,
                                 subSpectrum: subSpectrum,

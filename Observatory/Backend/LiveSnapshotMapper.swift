@@ -123,7 +123,7 @@ enum LiveSnapshotMapper {
                 nbLevel: reported(e.dsp.nbStrength),
                 agcThresholdDbfs: reported(e.dsp.agcThreshDb),
                 agcGainDb: wholeNumber(e.dsp.agcMaxGainDb),
-                notchCount: e.dsp.notchCount, squelchOn: e.dsp.squelchEnabled,
+                notches: e.dsp.notches, squelchOn: e.dsp.squelchEnabled,
                 lmsLevel: reported(e.dsp.lmsStrength), squelchLevel: reported(e.dsp.squelchThreshold),
                 apfGainDb: reported(e.dsp.apfGainDb), binDepth: reported(e.dsp.binDepth),
                 nnrMaskFloorDb: reported(e.dsp.nnrMaskFloorDb), nnrModel: e.dsp.nnrModel,

@@ -386,6 +386,47 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e), [.setFocusedRx(1)])
     }
 
+    func testFocusToggleBlockedByVfoLock() {
+        var e = cw()
+        e.radio.subEnabled = true
+        e.radio.focusedRx = 1
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e, locked: true), [])
+        e.radio.focusedRx = 2
+        XCTAssertEqual(plan(.spectrumFocusToggle(hz: 7_040_000), e, locked: true), [])
+    }
+
+    func testNotchCommands() {
+        var e = cw()
+        e.dsp.notches = [NotchInfo(offsetHz: 100, widthHz: 200, active: true),
+                         NotchInfo(offsetHz: -900, widthHz: 80, active: true)]
+        XCTAssertEqual(plan(.addNotch(offsetHz: -1_250), e),
+                       [.addNotch(offsetHz: -1_250, widthHz: 200)])
+        XCTAssertEqual(plan(.moveNotch(index: 1, offsetHz: 333), e), [.moveNotch(index: 1, offsetHz: 333)])
+        XCTAssertEqual(plan(.removeNotch(index: 0), e), [.removeNotch(index: 0)])
+        // The VFO lock does not stop notch edits.
+        XCTAssertEqual(plan(.removeNotch(index: 0), e, locked: true), [.removeNotch(index: 0)])
+    }
+
+    func testNotchWidthClamp() {
+        var e = cw()
+        e.dsp.notches = [NotchInfo(offsetHz: 0, widthHz: 200, active: true)]
+        XCTAssertEqual(plan(.setNotchWidth(index: 0, widthHz: 5), e), [.setNotchWidth(index: 0, widthHz: 10)])
+        XCTAssertEqual(plan(.setNotchWidth(index: 0, widthHz: 30_000), e),
+                       [.setNotchWidth(index: 0, widthHz: 20_000)])
+    }
+
+    func testNotchCommandsRefuseStaleIndicesAndNonFiniteValues() {
+        var e = cw()
+        e.dsp.notches = [NotchInfo(offsetHz: 0, widthHz: 200, active: true)]
+        XCTAssertEqual(plan(.moveNotch(index: 1, offsetHz: 5), e), [])
+        XCTAssertEqual(plan(.moveNotch(index: -1, offsetHz: 5), e), [])
+        XCTAssertEqual(plan(.setNotchWidth(index: 3, widthHz: 100), e), [])
+        XCTAssertEqual(plan(.removeNotch(index: 1), e), [])
+        XCTAssertEqual(plan(.moveNotch(index: 0, offsetHz: .nan), e), [])
+        XCTAssertEqual(plan(.setNotchWidth(index: 0, widthHz: .infinity), e), [])
+        XCTAssertEqual(plan(.addNotch(offsetHz: .nan), e), [])
+    }
+
     func testZoomClamped() {
         XCTAssertEqual(plan(.setZoom(40), cw()), [.setZoomPref(16)])
         XCTAssertEqual(plan(.setZoom(0.5), cw()), [.setZoomPref(1)])

@@ -85,6 +85,7 @@ enum LiveCommandPlanner {
         case .grabVfo(let delta):
             return vfoLocked ? [] : [.setRx1Hz(moved(r.rx1Hz, by: delta))]
         case .spectrumFocusToggle(let hz):
+            if vfoLocked { return [] }
             if panTuneRx(r) == .sub { return [.setFocusedRx(1)] }
             var plan: [EngineCall] = [.setVfoBHz(clamp(hz))]
             if r.subEnabled { plan.append(.setRx2Hz(clamp(hz &- Int64(r.markerOffsetHzRx2)))) }
@@ -130,6 +131,19 @@ enum LiveCommandPlanner {
         case .setAGCThreshold(let db): return finite(db).map { [.setAgcThreshDb(min(max($0, -160), 2))] } ?? []
         case .setAutoAGC(let on): return [.setAutoAgcThresh(on)]
         case .setAutoAGCMargin(let db): return finite(db).map { [.setAutoAgcMarginDb(min(max($0, -30), 30))] } ?? []
+
+        // Notch edits are not tuning, so the VFO lock does not stop them. An index outside the
+        // engine's current list is stale (they shift on every removal, H16) and is dropped.
+        case .addNotch(let offset):
+            return finite(offset).map { [.addNotch(offsetHz: $0, widthHz: NotchModel.defaultWidthHz)] } ?? []
+        case .moveNotch(let index, let offset):
+            guard e.dsp.notches.indices.contains(index), let v = finite(offset) else { return [] }
+            return [.moveNotch(index: index, offsetHz: v)]
+        case .setNotchWidth(let index, let width):
+            guard e.dsp.notches.indices.contains(index), let v = finite(width) else { return [] }
+            return [.setNotchWidth(index: index, widthHz: NotchModel.clampedWidth(v))]
+        case .removeNotch(let index):
+            return e.dsp.notches.indices.contains(index) ? [.removeNotch(index: index)] : []
         }
     }
 

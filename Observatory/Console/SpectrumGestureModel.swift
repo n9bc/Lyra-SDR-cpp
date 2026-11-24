@@ -18,6 +18,13 @@ struct SpectrumGestureContext: Equatable, Sendable {
     var hzPerPixel: Double { Double(spanHz) / max(1, width) }
 }
 
+/// Where a press on the spectrum lands (see `SpectrumGestureModel.hitTarget`).
+enum SpectrumHitTarget: Equatable, Sendable {
+    case notch(Int)
+    /// CTUN pan strip or click-to-tune.
+    case tune
+}
+
 /// Pure maths for the spectrum and waterfall tuning gestures, ported from `PanadapterPanel.qml`
 /// (map §4) and `vfo_snap.h`.
 enum SpectrumGestureModel {
@@ -92,6 +99,19 @@ enum SpectrumGestureModel {
     /// Zoom multiplier for wheel notches: x1.25 per notch up, x0.8 per notch down.
     nonisolated static func zoomFactor(ticks: Int) -> Double {
         ticks >= 0 ? pow(1.25, Double(ticks)) : pow(0.8, Double(-ticks))
+    }
+
+    /// What a press on the Main spectrum grabs, in controller ruling R1's priority order:
+    /// dB-scale zone, passband-edge handle, notch, then the CTUN pan strip and click-to-tune.
+    /// Only the notch and tune rungs exist yet.
+    nonisolated static func hitTarget(x: Double, y: Double, notches: [NotchInfo], width: Double,
+                                      spanHz: Double, notchesEnabled: Bool) -> SpectrumHitTarget {
+        // TODO(M5a Task 4): 1. the dB-scale zone (right 50 px, below the top 24 px) and
+        // 2. the passband-edge handles are checked here, before the notch.
+        if notchesEnabled, let i = NotchModel.hitIndex(x: x, notches: notches, width: width, spanHz: spanHz) {
+            return .notch(i)
+        }
+        return .tune
     }
 
     /// Middle (or option) click: toggles focus, putting VFO B on the snapped frequency under the cursor.
