@@ -88,11 +88,16 @@ struct ConsoleMenuChip: View {
     @Binding var selection: String
     /// Backend availability; an unavailable menu is disabled and its one tooltip is the reason.
     var status: CapabilityStatus = .available
+    /// Called with the chosen row's position, for lists whose names can repeat.
+    var onSelectIndex: ((Int) -> Void)?
 
     var body: some View {
         Menu {
-            ForEach(options, id: \.self) { option in
-                Button(option) { selection = option }
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                Button(option) {
+                    selection = option
+                    onSelectIndex?(index)
+                }
             }
         } label: {
             HStack(spacing: 5) {

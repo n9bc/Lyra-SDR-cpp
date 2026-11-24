@@ -77,6 +77,7 @@ final class MockRadioBackend: RadioBackend {
             if let i = s.dsp.toggles.firstIndex(where: { $0.id == function.rawValue }) {
                 s.dsp.toggles[i].isOn = on
             }
+            if function == .bin { s.audio.binaural = on }
             // The quick toggles call the notch "NOTCH"; every other id matches the function.
             let quickID = function == .nf ? "NOTCH" : function.rawValue
             for i in s.main.quickToggles.indices where s.main.quickToggles[i].id == quickID {

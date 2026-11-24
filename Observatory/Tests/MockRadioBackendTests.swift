@@ -312,6 +312,14 @@ private final class Flag: @unchecked Sendable {
         }
     }
 
+    func testBinauralFollowsTheBinToggle() {
+        let b = MockRadioBackend()
+        b.send(.setDSP(.bin, true))
+        XCTAssertTrue(b.snapshot.audio.binaural)
+        b.send(.setDSP(.bin, false))
+        XCTAssertFalse(b.snapshot.audio.binaural)
+    }
+
     func testMockAppliesAudioCommands() {
         let b = MockRadioBackend()
         b.send(.setAFGain(55))

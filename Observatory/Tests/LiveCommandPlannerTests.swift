@@ -414,6 +414,10 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.setMonitorLevel(0.3), .idle), [.setMonVolume(0.3)])
     }
 
+    func testBinauralChipSharesTheBinDspPath() {
+        XCTAssertEqual(plan(.setDSP(.bin, true), .idle), [.setDsp(.bin, true)])
+    }
+
     func testOutputDeviceIndex() {
         XCTAssertEqual(plan(.setOutputDevice(2), .idle), [.setAudioOutputDevice(2)])
         XCTAssertEqual(plan(.setOutputDevice(-1), .idle), [])

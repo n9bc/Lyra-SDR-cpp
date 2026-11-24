@@ -52,14 +52,6 @@ struct ReceiverColumnContent: View {
         abs(balance) < 0.02 ? "C" : String(format: "%@%.0f", balance < 0 ? "L" : "R", abs(balance) * 100)
     }
 
-    /// The output device menu: reads the engine's device, writes its index.
-    private var outputSelection: Binding<String> {
-        Binding(
-            get: { snapshot.audio.outputDevice },
-            set: { name in
-                if let index = snapshot.audio.outputDevices.firstIndex(of: name) { send(.setOutputDevice(index)) }
-            })
-    }
 
     var body: some View {
         VStack(spacing: ConsoleLayout.gap) {
@@ -147,9 +139,10 @@ struct ReceiverColumnContent: View {
             HStack(spacing: 5) {
                 ConsoleMenuChip(label: "Output", help: "Audio output device",
                                 options: a.outputDevices.isEmpty ? [a.outputDevice] : a.outputDevices,
-                                selection: outputSelection, status: status)
-                ConsoleChip(title: "Binaural", help: "Binaural audio", kind: a.binaural ? .on : .plain,
-                            status: status)
+                                selection: .constant(a.outputDevice), status: status,
+                                onSelectIndex: { send(.setOutputDevice($0)) })
+                ConsoleChip(title: "Binaural", help: "Binaural audio (the BIN toggle)", kind: a.binaural ? .on : .plain,
+                            status: capabilities.control(.dsp(.bin))) { send(.setDSP(.bin, !a.binaural)) }
                 Spacer(minLength: 0)
                 ConsoleChip(title: "MON TX", help: "Monitor transmit audio, heard only while keyed",
                             kind: a.monitorTx ? .on : .plain, status: status) { send(.setMonitor(!a.monitorTx)) }
