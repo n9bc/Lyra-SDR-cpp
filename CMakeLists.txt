@@ -652,6 +652,8 @@ qt_add_qml_module(lyra
         src/qml/LyraDS.qml
         src/qml/ConsoleChip.qml
         src/qml/ConsoleSectionHeader.qml
+        src/qml/ConsoleSliderRow.qml
+        src/qml/SegmentMeter.qml
         src/qml/LyraSlider.qml
         src/qml/LyraButton.qml
         src/qml/VfoBox.qml
