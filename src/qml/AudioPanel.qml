@@ -28,8 +28,8 @@ Rectangle {
     readonly property bool compact: Qt.platform.os === "osx"
     implicitHeight: compact ? 100 : 118
     implicitWidth:  compact ? 720 : 860
-    color: Prefs.panelBgColor
-    border.color: "#2a4a5a"
+    color: LyraDS.palette.surface
+    border.color: LyraDS.palette.panelBorder
 
     // Honest floor, measured from the content — NOT the same thing as the
     // implicit size above, which is only a preferred size.  MainWindow pushes
@@ -39,11 +39,12 @@ Rectangle {
     readonly property int lyraMinWidth:  body.implicitWidth + 16
     readonly property int lyraMinHeight: body.implicitHeight + 16
 
-    readonly property color cAccent: "#00e5ff"
-    readonly property color cText:   "#cdd9e5"
-    readonly property color cMuted:  "#8a9aac"
-    readonly property color cDim:    "#5a7080"
-    readonly property color cOn:     "#ff9a3c"   // "engaged" orange (old-Lyra dsp_btn)
+    // Observatory tokens under the panel's historical short names.
+    readonly property color cAccent: LyraDS.palette.cyan
+    readonly property color cText:   LyraDS.palette.textPrimary
+    readonly property color cMuted:  LyraDS.palette.textMuted
+    readonly property color cDim:    LyraDS.palette.textDim
+    readonly property color cOn:     LyraDS.palette.yellow   // warn / state cue (A-ATT, latched auto AGC)
     // QQuickWidget: a direct Stream.subEnabled binding can stay stale after
     // the SUB click (same lesson as PanadapterPanel). Vol2/MUTE2 must track
     // the signal so RX2 gain is reachable when SUB is on.
@@ -53,37 +54,19 @@ Rectangle {
     // cannot wipe a just-restored NR-C profile.
     property bool nrcCombosLive: false
 
-    // Small toggle button matching old Lyra's dsp_btn (orange when on).
-    component DspToggle: Button {
+    // Small DSP toggle: Observatory chip, cyan "on" when engaged.
+    component DspToggle: ConsoleChip {
         id: btn
         property string note: ""
         implicitWidth: 42
-        implicitHeight: 24
+        height: 24
         checkable: true
-        font.pixelSize: 12
+        kind: checked ? "on" : "plain"
         ToolTip.visible: false
         LyraHoverHelp {
             title: btn.text
             text: btn.note
             hovered: btn.hovered && btn.note.length > 0
-        }
-        background: Rectangle {
-            radius: 3
-            color: btn.checked ? "#3a2a14" : "#161e28"
-            border.color: btn.checked ? "#ff9a3c"
-                          : (btn.enabled ? "#2a3a4a" : "#1c2630")
-        }
-        contentItem: Text {
-            text: btn.text
-            color: !btn.enabled ? "#5a7080"
-                   : (btn.checked ? "#ff9a3c" : "#cdd9e5")
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: btn.font
-            // A custom contentItem drops the style's default eliding, so a
-            // squeezed toggle paints its label out over its neighbours.
-            elide: Text.ElideRight
-            clip: true
         }
     }
 
@@ -142,9 +125,9 @@ Rectangle {
             Label {
                 text: (!FrontEnd.p2Active && FrontEnd.value > 0 ? "+" : "")
                       + FrontEnd.value + qsTr(" dB")
-                color: root.cText; font.family: "Consolas"; Layout.preferredWidth: 48
+                color: root.cText; font.family: "Menlo, Consolas, monospace"; Layout.preferredWidth: 48
             }
-            Button {
+            ConsoleChip {
                 id: autoBtn
                 text: FrontEnd.p2Active ? qsTr("Step") : qsTr("Auto")
                 checkable: true
@@ -152,22 +135,8 @@ Rectangle {
                 enabled: FrontEnd.autoAvailable
                 visible: true
                 onToggled: FrontEnd.setAutoEnabled(checked)
-                implicitWidth: 46; implicitHeight: 24
-                background: Rectangle {
-                    radius: 3
-                    color: autoBtn.checked ? "#3a2a14" : "#161e28"
-                    border.color: autoBtn.checked ? root.cOn : "#2a3a4a"
-                    border.width: 1
-                }
-                contentItem: Text {
-                    text: autoBtn.text
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    color: autoBtn.checked ? root.cOn : root.cText
-                    font.pixelSize: 12
-                    elide: Text.ElideRight
-                    clip: true
-                }
+                                implicitWidth: 46; height: 24
+                kind: checked ? "warn" : "plain"
                 LyraHoverHelp {
                     title: FrontEnd.p2Active ? qsTr("Step") : qsTr("Auto")
                     text: FrontEnd.p2Active
@@ -213,7 +182,7 @@ Rectangle {
                     visible: FrontEnd.autoEnabled
                     text: qsTr("A-ATT")
                     color: root.cOn
-                    font.family: "Consolas"
+                    font.family: "Menlo, Consolas, monospace"
                     font.pixelSize: 12
                 }
 
@@ -222,13 +191,13 @@ Rectangle {
                     anchors.centerIn: parent
                     visible: !FrontEnd.autoEnabled
                     width: 10; height: 10; radius: 5
-                    color: FrontEnd.overloadTier === 2 ? "#ff4040"
-                         : FrontEnd.overloadTier === 1 ? "#e0a828"
-                                                        : "#26323c"
+                    color: FrontEnd.overloadTier === 2 ? LyraDS.palette.pink
+                         : FrontEnd.overloadTier === 1 ? LyraDS.palette.yellow
+                                                        : LyraDS.palette.meterTrack
                     border.width: 1
-                    border.color: FrontEnd.overloadTier === 2 ? "#ff8080"
-                                : FrontEnd.overloadTier === 1 ? "#f5c860"
-                                                               : "#33424e"
+                    border.color: FrontEnd.overloadTier === 2 ? LyraDS.palette.pink
+                                : FrontEnd.overloadTier === 1 ? LyraDS.palette.yellow
+                                                               : LyraDS.palette.chipBorder
                 }
 
                 LyraHoverHelp {
@@ -267,7 +236,7 @@ Rectangle {
                 onMoved: WdspEngine.setAfGainDb(value)
             }
             Label { text: "+" + Math.round(WdspEngine.afGainDb) + qsTr(" dB")
-                    color: root.cText; font.family: "Consolas"
+                    color: root.cText; font.family: "Menlo, Consolas, monospace"
                     Layout.preferredWidth: 44 }
 
             Item { width: 10 }
@@ -303,16 +272,17 @@ Rectangle {
                 text: WdspEngine.volume <= 0.0
                       ? qsTr("-∞ dB")
                       : Math.round(WdspEngine.volumeDb) + qsTr(" dB")
-                color: root.cText; font.family: "Consolas"
+                color: root.cText; font.family: "Menlo, Consolas, monospace"
                 Layout.preferredWidth: 44
             }
-            LyraButton {
+            ConsoleChip {
                 id: muteBtn
                 text: WdspEngine.muted ? qsTr("MUTED") : qsTr("MUTE")
                 checkable: true
                 checked: WdspEngine.muted
                 onToggled: WdspEngine.setMuted(checked)
-                implicitWidth: 66; implicitHeight: 24
+                                implicitWidth: 66; height: 24
+                kind: checked ? "hot" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MUTE")
                     text: qsTr("Silence RX1 without moving the volume slider.")
@@ -348,16 +318,17 @@ Rectangle {
                 text: WdspEngine.volumeRx2 <= 0.0
                       ? qsTr("-∞ dB")
                       : Math.round(WdspEngine.volumeDbRx2) + qsTr(" dB")
-                color: root.cText; font.family: "Consolas"
+                color: root.cText; font.family: "Menlo, Consolas, monospace"
                 Layout.preferredWidth: 44
             }
-            LyraButton {
+            ConsoleChip {
                 id: mute2Btn
                 text: WdspEngine.mutedRx2 ? qsTr("MUTED") : qsTr("MUTE2")
                 checkable: true
                 checked: WdspEngine.mutedRx2
                 onToggled: WdspEngine.setMutedRx2(checked)
-                implicitWidth: 66; implicitHeight: 24
+                                implicitWidth: 66; height: 24
+                kind: checked ? "hot" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MUTE2")
                     text: qsTr("Silence RX2 without moving the Vol2 slider.")
@@ -392,28 +363,14 @@ Rectangle {
             Item { width: 10 }
 
             // ── TX monitor (#90) — MON toggle + Monitor level ──
-            Button {
+            ConsoleChip {
                 id: monBtn
                 text: qsTr("MON TX")
                 checkable: true
                 checked: WdspEngine.monEnabled
                 onToggled: WdspEngine.setMonEnabled(checked)
-                implicitWidth: 60; implicitHeight: 24
-                background: Rectangle {
-                    radius: 3
-                    color: monBtn.checked ? "#3a2a14" : "#161e28"
-                    border.color: monBtn.checked ? root.cOn : "#2a3a4a"
-                    border.width: 1
-                }
-                contentItem: Text {
-                    text: monBtn.text
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    color: monBtn.checked ? root.cOn : root.cText
-                    font.pixelSize: 12
-                    elide: Text.ElideRight
-                    clip: true
-                }
+                                implicitWidth: 60; height: 24
+                kind: checked ? "on" : "plain"
                 LyraHoverHelp {
                     title: qsTr("MON TX")
                     text: qsTr("Hear your processed TX on the jack. Slider sets level.")
@@ -442,7 +399,7 @@ Rectangle {
                       ? qsTr("-∞ dB")
                       : Math.round(20 * Math.log(WdspEngine.monVolume) / Math.LN10) + qsTr(" dB")
                 color: WdspEngine.monEnabled ? root.cText : root.cDim
-                font.family: "Consolas"; Layout.preferredWidth: 48
+                font.family: "Menlo, Consolas, monospace"; Layout.preferredWidth: 48
             }
 
             Item { Layout.fillWidth: true }
@@ -452,19 +409,11 @@ Rectangle {
             // setter the Settings -> Audio combo uses (audioOutputDevices() /
             // setAudioOutputDevice / audioDeviceIndex; index 0 = HL2 jack).
             // Full setup (host API, exclusive, VAC) stays in Settings.
-            Button {
+            ConsoleChip {
                 id: outBtn
                 text: qsTr("Out")
-                implicitWidth: 46; implicitHeight: 24
+                                implicitWidth: 46; height: 24
                 onClicked: outPopup.open()
-                background: Rectangle { radius: 3; color: "#161e28"
-                    border.color: "#2a3a4a" }
-                contentItem: Text { text: outBtn.text; color: root.cText
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                    clip: true }
                 LyraHoverHelp {
                     title: qsTr("Out")
                     text: {
@@ -494,7 +443,7 @@ Rectangle {
                     focus: true
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                     onAboutToShow: outList.model = WdspEngine.audioOutputDevices()
-                    background: Rectangle { color: "#0d141b"
+                    background: Rectangle { color: LyraDS.palette.surface
                         border.color: root.cAccent; radius: 4 }
                     contentItem: ColumnLayout {
                         spacing: 0
@@ -503,7 +452,7 @@ Rectangle {
                             text: qsTr("Output device")
                             color: root.cAccent; font.bold: true; font.pixelSize: 11
                             leftPadding: 8; topPadding: 5; bottomPadding: 5
-                            background: Rectangle { color: "#11202b" }
+                            background: Rectangle { color: LyraDS.palette.surfaceElevated }
                         }
                         ListView {
                             id: outList
@@ -531,8 +480,8 @@ Rectangle {
                                     verticalAlignment: Text.AlignVCenter
                                 }
                                 background: Rectangle {
-                                    color: index === WdspEngine.audioDeviceIndex ? "#13222c"
-                                           : (devDel.hovered ? "#162230" : "transparent")
+                                    color: index === WdspEngine.audioDeviceIndex ? LyraDS.palette.vchipFill
+                                           : (devDel.hovered ? LyraDS.palette.surfaceElevated : "transparent")
                                 }
                             }
                         }
@@ -618,7 +567,7 @@ Rectangle {
                       : WdspEngine.notches.length + qsTr(" notches")
                 color: WdspEngine.notches.length > 0 ? root.cText : root.cDim
                 opacity: WdspEngine.notches.length > 0 ? 0.9 : 0.6
-                font.family: "Consolas"; font.pixelSize: 10
+                font.family: "Menlo, Consolas, monospace"; font.pixelSize: 10
                 Layout.preferredWidth: root.compact ? 64 : 80
             }
 
@@ -638,13 +587,13 @@ Rectangle {
                 // DSP toggles beside it.  Clip so it degrades instead.
                 clip: true
                 radius: 4
-                color: agcMa.containsMouse ? "#16242e" : "transparent"
+                color: agcMa.containsMouse ? LyraDS.palette.surfaceElevated : "transparent"
                 border.width: 1
                 // Latched Auto AGC-T lights the cell border orange (engaged
                 // state cue, same "engaged orange" as Auto-LNA / MON).  Hover
                 // blue when not latched; otherwise no border.
                 border.color: WdspEngine.autoAgcThresh ? root.cOn
-                            : agcMa.containsMouse       ? "#2a4a5a"
+                            : agcMa.containsMouse       ? LyraDS.palette.panelBorder
                             :                             "transparent"
                 Row {
                     id: agcRow
@@ -660,19 +609,19 @@ Rectangle {
                             }
                     }
                     Label { text: WdspEngine.agcMode.toUpperCase()
-                            color: root.cAccent; font.family: "Consolas"; font.bold: true
+                            color: root.cAccent; font.family: "Menlo, Consolas, monospace"; font.bold: true
                             anchors.verticalCenter: parent.verticalCenter
                             width: 38 }
                     Label { text: qsTr("thr"); color: root.cMuted; font.pixelSize: 9
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: Math.round(WdspEngine.agcThreshDb) + qsTr(" dBFS")
-                            color: root.cText; font.family: "Consolas"
+                            color: root.cText; font.family: "Menlo, Consolas, monospace"
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: qsTr("gain"); color: root.cMuted; font.pixelSize: 9
                             anchors.verticalCenter: parent.verticalCenter }
                     Label { text: WdspEngine.agcMode === "off"
                                   ? "—" : Math.round(WdspEngine.agcGainDb) + qsTr(" dB")
-                            color: "#50d0ff"; font.family: "Consolas"
+                            color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"
                             anchors.verticalCenter: parent.verticalCenter
                             width: 48 }
                 }
@@ -712,27 +661,15 @@ Rectangle {
                         }
                         Label { text: qsTr("dBFS"); color: root.cMuted
                                 anchors.verticalCenter: parent.verticalCenter }
-                        Button {
+                        ConsoleChip {
                             id: autoAgcBtn
                             text: qsTr("Auto")
                             checkable: true
                             checked: WdspEngine.autoAgcThresh
                             onToggled: WdspEngine.setAutoAgcThresh(checked)
-                            implicitHeight: 24; implicitWidth: 48
+                                                        height: 24; implicitWidth: 48
+                            kind: checked ? "warn" : "plain"
                             anchors.verticalCenter: parent.verticalCenter
-                            background: Rectangle {
-                                radius: 3
-                                color: autoAgcBtn.checked ? "#3a2a14" : "#161e28"
-                                border.color: autoAgcBtn.checked ? root.cOn : "#2a3a4a"
-                                border.width: 1
-                            }
-                                contentItem: Text {
-                                text: autoAgcBtn.text
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                color: autoAgcBtn.checked ? root.cOn : root.cText
-                                font.pixelSize: 12
-                            }
                         }
                         // Auto offset (dB): raises the knee above the floor.
                         // The reference lands its auto max-gain ~55-57; nudge
@@ -754,7 +691,7 @@ Rectangle {
                             visible: WdspEngine.autoAgcThresh
                             text: qsTr("max ") + (isNaN(WdspEngine.agcMaxGainDb)
                                     ? "—" : Math.round(WdspEngine.agcMaxGainDb) + qsTr(" dB"))
-                            color: root.cText; font.family: "Consolas"
+                            color: root.cText; font.family: "Menlo, Consolas, monospace"
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
@@ -788,7 +725,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.squelchEnabled
                     text: Math.round(WdspEngine.squelchThreshold * 100)
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 26 }
 
             Item { Layout.fillWidth: true }
@@ -829,7 +766,7 @@ Rectangle {
                 }
                 Label {
                     text: Stream.cwSidetoneLevel
-                    color: root.cText; font.family: "Consolas"
+                    color: root.cText; font.family: "Menlo, Consolas, monospace"
                     Layout.preferredWidth: 28
                 }
             }
@@ -861,8 +798,8 @@ Rectangle {
                 onMoved: WdspEngine.setNrMode(Math.round(value))
             }
             Label { visible: !WdspEngine.nnrEnabled
-                    text: WdspEngine.nrMode; color: "#50d0ff"
-                    font.family: "Consolas"; font.bold: true
+                    text: WdspEngine.nrMode; color: LyraDS.palette.cyan
+                    font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 16
                     HoverHandler { id: nrModeValHov }
                     LyraHoverHelp {
@@ -915,7 +852,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.nnrEnabled
                     text: Math.round(WdspEngine.nnrMaskFloorDb)
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 32
                     HoverHandler { id: nnrMaskValHov }
                     LyraHoverHelp {
@@ -1000,7 +937,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.lmsEnabled
                     text: Math.round(WdspEngine.lmsStrength * 100) + "%"
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 34 }
 
             // NB strength — appears only when NB is engaged.
@@ -1027,7 +964,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.nbEnabled
                     text: Math.round(WdspEngine.nbStrength * 100) + "%"
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 34 }
 
             // APF gain — appears only when APF is on; stepped in 3 dB
@@ -1055,7 +992,7 @@ Rectangle {
             }
             Label { visible: WdspEngine.apfEnabled
                     text: Math.round(WdspEngine.apfGainDb) + qsTr(" dB")
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 40 }
 
             // BIN depth — appears only when BIN is on (0 = mono … 100 = full).
@@ -1082,41 +1019,28 @@ Rectangle {
             }
             Label { visible: WdspEngine.binEnabled
                     text: Math.round(WdspEngine.binDepth * 100) + "%"
-                    color: "#50d0ff"; font.family: "Consolas"; font.bold: true
+                    color: LyraDS.palette.cyan; font.family: "Menlo, Consolas, monospace"; font.bold: true
                     Layout.preferredWidth: 34 }
 
             Item { width: 10 }
             Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 20
-                        color: "#2a3a4a" }
+                        color: LyraDS.palette.panelBorder }
             Item { width: 4 }
 
             // ── Captured noise profile — Lyra's IQ-domain spectral NR ──
             // 📷 Cap averages the band's noise spectrum (do it on a quiet
             // frequency); NR-C applies it (Wiener subtraction, pre-WDSP);
             // profiles are named + saved, tagged with rate + FFT size.
-            Button {
+            ConsoleChip {
                 id: capBtn
-                implicitHeight: 24; implicitWidth: 72; font.pixelSize: 12
+                height: 24; implicitWidth: 72
+                kind: WdspEngine.noiseCapturing ? "warn" : "plain"
                 text: WdspEngine.noiseCapturing
                       ? (Math.round(WdspEngine.noiseCaptureProgress * 100) + "%")
                       : qsTr("📷 Cap")
                 onClicked: WdspEngine.noiseCapturing
                            ? WdspEngine.cancelNoiseCapture()
                            : WdspEngine.startNoiseCaptureDefault()
-                background: Rectangle {
-                    radius: 3
-                    color: WdspEngine.noiseCapturing ? "#3a2a14" : "#161e28"
-                    border.color: WdspEngine.noiseCapturing ? "#ff9a3c" : "#2a3a4a"
-                }
-                contentItem: Text {
-                    text: capBtn.text
-                    color: WdspEngine.noiseCapturing ? "#ff9a3c" : "#cdd9e5"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font: capBtn.font
-                    elide: Text.ElideRight
-                    clip: true
-                }
                 LyraHoverHelp {
                     title: qsTr("Cap")
                     text: qsTr("Capture band noise on a quiet frequency. Click again to cancel.")
@@ -1171,23 +1095,13 @@ Rectangle {
             }
 
             // Tune button — Strength / Floor / Smoothing (visible when applying).
-            Button {
+            ConsoleChip {
                 id: tuneBtn
-                implicitWidth: 32; implicitHeight: 24
+                implicitWidth: 32; height: 24
+                kind: tunePop.opened ? "on" : "plain"
+                text: "\u2699"
                 visible: WdspEngine.noiseApplyEnabled
                 onClicked: tunePop.open()
-                background: Rectangle {
-                    radius: 3
-                    color: tunePop.opened ? "#16242e" : "#161e28"
-                    border.color: root.cAccent
-                }
-                contentItem: Text {
-                    text: "⚙"          // ⚙
-                    color: root.cAccent
-                    font.pixelSize: 15; font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
                 Popup {
                     id: tunePop
                     // Own top-level window so it isn't clipped to the panel's
@@ -1197,7 +1111,7 @@ Rectangle {
                     x: tuneBtn.width - width         // right-align to the button
                     width: 300; padding: 12
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                    background: Rectangle { color: "#0c141c"; radius: 6
+                    background: Rectangle { color: LyraDS.palette.surface; radius: 6
                                             border.color: root.cAccent }
                     contentItem: ColumnLayout {
                         spacing: 8
@@ -1209,53 +1123,36 @@ Rectangle {
                                 implicitWidth: 22; implicitHeight: 20
                                 onClicked: tunePop.close()
                                 background: Rectangle { radius: 3; color: "transparent"
-                                                        border.color: "#2a4a5a" }
+                                                        border.color: LyraDS.palette.panelBorder }
                                 contentItem: Text { text: "✕"; color: root.cMuted
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter }
                             }
                         }
-                        RowLayout { spacing: 8; Layout.fillWidth: true
-                            Label { text: qsTr("Strength"); color: root.cText
-                                    font.pixelSize: 11; Layout.preferredWidth: 68 }
-                            LyraSlider { Layout.fillWidth: true
-                                from: 1.0; to: 5.0; stepSize: 0.1
-                                value: WdspEngine.noiseStrength
-                                onMoved: WdspEngine.setNoiseStrength(value) }
-                            Label { text: WdspEngine.noiseStrength.toFixed(1) + "×"
-                                    color: "#50d0ff"; font.family: "Consolas"
-                                    Layout.preferredWidth: 38 }
+                        ConsoleSliderRow {
+                            Layout.fillWidth: true
+                            label: qsTr("Strength")
+                            from: 1.0; to: 5.0; stepSize: 0.1
+                            value: WdspEngine.noiseStrength
+                            readout: WdspEngine.noiseStrength.toFixed(1) + "\u00d7"
+                            onMoved: WdspEngine.setNoiseStrength(value)
                         }
-                        RowLayout { spacing: 8; Layout.fillWidth: true
-                            Label { text: qsTr("Floor"); color: root.cText
-                                    font.pixelSize: 11; Layout.preferredWidth: 68
-                                    HoverHandler { id: floorLblHov }
-                                    LyraHoverHelp {
-                                        title: qsTr("Floor")
-                                        text: qsTr("Deepest any bin may drop, before AGC. More negative = more audible hiss cut. Default −24 dB.")
-                                        hovered: floorLblHov.hovered
-                                    }
-                            }
-                            LyraSlider { Layout.fillWidth: true
-                                helpTitle: qsTr("Floor")
-                                helpText: qsTr("Deepest any bin may drop, before AGC. More negative = more audible hiss cut. Default −24 dB.")
-                                from: -30; to: -3; stepSize: 1
-                                value: WdspEngine.noiseFloorDb
-                                onMoved: WdspEngine.setNoiseFloorDb(value) }
-                            Label { text: Math.round(WdspEngine.noiseFloorDb) + qsTr(" dB")
-                                    color: "#50d0ff"; font.family: "Consolas"
-                                    Layout.preferredWidth: 44 }
+                        ConsoleSliderRow {
+                            Layout.fillWidth: true
+                            label: qsTr("Floor")
+                            help: qsTr("Deepest any bin may drop, before AGC. More negative = more audible hiss cut. Default \u221224 dB.")
+                            from: -30; to: -3; stepSize: 1
+                            value: WdspEngine.noiseFloorDb
+                            readout: Math.round(WdspEngine.noiseFloorDb) + qsTr(" dB")
+                            onMoved: WdspEngine.setNoiseFloorDb(value)
                         }
-                        RowLayout { spacing: 8; Layout.fillWidth: true
-                            Label { text: qsTr("Smoothing"); color: root.cText
-                                    font.pixelSize: 11; Layout.preferredWidth: 68 }
-                            LyraSlider { Layout.fillWidth: true
-                                from: 0; to: 95; stepSize: 5
-                                value: Math.round(WdspEngine.noiseSmoothing * 100)
-                                onMoved: WdspEngine.setNoiseSmoothing(value / 100.0) }
-                            Label { text: Math.round(WdspEngine.noiseSmoothing * 100) + "%"
-                                    color: "#50d0ff"; font.family: "Consolas"
-                                    Layout.preferredWidth: 38 }
+                        ConsoleSliderRow {
+                            Layout.fillWidth: true
+                            label: qsTr("Smoothing")
+                            from: 0; to: 95; stepSize: 5
+                            value: Math.round(WdspEngine.noiseSmoothing * 100)
+                            readout: Math.round(WdspEngine.noiseSmoothing * 100) + "%"
+                            onMoved: WdspEngine.setNoiseSmoothing(value / 100.0)
                         }
                         Label {
                             Layout.fillWidth: true
