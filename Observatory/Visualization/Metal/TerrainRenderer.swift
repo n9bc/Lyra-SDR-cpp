@@ -71,7 +71,8 @@ final class TerrainRenderer: LyraMetalRenderer {
 
     private var range = TerrainAutoRange()
     private var clock = TerrainScrollClock()
-    private var lastNewest: [Float]?
+    /// The feed's pushed-row counter at the last ingest; nil before the first.
+    private var lastSequence: Int?
     private var lastCount = -1
     private var lastFrame: TimeInterval?
     /// The dB the height texture is measured from: the scale's floor when the rows were built.
@@ -145,7 +146,7 @@ final class TerrainRenderer: LyraMetalRenderer {
     /// live feed starts from the scale's start values, not from whatever the last source left.
     func setSource(_ newSource: Source) {
         source = newSource
-        lastNewest = nil
+        lastSequence = nil
         lastCount = -1
         lastFrame = nil
         range = TerrainAutoRange()
@@ -160,7 +161,7 @@ final class TerrainRenderer: LyraMetalRenderer {
     var shaping: TerrainShaping = .standard {
         didSet {
             guard shaping != oldValue else { return }
-            // Forces the next ingest to rebuild the rows. `lastNewest` stays, so rows that
+            // Forces the next ingest to rebuild the rows. `lastSequence` stays, so rows that
             // arrive while the slider moves still advance the scroll clock.
             lastCount = -1
             if case .sample(let grid) = source {
@@ -188,10 +189,11 @@ final class TerrainRenderer: LyraMetalRenderer {
         view?.isPaused = false
     }
 
-    private var current: (grid: [[Float]], live: Bool) {
+    /// What to draw, whether it is live, and the feed's pushed-row counter (0 for a sample).
+    private var current: (grid: [[Float]], live: Bool, sequence: Int) {
         switch source {
-        case .feed(let feed): (feed.grid, feed.isLive)
-        case .sample(let grid): (grid, false)
+        case .feed(let feed): (feed.grid, feed.isLive, feed.rowsPushed)
+        case .sample(let grid): (grid, false, 0)
         }
     }
 
@@ -279,22 +281,26 @@ final class TerrainRenderer: LyraMetalRenderer {
 
     // MARK: - Frame preparation
 
-    /// How many rows landed between `previousNewest` and `grid` (newest first): where the old
-    /// newest row now sits, or 1 when it cannot be found; 0 when the newest row is unchanged or
-    /// there was nothing before.
-    nonisolated static func arrivedRows(_ grid: [[Float]], previousNewest: [Float]?) -> Int {
-        guard let previousNewest, let newest = grid.first, newest != previousNewest else { return 0 }
-        return grid.indices.dropFirst().first { grid[$0] == previousNewest } ?? 1
+    /// Whether a frame must rebuild the cached rows, and how many rows arrived since the last
+    /// ingest. Both come from the feed's pushed-row counter (`sequence`) and the grid's row count,
+    /// never from row contents: identical rows (silence, a closed squelch) still arrive. A changed
+    /// count with the same counter (a restarted feed, or `lastCount` forced to -1) rebuilds
+    /// without an arrival; the first ingest (`lastSequence` nil) counts none.
+    nonisolated static func ingestStep(sequence: Int, count: Int, lastSequence: Int?,
+                                       lastCount: Int) -> (rebuild: Bool, arrived: Int) {
+        let arrived = lastSequence.map { max(sequence - $0, 0) } ?? 0
+        return (sequence != lastSequence || count != lastCount, arrived)
     }
 
-    /// Takes a new grid into the scale's targets and the cached rows. Only runs when the grid
-    /// changed. The scale itself moves per frame, in `prepare`.
-    private func ingest(_ grid: [[Float]], now: TimeInterval) {
-        let newest = grid.first
-        guard grid.count != lastCount || newest != lastNewest else { return }
-        let arrived = Self.arrivedRows(grid, previousNewest: lastNewest)
+    /// Takes a new grid into the scale's targets and the cached rows. Only runs when a row was
+    /// pushed or the grid's size changed. The scale itself moves per frame, in `prepare`.
+    private func ingest(_ grid: [[Float]], sequence: Int, now: TimeInterval) {
+        let step = Self.ingestStep(sequence: sequence, count: grid.count, lastSequence: lastSequence,
+                                   lastCount: lastCount)
+        guard step.rebuild else { return }
+        let arrived = step.arrived
         lastCount = grid.count
-        lastNewest = newest
+        lastSequence = sequence
 
         if case .feed = source {
             // The peak is read from the heights as drawn, measured from the same reference the rows
@@ -314,8 +320,8 @@ final class TerrainRenderer: LyraMetalRenderer {
     }
 
     private func prepare(now: TimeInterval, viewSize: CGSize) -> Bool {
-        let (grid, live) = current
-        ingest(grid, now: now)
+        let (grid, live, sequence) = current
+        ingest(grid, sequence: sequence, now: now)
         // The scale glides only while live (a dim, paused terrain holds still). A long gap (the
         // view was paused) is capped at one row period, so waking never jumps the scale.
         let dt = lastFrame.map { min(max(now - $0, 0), TerrainScrollClock.nominalPeriod) } ?? 0

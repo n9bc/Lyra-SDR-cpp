@@ -35,16 +35,20 @@ struct SpectrumGestureInputs {
         NotchModel.availability(stack: stack, status: notchStatus)
     }
 
-    func notchesEnabled(on stack: ReceiverID) -> Bool {
+    /// Whether notch gestures work on `stack`'s `surface`. Notches are drawn on the spectrum only,
+    /// so the waterfall never hit-tests them (Qt's notch areas live in the spectrum overlay).
+    func notchesEnabled(on stack: ReceiverID, surface: SpectrumSurface = .spectrum) -> Bool {
+        guard surface == .spectrum else { return false }
         let s = notchAvailability(on: stack)
         return s == .available || s == .mocked
     }
 
-    /// The surface's tooltip: the tuning help (or why tuning is off), then the notch help (or why
-    /// notches are off here).
+    /// The surface's tooltip: the tuning help (or why tuning is off), then, on the spectrum, the
+    /// notch help (or why notches are off here). The waterfall has no notch gestures to describe.
     func help(for stack: ReceiverID, surface: SpectrumSurface = .spectrum) -> String {
         var tuning = disabledReason ?? Self.help
         if disabledReason == nil, surface == .spectrum, stack == .main { tuning += "\n" + Self.edgeHelp }
+        guard surface == .spectrum else { return tuning }
         if case .unavailable(let reason) = notchAvailability(on: stack) { return tuning + "\n" + reason }
         return tuning + "\n" + Self.notchHelp
     }
@@ -112,7 +116,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
         private var session: SpectrumGestureSession?
         /// A press that began on a notch, or a right press that may add one.
         private var notchGesture: NotchGesture?
-        private var notchWidth = NotchWidthAccumulator()
+        private var notchWidth = NotchWidthScroll()
+        /// Bumped by every notch-width scroll, so only the latest trailing flush acts.
+        private var notchWidthGeneration = 0
         private var zoom = SpectrumZoomAccumulator()
         private var optionClick = false
         private var scrollAccumulator = 0.0
@@ -134,9 +140,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         /// What notch gestures need: the Main stack's notches, its width and span. Nil when notch
-        /// gestures are off (Sub stack, `.notches` unavailable) or there is no axis.
+        /// gestures are off (Sub stack, the waterfall, `.notches` unavailable) or there is no axis.
         private func notchContext() -> (notches: [NotchInfo], width: Double, span: Double, inputs: SpectrumGestureInputs)? {
-            guard let display, let inputs, inputs.notchesEnabled(on: stack) else { return nil }
+            guard let display, let inputs, inputs.notchesEnabled(on: stack, surface: surface) else { return nil }
             let span = Double(display.spanHighHz - display.spanLowHz)
             guard span > 0, bounds.width > 0 else { return nil }
             return (NotchModel.visible(inputs.notches, on: stack), Double(bounds.width), span, inputs)
@@ -214,8 +220,22 @@ struct SpectrumInteractionView: NSViewRepresentable {
             }
         }
 
+        /// The live inputs while a dB or edge grab may go on. Once TX owns the axis (or the surface
+        /// is no longer live) the grab ends with no further command: the drag was seeded from the
+        /// RX range, and `Prefs` would write it into the live TX pair (Review Focus 5).
+        private func grabInputs() -> SpectrumGestureInputs? {
+            guard let (display, inputs) = live,
+                  SpectrumGestureModel.grabsEnabled(stack: stack, surface: surface, live: true,
+                                                    txAxis: display.txAxis) else {
+                dbDrag = nil
+                edgeDrag = nil
+                return nil
+            }
+            return inputs
+        }
+
         private func moveGrab(_ event: NSEvent) {
-            guard let (_, inputs) = live else { return }
+            guard let inputs = grabInputs() else { return }
             let p = point(event)
             let command = dbDrag != nil
                 ? dbDrag?.moved(toY: p.y, height: Double(bounds.height), at: event.timestamp)
@@ -226,7 +246,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         /// The release flushes what the throttle held back.
         private func endGrab(_ event: NSEvent) {
             defer { dbDrag = nil; edgeDrag = nil }
-            guard let (_, inputs) = live else { return }
+            guard let inputs = grabInputs() else { return }
             let p = point(event)
             let command = dbDrag != nil
                 ? dbDrag?.ended(atY: p.y, height: Double(bounds.height))
@@ -264,9 +284,16 @@ struct SpectrumInteractionView: NSViewRepresentable {
             let control = event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.option)
             let option = event.modifierFlags.contains(.option)
             let target = hitTarget(at: point(event))
-            // The dB scale and the passband edges come before notches and tuning (R1).
-            if !control, !option, beginGrab(target, at: point(event)) { return }
-            if beginNotchGesture(event, button: control ? .right : .left, target: target) { return }
+            // The dB scale and the passband edges come before notches and tuning (R1); an Option
+            // press always reaches the focus toggle below.
+            switch SpectrumGestureModel.pressRoute(target: target, control: control, option: option) {
+            case .grab:
+                if beginGrab(target, at: point(event)) { return }
+            case .notch(let button):
+                if beginNotchGesture(event, button: button, target: target) { return }
+            case .tune:
+                break
+            }
             guard let (ctx, _) = context() else { return super.mouseDown(with: event) }
             let p = point(event)
             optionClick = event.modifierFlags.contains(.option)
@@ -319,22 +346,49 @@ struct SpectrumInteractionView: NSViewRepresentable {
             inputs.send(SpectrumGestureModel.middleClick(atX: point(event).x, context: ctx))
         }
 
+        /// Sends the notch widths the scroll throttle held back (H14's final value).
+        private func flushNotchWidths() {
+            guard let n = notchContext() else { return }
+            for command in notchWidth.flush(notches: n.notches, now: ProcessInfo.processInfo.systemUptime) {
+                n.inputs.send(command)
+            }
+        }
+
+        /// A discrete wheel has no end phase: flush shortly after the last notch-width tick.
+        private func scheduleNotchWidthFlush() {
+            notchWidthGeneration += 1
+            let generation = notchWidthGeneration
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(50))
+                guard let self, self.notchWidthGeneration == generation else { return }
+                self.flushNotchWidths()
+            }
+        }
+
         override func scrollWheel(with event: NSEvent) {
             guard let (ctx, inputs) = context(), let display else { return super.scrollWheel(with: event) }
-            // Trackpad momentum would keep tuning after the fingers lift.
-            guard event.momentumPhase.isEmpty else { return }
+            // Trackpad momentum would keep tuning after the fingers lift; its end (like the
+            // fingers' own end) sends any notch width still held.
+            guard event.momentumPhase.isEmpty else {
+                if event.momentumPhase.contains(.ended) { flushNotchWidths() }
+                return
+            }
             if event.phase.contains(.began) { scrollAccumulator = 0 }
+            if event.phase.contains(.ended) || event.phase.contains(.cancelled) { flushNotchWidths() }
             let ticks = SpectrumGestureModel.wheelTicks(
                 deltaY: Double(event.scrollingDeltaY), deltaX: Double(event.scrollingDeltaX),
                 precise: event.hasPreciseScrollingDeltas, accumulator: &scrollAccumulator)
             guard ticks != 0 else { return }
-            // The wheel over a notch widens or narrows it and is not a tune.
-            if !event.modifierFlags.contains(.command), let n = notchContext(),
-               let command = NotchModel.scrollCommand(ticks: ticks, x: point(event).x, notches: n.notches,
-                                                      width: n.width, spanHz: n.span,
-                                                      accumulator: &notchWidth, now: event.timestamp) {
-                inputs.send(command)
-                return
+            // The wheel over a notch widens or narrows it and is not a tune; writes are throttled
+            // per notch (H14).
+            if !event.modifierFlags.contains(.command), let n = notchContext() {
+                let result = notchWidth.scrolled(ticks: ticks, x: point(event).x, notches: n.notches,
+                                                 width: n.width, spanHz: n.span, now: event.timestamp)
+                if result.consumed {
+                    if let command = result.command { inputs.send(command) }
+                    scheduleNotchWidthFlush()
+                    return
+                }
             }
             if event.modifierFlags.contains(.command) {
                 inputs.send(.setZoom(zoom.next(snapshotZoom: display.zoom,

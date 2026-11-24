@@ -1111,10 +1111,13 @@ public:
     // No audio is played yet (Step 3e); this only measures.
     void feedIq(const double *iq, int nframes);
 
-    // TCI streaming taps (off unless a TCI client subscribes).  When on,
-    // feedIq emits a copy of each post-DSP audio block (mono float32 @
-    // outRate) / raw IQ block (interleaved I,Q float32 @ inRate) as a
-    // queued signal so the (main-thread) TCI server can frame + send it.
+    // Streaming taps.  The audio block is emitted while a TCI client
+    // subscribes OR the native console's audio terrain wants it (two
+    // flags, OR'd at the emit site; neither turns the other off); IQ only
+    // while a TCI client subscribes.  When on, feedIq emits a copy of each
+    // post-DSP audio block (mono float32 @ outRate) / raw IQ block
+    // (interleaved I,Q float32 @ inRate) as a queued signal so the
+    // (main-thread) TCI server and the console can use it.
     void setTciAudioStreaming(bool on) {
         tciAudioWanted_.store(on, std::memory_order_relaxed);
     }

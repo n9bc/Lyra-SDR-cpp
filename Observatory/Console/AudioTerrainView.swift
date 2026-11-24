@@ -95,6 +95,9 @@ struct AudioTerrainView: View {
         .help("Terrain smoothing: left is sharper, right is smoother")
     }
 
+    /// Orbit has no working path yet, so the chip is disabled with its reason as the tooltip.
+    nonisolated static let orbitStatus = CapabilityStatus.unavailable("Orbit arrives in a later milestone")
+
     /// The Smooth control's value as a percentage.
     nonisolated static func smoothingReadout(_ amount: Double) -> String {
         "\(Int((min(max(amount, 0), 1) * 100).rounded())) %"
@@ -113,7 +116,7 @@ struct AudioTerrainView: View {
             Spacer(minLength: 6)
             if store.terrainExpanded {
                 smoothControl
-                ConsoleChip(title: "Orbit", help: "Orbit the terrain view")
+                ConsoleChip(title: "Orbit", help: "Orbit the terrain view", status: Self.orbitStatus)
             }
         }
         .padding(.horizontal, 10)

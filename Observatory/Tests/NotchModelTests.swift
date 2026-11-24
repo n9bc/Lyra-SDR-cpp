@@ -80,6 +80,17 @@ final class NotchModelTests: XCTestCase {
         XCTAssertTrue(inputs.help(for: .main).hasSuffix(SpectrumGestureInputs.notchHelp))
     }
 
+    /// Notches are drawn on the spectrum only, so the waterfall neither hit-tests them nor
+    /// advertises their gestures (finding 8).
+    func testNoNotchGesturesOrHelpOnTheWaterfall() {
+        let inputs = SpectrumGestureInputs(ctuneEnabled: false, subEnabled: false, splitEnabled: false,
+                                           focused: .main, status: .available, send: { _ in })
+        XCTAssertFalse(inputs.notchesEnabled(on: .main, surface: .waterfall))
+        XCTAssertTrue(inputs.notchesEnabled(on: .main, surface: .spectrum))
+        XCTAssertFalse(inputs.help(for: .main, surface: .waterfall).contains(SpectrumGestureInputs.notchHelp))
+        XCTAssertTrue(inputs.help(for: .main, surface: .spectrum).contains(SpectrumGestureInputs.notchHelp))
+    }
+
     // MARK: - Click gestures
 
     func testRightClickEmptyAddsNotch() throws {
@@ -214,6 +225,52 @@ final class NotchModelTests: XCTestCase {
         var tiny = NotchWidthAccumulator()
         XCTAssertEqual(N.scrollCommand(ticks: 1, x: 500, notches: [notch(0, 10)], width: w, spanHz: span,
                                        accumulator: &tiny, now: 0), .setNotchWidth(index: 0, widthHz: 10))
+    }
+
+    /// Scroll-to-width is throttled per notch to one write per 33 ms (H14), the held width goes
+    /// out on flush, and a width equal to the snapshot's is never written (finding 4).
+    func testNotchWidthScrollIsThrottled() {
+        let list = [notch(0, 200)]
+        var scroll = NotchWidthScroll()
+        var sent: [RadioCommand] = []
+        for i in 0..<10 {
+            let r = scroll.scrolled(ticks: 1, x: 500, notches: list, width: w, spanHz: span,
+                                    now: Double(i) * 0.003)
+            XCTAssertTrue(r.consumed, "a scroll over a notch never tunes")
+            if let c = r.command { sent.append(c) }
+        }
+        XCTAssertEqual(sent, [.setNotchWidth(index: 0, widthHz: 160)], "10 ticks within 33 ms: one write")
+        // The held width, ten steps of x0.8 built on 200, goes out on flush.
+        var expected = 200.0
+        for _ in 0..<10 { expected = N.clampedWidth(expected * 0.8) }
+        XCTAssertEqual(scroll.flush(notches: list, now: 0.04), [.setNotchWidth(index: 0, widthHz: expected)])
+        XCTAssertEqual(scroll.flush(notches: list, now: 0.05), [], "nothing left to flush")
+        // Not over a notch: not consumed, so the caller tunes.
+        XCTAssertFalse(scroll.scrolled(ticks: 1, x: 100, notches: list, width: w, spanHz: span, now: 1).consumed)
+    }
+
+    func testNotchWidthScrollSkipsTheSnapshotWidthAndDropsAFlushAfterTheListChanged() {
+        // Already at the clamp: further ticks write nothing.
+        var clamped = NotchWidthScroll()
+        let r = clamped.scrolled(ticks: 1, x: 500, notches: [notch(0, 10)], width: w, spanHz: span, now: 0)
+        XCTAssertTrue(r.consumed)
+        XCTAssertNil(r.command)
+        XCTAssertEqual(clamped.flush(notches: [notch(0, 10)], now: 1), [])
+        // A held width is not sent to an index that now names another notch.
+        var scroll = NotchWidthScroll()
+        _ = scroll.scrolled(ticks: 1, x: 500, notches: [notch(0, 200)], width: w, spanHz: span, now: 0)
+        _ = scroll.scrolled(ticks: 1, x: 500, notches: [notch(0, 200)], width: w, spanHz: span, now: 0.01)
+        XCTAssertEqual(scroll.flush(notches: [notch(-9_600, 200), notch(0, 200)], now: 0.05), [])
+    }
+
+    /// After a flush, the next tick still waits out 33 ms from the flush.
+    func testNotchWidthFlushCountsAsAWrite() {
+        let list = [notch(0, 200)]
+        var scroll = NotchWidthScroll()
+        _ = scroll.scrolled(ticks: 1, x: 500, notches: list, width: w, spanHz: span, now: 0)
+        _ = scroll.scrolled(ticks: 1, x: 500, notches: list, width: w, spanHz: span, now: 0.01)
+        XCTAssertEqual(scroll.flush(notches: list, now: 0.04).count, 1)
+        XCTAssertNil(scroll.scrolled(ticks: 1, x: 500, notches: list, width: w, spanHz: span, now: 0.05).command)
     }
 
     // MARK: - Hit priority (controller ruling R1)

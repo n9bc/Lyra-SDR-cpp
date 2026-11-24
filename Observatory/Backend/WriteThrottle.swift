@@ -26,11 +26,14 @@ struct WriteThrottle<Value: Equatable> {
         return v
     }
 
-    /// The held value, if it differs from the last one sent (call on release).
-    mutating func flush() -> Value? {
+    /// The held value, if it differs from the last one sent (call on release). Given `now`, a
+    /// flushed value counts as a send, so the next `offer` waits out the interval from it (a
+    /// trailing flush in the middle of a run of changes keeps the rate cap).
+    mutating func flush(now: TimeInterval? = nil) -> Value? {
         defer { held = nil }
         guard let v = held, v != lastSent else { return nil }
         lastSent = v
+        if let now { lastSentAt = now }
         return v
     }
 }

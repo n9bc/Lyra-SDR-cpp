@@ -29,6 +29,16 @@ enum SpectrumHitTarget: Equatable, Sendable {
     case tune
 }
 
+/// What a left press (or Control-click, a right press) tries first, before tuning.
+enum SpectrumPressRoute: Equatable, Sendable {
+    /// A dB-scale or passband-edge drag.
+    case grab
+    /// A notch gesture, as this button.
+    case notch(NotchGesture.Button)
+    /// Click-to-tune and drags, or with Option the focus toggle.
+    case tune
+}
+
 /// The two edges of the Main passband.
 enum PassbandEdge: Equatable, Sendable { case low, high }
 
@@ -198,6 +208,19 @@ enum SpectrumGestureModel {
         return .tune
     }
 
+    /// Where a left press goes (`SpectrumInteractionView`'s `mouseDown`). An Option press always
+    /// takes the focus-toggle path, whatever is under it; Control makes it a right press (notch add
+    /// or remove); otherwise the dB scale and passband edges, then a notch, then tuning (R1).
+    nonisolated static func pressRoute(target: SpectrumHitTarget, control: Bool, option: Bool) -> SpectrumPressRoute {
+        if option { return .tune }
+        if control { return .notch(.right) }
+        switch target {
+        case .dbScale, .edge: return .grab
+        case .notch: return .notch(.left)
+        case .tune: return .tune
+        }
+    }
+
     /// Middle (or option) click: toggles focus, putting VFO B on the snapped frequency under the cursor.
     nonisolated static func middleClick(atX x: Double, context c: SpectrumGestureContext) -> RadioCommand {
         let hz = hz(atX: x, width: c.width, centreHz: c.centreHz, spanHz: c.spanHz)
@@ -354,13 +377,15 @@ struct SpectrumDbDrag: Sendable {
 }
 
 /// One press-drag-release on a passband edge handle. Offsets are from the display centre; the
-/// planner makes them dial-relative. Throttled to 1/30 s, flushed on release.
+/// planner makes them dial-relative. Throttled to 1/30 s, flushed on release. A press and release
+/// with no movement writes nothing (Qt wrote only on a position change).
 struct SpectrumEdgeDrag: Sendable {
     private let edge: PassbandEdge
     private let width: Double
     private let spanHz: Double
     private var throttle = WriteThrottle<Double>(interval: SpectrumGestureModel.dragThrottle)
     private var sent: Double?
+    private var moved = false
 
     nonisolated init(edge: PassbandEdge, width: Double, spanHz: Double) {
         self.edge = edge
@@ -371,12 +396,16 @@ struct SpectrumEdgeDrag: Sendable {
     private nonisolated func offset(atX x: Double) -> Double { (x / max(1, width) - 0.5) * spanHz }
 
     nonisolated mutating func moved(toX x: Double, at time: TimeInterval) -> RadioCommand? {
+        moved = true
         guard let off = throttle.offer(offset(atX: x), now: time) else { return nil }
         sent = off
         return .dragPassbandEdge(edge, offsetHz: off)
     }
 
+    /// The release: the offset at the release point once the handle has moved, unless it is
+    /// already what was last sent; nothing for a plain click.
     nonisolated mutating func ended(atX x: Double) -> RadioCommand? {
+        guard moved else { return nil }
         let off = offset(atX: x)
         _ = throttle.flush()
         guard off != sent else { return nil }

@@ -210,6 +210,11 @@ struct ReceiverColumnContent: View {
 
     // MARK: Noise and DSP
 
+    /// The ANF row's range. The engine has no ANF level, so the disabled thumb sits at the bottom
+    /// rather than on a value the engine never reported.
+    nonisolated static let anfRange = 0.0...100.0
+    nonisolated static let anfThumb = anfRange.lowerBound
+
     private var dsp: some View {
         let d = snapshot.dsp
         return VStack(alignment: .leading, spacing: 0) {
@@ -236,7 +241,7 @@ struct ReceiverColumnContent: View {
             levelRow("NNR floor", help: "NNR mask floor", value: d.nnrMaskFloorDb, range: -50 ... -10, step: 1,
                      status: nnrStatus, readout: { Self.signed($0, "dB") },
                      command: { .setDSPLevel(.nnrMaskFloorDb, $0) })
-            ConsoleSliderRow(label: "ANF", help: "ANF level", value: .constant(Double(d.anfLevel)), range: 0...100,
+            ConsoleSliderRow(label: "ANF", help: "ANF level", value: .constant(Self.anfThumb), range: Self.anfRange,
                              step: 1, readout: "\u{2014}",
                              status: .unavailable("The engine's ANF has no adjustable level"))
             levelRow("NB", help: "Noise blanker level", value: d.nbLevel, range: 0...1, step: 0.01,

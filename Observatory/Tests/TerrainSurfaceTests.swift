@@ -661,12 +661,52 @@ final class TerrainSurfaceTests: XCTestCase {
         clock.rowsArrived(5, at: 0.11)
         XCTAssertEqual(clock.lag, TerrainScrollClock.maxLag)
 
-        let a: [Float] = [1, 2], b: [Float] = [3, 4], c: [Float] = [5, 6]
-        XCTAssertEqual(TerrainRenderer.arrivedRows([b, a], previousNewest: a), 1)
-        XCTAssertEqual(TerrainRenderer.arrivedRows([c, b, a], previousNewest: a), 2)
-        XCTAssertEqual(TerrainRenderer.arrivedRows([b, a], previousNewest: b), 0)
-        XCTAssertEqual(TerrainRenderer.arrivedRows([b], previousNewest: nil), 0)
-        XCTAssertEqual(TerrainRenderer.arrivedRows([c, b], previousNewest: a), 1)
+    }
+
+    /// Arrivals are counted from the feed's pushed-row counter, never from row contents: one new
+    /// row, a burst, nothing new, and the first frame (nothing before it).
+    func testArrivalsComeFromThePushedRowCounter() {
+        let step = TerrainRenderer.ingestStep
+        XCTAssertEqual(step(5, 30, 4, 30).arrived, 1)
+        XCTAssertTrue(step(5, 30, 4, 30).rebuild)
+        XCTAssertEqual(step(7, 30, 4, 30).arrived, 3)
+        XCTAssertEqual(step(5, 30, 5, 30).arrived, 0)
+        XCTAssertFalse(step(5, 30, 5, 30).rebuild)
+        XCTAssertEqual(step(5, 3, nil, -1).arrived, 0)
+        XCTAssertTrue(step(5, 3, nil, -1).rebuild)
+        // A restarted feed (grid emptied, counter unchanged) or a Smooth change (count forced to
+        // -1) rebuilds the rows without counting an arrival.
+        XCTAssertEqual(step(5, 0, 5, 30).arrived, 0)
+        XCTAssertTrue(step(5, 0, 5, 30).rebuild)
+        XCTAssertTrue(step(5, 30, 5, -1).rebuild)
+    }
+
+    /// Squelch-closed or silent audio gives identical -200 dB rows. With a full 30-row history the
+    /// grid's count and newest row never change, yet every pushed row must still rebuild the rows
+    /// and advance the scroll clock (final review, finding 3).
+    func testIdenticalRowsInAFullGridStillAdvanceTheScroll() {
+        let silent = [Float](repeating: -200, count: 201)
+        var history = TerrainHistory()
+        var sequence = 0
+        for _ in 0..<TerrainHistory.rows { history.push(silent); sequence += 1 }
+        let before = history.grid
+        var clock = TerrainScrollClock()
+        _ = clock.advance(now: 0, live: true)
+        let lagBefore = clock.advance(now: 0.1, live: true)
+        var lastSequence: Int? = sequence
+        var lastCount = history.grid.count
+        for i in 1...3 {
+            history.push(silent); sequence += 1
+            XCTAssertEqual(history.grid, before, "the grid itself does not change")
+            let s = TerrainRenderer.ingestStep(sequence: sequence, count: history.grid.count,
+                                                 lastSequence: lastSequence, lastCount: lastCount)
+            XCTAssertTrue(s.rebuild, "row \(i) rebuilds")
+            XCTAssertEqual(s.arrived, 1, "row \(i) counts")
+            clock.rowsArrived(s.arrived, at: 0.1 + Double(i) * 0.001)
+            lastSequence = sequence
+            lastCount = history.grid.count
+        }
+        XCTAssertGreaterThan(clock.lag, lagBefore, "the scroll clock took the rows up")
     }
 
     /// Rows that arrive slower than the nominal 4/30 s (and with jitter): the measured period

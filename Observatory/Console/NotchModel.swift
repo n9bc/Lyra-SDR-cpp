@@ -81,6 +81,51 @@ enum NotchModel {
     }
 }
 
+/// Scrolling over a notch to change its width, throttled per notch to one write per 33 ms (H14):
+/// each wheel tick builds on the width last asked for (`NotchWidthAccumulator`), the throttle
+/// holds back what comes too soon, and `flush` sends the held widths when the scroll ends. A
+/// width equal to the snapshot's is never written (a notch already at its clamp stays quiet), and
+/// a held width is dropped if the notch list changed under it (H16: indices shift on every edit).
+struct NotchWidthScroll: Sendable {
+    private var accumulator = NotchWidthAccumulator()
+    private var throttles: [Int: WriteThrottle<Double>] = [:]
+    /// The notch offsets the held widths' indices refer to.
+    private var offsetsAtOffer: [Double] = []
+
+    nonisolated init() {}
+
+    /// One scroll event of `ticks`. `consumed` is false when no notch is under `x` (the caller
+    /// tunes); otherwise `command` is the write to send now, if any.
+    nonisolated mutating func scrolled(ticks: Int, x: Double, notches: [NotchInfo], width: Double, spanHz: Double,
+                                       now: TimeInterval) -> (consumed: Bool, command: RadioCommand?) {
+        guard let command = NotchModel.scrollCommand(ticks: ticks, x: x, notches: notches, width: width,
+                                                     spanHz: spanHz, accumulator: &accumulator, now: now),
+              case .setNotchWidth(let index, let target) = command else { return (false, nil) }
+        let offsets = notches.map(\.offsetHz)
+        if offsets != offsetsAtOffer {
+            throttles = [:]
+            offsetsAtOffer = offsets
+        }
+        var throttle = throttles[index] ?? WriteThrottle<Double>(interval: SpectrumGestureModel.dragThrottle)
+        defer { throttles[index] = throttle }
+        guard let v = throttle.offer(target, now: now), v != notches[index].widthHz else { return (true, nil) }
+        return (true, .setNotchWidth(index: index, widthHz: v))
+    }
+
+    /// The held widths, for the scroll's end (phase ended, momentum ended, or a short idle after a
+    /// discrete wheel). Each counts as a write for the throttle.
+    nonisolated mutating func flush(notches: [NotchInfo], now: TimeInterval) -> [RadioCommand] {
+        let intact = notches.map(\.offsetHz) == offsetsAtOffer
+        var out: [RadioCommand] = []
+        for index in throttles.keys.sorted() {
+            guard let v = throttles[index]?.flush(now: now) else { continue }
+            guard intact, index < notches.count, v != notches[index].widthHz else { continue }
+            out.append(.setNotchWidth(index: index, widthHz: v))
+        }
+        return out
+    }
+}
+
 /// Builds fast wheel steps on the width last asked for until the snapshot reports it, so steps
 /// sent between two snapshots are not lost by scaling the same stale width.
 struct NotchWidthAccumulator: Sendable {

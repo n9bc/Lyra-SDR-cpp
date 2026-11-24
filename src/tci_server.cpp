@@ -879,6 +879,15 @@ void TciServer::recomputeStreaming() {
 
 void TciServer::onTciAudioBlock(const QByteArray &monoFloat, int rateHz) {
     if (monoFloat.isEmpty()) return;
+    // The engine also emits this block while the native console's audio
+    // terrain wants it (its emit tests the TCI flag OR the console flag), so
+    // a block can arrive with no TCI stream subscribed.  Nothing would
+    // receive it: skip the resample (audioOutRate_ keeps whatever an earlier
+    // client negotiated) and the buffering.
+    bool anyAudio = false;
+    for (const StreamCfg &c : std::as_const(streams_))
+        anyAudio = anyAudio || c.audio;
+    if (!anyAudio) return;
     const int frames = monoFloat.size() / int(sizeof(float));
     if (frames <= 0) return;
     const float *mono =
@@ -933,10 +942,11 @@ void TciServer::onTciAudioBlock(const QByteArray &monoFloat, int rateHz) {
     }
 
     // Drop-oldest cap: never let the accumulator grow unbounded
-    // (recomputeStreaming turns the engine tap off when no client
-    // subscribes — this is belt-and-braces for the connect/
-    // disconnect window).  Older samples are stale by definition;
-    // discard them, keep the freshest tail.
+    // (recomputeStreaming clears the TCI flag when no client subscribes,
+    // and blocks the console's flag keeps coming are dropped above —
+    // this is belt-and-braces for the connect/disconnect window).
+    // Older samples are stale by definition; discard them, keep the
+    // freshest tail.
     if (int(audioPending_.size()) > kAudioPendingCap) {
         const int drop = int(audioPending_.size()) - kAudioPendingCap;
         audioPending_.erase(audioPending_.begin(),

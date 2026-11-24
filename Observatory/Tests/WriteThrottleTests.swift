@@ -24,6 +24,16 @@ final class WriteThrottleTests: XCTestCase {
         XCTAssertNil(t.flush(), "the held value was already flushed")
     }
 
+    /// A flush given the time counts as a send, so the next offer waits out the interval from it.
+    func testTimedFlushRestartsTheInterval() {
+        var t = WriteThrottle<Int>()
+        XCTAssertEqual(t.offer(1, now: 0), 1)
+        XCTAssertNil(t.offer(2, now: 0.01))
+        XCTAssertEqual(t.flush(now: 0.04), 2)
+        XCTAssertNil(t.offer(3, now: 0.05), "within 33 ms of the flush")
+        XCTAssertEqual(t.offer(4, now: 0.08), 4)
+    }
+
     func testFlushAfterLastOfferWasSentIsNil() {
         var t = WriteThrottle<Int>()
         XCTAssertEqual(t.offer(1, now: 0), 1)

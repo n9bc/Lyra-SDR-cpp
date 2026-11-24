@@ -208,6 +208,12 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
             for c in controls { XCTAssertEqual(caps.control(c), .available, "\(c) isP2=\(isP2)") }
             XCTAssertEqual(caps.status(.audioTerrain), .available)
         }
+        // Orbit has no working path yet: disabled, with its reason as the tooltip (final review 7).
+        XCTAssertEqual(AudioTerrainView.orbitStatus, .unavailable("Orbit arrives in a later milestone"))
+        XCTAssertTrue(ConsoleAvailability.isDisabled(AudioTerrainView.orbitStatus))
+        // The ANF row has no engine level: its thumb sits at the bottom, not on a sample value
+        // (final review 6).
+        XCTAssertEqual(ReceiverColumnContent.anfThumb, ReceiverColumnContent.anfRange.lowerBound)
     }
 
     /// Every transmit-owned control carries the one Milestone 5b reason; no reason says a bare

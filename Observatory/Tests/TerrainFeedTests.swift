@@ -155,3 +155,45 @@ final class TerrainFeedTests: XCTestCase {
         XCTAssertEqual(peak, 67, accuracy: 2)
     }
 }
+
+/// Final review fixes (M5a findings 2 and 3).
+@MainActor
+final class TerrainFeedFinalReviewTests: XCTestCase {
+    /// Silent (or squelch-closed) audio makes identical rows; each one still counts as pushed, so
+    /// the renderer keeps scrolling.
+    func testSilentRowsStillAdvanceThePushedRowCounter() async throws {
+        let source = FakeTerrainSource()
+        let feed = TerrainFeed(source: source)
+        feed.isStreaming = true
+        feed.start()
+        let silence = [Float](repeating: 0, count: 2_048)
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline {
+            silence.withUnsafeBufferPointer { source.handler?($0, 48_000) }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        feed.stop()
+        XCTAssertGreaterThanOrEqual(feed.rowsPushed, 4)
+        XCTAssertEqual(feed.rowsPushed, feed.grid.count, "fewer than 30 rows: every push is in the grid")
+        XCTAssertTrue(feed.grid.dropFirst().allSatisfy { $0 == feed.grid.first }, "the rows are identical")
+    }
+
+    /// Blocks that arrive while the console tap is off (a TCI client keeps the engine emitting)
+    /// are dropped at once: nothing is copied into the ring or recorded.
+    func testBlocksAreDroppedWhileTheTapIsOff() {
+        let source = FakeTerrainSource()
+        let feed = TerrainFeed(source: source)
+        feed.isStreaming = true
+        feed.start()
+        source.feedTone()
+        XCTAssertEqual(feed.blocksTaken, 1)
+        feed.isExpanded = false
+        source.feedTone()
+        source.feedTone()
+        XCTAssertEqual(feed.blocksTaken, 1, "tap off: no ring work")
+        feed.isExpanded = true
+        source.feedTone()
+        XCTAssertEqual(feed.blocksTaken, 2)
+        feed.stop()
+    }
+}

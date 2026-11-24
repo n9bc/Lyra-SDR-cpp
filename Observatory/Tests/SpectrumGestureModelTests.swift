@@ -231,6 +231,32 @@ final class SpectrumGestureModelTests: XCTestCase {
         XCTAssertNil(d.ended(atX: 750))
     }
 
+    /// A press and release on an edge handle with no movement writes nothing (Qt wrote only from
+    /// onPositionChanged); final review finding 9.
+    func testClickOnEdgeHandleWithoutMovingWritesNothing() {
+        var d = SpectrumEdgeDrag(edge: .high, width: 1000, spanHz: 96_000)
+        XCTAssertNil(d.ended(atX: 704))
+        // Once it has moved, the release still flushes the final offset.
+        var moved = SpectrumEdgeDrag(edge: .high, width: 1000, spanHz: 96_000)
+        XCTAssertEqual(moved.moved(toX: 625, at: 0), .dragPassbandEdge(.high, offsetHz: 12_000))
+        XCTAssertNil(moved.moved(toX: 700, at: 0.01))
+        XCTAssertEqual(moved.ended(atX: 750), .dragPassbandEdge(.high, offsetHz: 24_000))
+    }
+
+    /// An Option press always takes the focus-toggle path, even over a notch or a grab target;
+    /// Control is a right press; otherwise grabs, then notches, then tuning (finding 11).
+    func testPressRoute() {
+        XCTAssertEqual(M.pressRoute(target: .notch(0), control: false, option: true), .tune)
+        XCTAssertEqual(M.pressRoute(target: .edge(.low), control: false, option: true), .tune)
+        XCTAssertEqual(M.pressRoute(target: .dbScale(.both), control: false, option: true), .tune)
+        XCTAssertEqual(M.pressRoute(target: .notch(0), control: true, option: false), .notch(.right))
+        XCTAssertEqual(M.pressRoute(target: .edge(.high), control: true, option: false), .notch(.right))
+        XCTAssertEqual(M.pressRoute(target: .edge(.high), control: false, option: false), .grab)
+        XCTAssertEqual(M.pressRoute(target: .dbScale(.floor), control: false, option: false), .grab)
+        XCTAssertEqual(M.pressRoute(target: .notch(1), control: false, option: false), .notch(.left))
+        XCTAssertEqual(M.pressRoute(target: .tune, control: false, option: false), .tune)
+    }
+
     func testEdgeHandleBeatsClickToTune() {
         // Controller ruling R1: dB zone, then edge handle, then notch, then tune.
         let notch = [NotchInfo(offsetHz: 0, widthHz: 200, active: true)]
@@ -245,7 +271,8 @@ final class SpectrumGestureModelTests: XCTestCase {
         XCTAssertEqual(hit(500, 100), .edge(.low))
         XCTAssertEqual(hit(975, 50, edges: (972, 700)), .dbScale(.ceiling))
         XCTAssertEqual(hit(975, 10, edges: (972, 700)), .edge(.low))
-        // No edges (Sub stack, waterfall): the notch and tune rungs are as before.
+        // No edges (Sub stack): the notch and tune rungs are as before. The waterfall has no
+        // notch rung either (see SpectrumSurfaceViewTests).
         XCTAssertEqual(hit(500, 100, edges: nil), .notch(0))
         XCTAssertEqual(M.hitTarget(x: 975, y: 100, notches: [], width: 1000, spanHz: 96_000,
                                    notchesEnabled: false), .tune)

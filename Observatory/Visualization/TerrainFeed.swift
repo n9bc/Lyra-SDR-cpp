@@ -31,6 +31,13 @@ final class TerrainFeed {
     private(set) var grid: [[Float]] = []
     /// True only after an audio block arrived within `liveWindow`. Refreshed on every row tick.
     private(set) var isLive = false
+    /// How many rows have ever been pushed into `grid`; it only grows (a fresh run empties the
+    /// grid but keeps counting). The renderer counts arrivals from it, never from row contents:
+    /// silent or squelch-closed audio makes identical rows that must still scroll the terrain.
+    private(set) var rowsPushed = 0
+
+    /// Audio blocks taken into the ring since the feed was made. Tests only.
+    var blocksTaken: Int { arrivals.taken }
 
     /// The terrain is expanded. Defaults true, as the display store does.
     var isExpanded = true { didSet { apply() } }
@@ -83,7 +90,9 @@ final class TerrainFeed {
         started = true
         let ring = ring, arrivals = arrivals, clock = clock
         source.onConsoleAudio { samples, rate in
-            guard arrivals.receiving else { return }
+            // Dropped at once while the tap is off (a TCI client can keep the engine emitting)
+            // or while the radio is not receiving.
+            guard arrivals.accepting else { return }
             ring.append(samples)
             arrivals.record(at: clock(), rate: rate)
         }
@@ -105,6 +114,7 @@ final class TerrainFeed {
         let want = wantsAudio
         if want != tapOn {
             tapOn = want
+            arrivals.setTapOn(want)
             source.setConsoleAudioStreaming(want)
             if want {
                 // A fresh run: nothing from before the gap may pass for current audio.
@@ -164,20 +174,26 @@ final class TerrainFeed {
         guard let row, tapOn, isReceiving else { return }
         history.push(row)
         grid = history.grid
+        rowsPushed += 1
     }
 
-    /// Thread-safe record of the newest block's arrival time and sample rate.
+    /// Thread-safe record of the newest block's arrival time and sample rate, and of whether the
+    /// block handler takes blocks at all (the tap is on and the radio is receiving).
     private final class Arrivals: @unchecked Sendable {
         private let lock = NSLock()
         private var last: TimeInterval?
         private var rateHz: Int?
         private var isReceiving = true
+        private var isTapOn = false
+        private var count = 0
 
-        var receiving: Bool { lock.lock(); defer { lock.unlock() }; return isReceiving }
+        var accepting: Bool { lock.lock(); defer { lock.unlock() }; return isReceiving && isTapOn }
         func setReceiving(_ on: Bool) { lock.lock(); isReceiving = on; lock.unlock() }
+        func setTapOn(_ on: Bool) { lock.lock(); isTapOn = on; lock.unlock() }
+        var taken: Int { lock.lock(); defer { lock.unlock() }; return count }
 
         func record(at time: TimeInterval, rate: Int) {
-            lock.lock(); last = time; rateHz = rate; lock.unlock()
+            lock.lock(); last = time; rateHz = rate; count += 1; lock.unlock()
         }
         func reset() { lock.lock(); last = nil; lock.unlock() }
         func isRecent(now: TimeInterval, within window: TimeInterval) -> Bool {
