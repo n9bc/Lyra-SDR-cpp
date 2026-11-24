@@ -44,7 +44,8 @@ extension LyraEngineFacade: EngineFacade {
         e.audio = EngineState.Audio(
             afGainDb: a.afGainDb, volume: a.volume, muted: a.muted, volumeRx2: a.volumeRx2,
             mutedRx2: a.mutedRx2, balance: a.balance, monEnabled: a.monEnabled,
-            monVolume: a.monVolume, outputDevice: a.outputDevice)
+            monVolume: a.monVolume, outputDevice: a.outputDevice, outputDevices: a.outputDevices,
+            outputDeviceIndex: a.outputDeviceIndex)
 
         let m = consoleMeters()
         e.meters = EngineState.Meters(
@@ -125,6 +126,15 @@ extension LyraEngineFacade: EngineFacade {
             case .setShowSpotsPref(let on): setShowSpotsPreference(on)
             case .setStepPref(let id, let hz): setStepPreference(id, hz: hz)
             case .activateSpot(let call): activateSpot(call)
+            case .setAfGainDb(let db): setAfGainDb(db)
+            case .setVolume(let v): setVolume(v)
+            case .setVolumeRx2(let v): setVolumeRx2(v)
+            case .setMuted(let on): setMuted(on)
+            case .setMutedRx2(let on): setMutedRx2(on)
+            case .setBalance(let v): setBalance(v)
+            case .setMonEnabled(let on): setMonEnabled(on)
+            case .setMonVolume(let v): setMonVolume(v)
+            case .setAudioOutputDevice(let index): setAudioOutputDevice(index)
             }
         }
     }

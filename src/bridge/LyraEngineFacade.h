@@ -109,6 +109,10 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 @property (nonatomic) BOOL monEnabled;
 @property (nonatomic) double monVolume;
 @property (nonatomic, copy) NSString *outputDevice;
+// WdspEngine::audioOutputDevices(), read once per facade (the engine enumerates
+// them in its constructor and never refreshes). Index 0 is the HL2 jack.
+@property (nonatomic, copy) NSArray<NSString *> *outputDevices;
+@property (nonatomic) NSInteger outputDeviceIndex;
 @end
 
 @interface LyraMeterReading : NSObject
@@ -402,6 +406,18 @@ typedef void (^LyraEngineChangeCallback)(LyraEngineChange change);
 - (int)copySpectrumRx2Into:(float *)dst maxBins:(int)maxBins;
 // The main waterfall row (WdspEngine::copyWaterfallSpectrum).
 - (int)copyWaterfallInto:(float *)dst maxBins:(int)maxBins;
+
+#pragma mark Audio calls
+
+// WdspEngine setters; each clamps and persists itself. Main thread.
+- (void)setVolumeRx2:(double)volume;
+- (void)setMutedRx2:(BOOL)on;
+- (void)setBalance:(double)balance;
+- (void)setMonEnabled:(BOOL)on;
+- (void)setMonVolume:(double)volume;
+// Index 0 = HL2 jack, n = PC device n-1. Briefly blocks the main thread
+// while the sink restarts.
+- (void)setAudioOutputDevice:(NSInteger)index;
 
 #pragma mark Display calls
 

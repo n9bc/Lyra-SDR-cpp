@@ -4,6 +4,7 @@
 // spectrum, waterfall and overlays, m4-engine-api-map.md.  Main thread
 // only.  Compiled with ARC (see CMakeLists.txt).
 
+#import <objc/runtime.h>
 #import "bridge/LyraEngineFacade.h"
 #import "bridge/LyraEngineFacade+Internal.h"
 
@@ -479,6 +480,7 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
 {
     LyraAudioReading *a = [LyraAudioReading new];
     a.outputDevice = @"";
+    a.outputDevices = @[];
     if (WdspEngine *we = [self engineDsp]) {
         a.afGainDb = we->afGainDb();
         a.volume = we->volume();
@@ -488,10 +490,21 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
         a.balance = we->balance();
         a.monEnabled = we->monEnabled();
         a.monVolume = we->monVolume();
-        const QStringList devices = we->audioOutputDevices();
+        // The list never changes after the engine's constructor, so build it once.
+        static const void *kDevicesKey = &kDevicesKey;
+        NSArray<NSString *> *names = objc_getAssociatedObject(self, kDevicesKey);
+        if (!names) {
+            NSMutableArray<NSString *> *list = [NSMutableArray array];
+            for (const QString &name : we->audioOutputDevices())
+                [list addObject:name.toNSString()];
+            names = [list copy];
+            objc_setAssociatedObject(self, kDevicesKey, names, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        }
         const int index = we->audioDeviceIndex();
-        if (index >= 0 && index < devices.size())
-            a.outputDevice = devices.at(index).toNSString();
+        a.outputDevices = names;
+        a.outputDeviceIndex = index;
+        if (index >= 0 && index < static_cast<int>(names.count))
+            a.outputDevice = names[static_cast<NSUInteger>(index)];
     }
     return a;
 }
@@ -766,6 +779,18 @@ P2RxBridge *runningP2(LyraEngineFacade *facade)
     WdspEngine *we = [self engineDsp];
     if (!we || !dst || maxBins <= 0) return 0;
     return we->copyWaterfallSpectrum(dst, maxBins);
+}
+
+#pragma mark Audio calls
+
+- (void)setVolumeRx2:(double)volume { if (WdspEngine *we = [self engineDsp]) we->setVolumeRx2(volume); }
+- (void)setMutedRx2:(BOOL)on { if (WdspEngine *we = [self engineDsp]) we->setMutedRx2(on); }
+- (void)setBalance:(double)balance { if (WdspEngine *we = [self engineDsp]) we->setBalance(balance); }
+- (void)setMonEnabled:(BOOL)on { if (WdspEngine *we = [self engineDsp]) we->setMonEnabled(on); }
+- (void)setMonVolume:(double)volume { if (WdspEngine *we = [self engineDsp]) we->setMonVolume(volume); }
+- (void)setAudioOutputDevice:(NSInteger)index
+{
+    if (WdspEngine *we = [self engineDsp]) we->setAudioOutputDevice(static_cast<int>(index));
 }
 
 #pragma mark Display calls

@@ -48,9 +48,17 @@ struct ReceiverColumnContent: View {
     }
 
     private var nbOn: Bool { snapshot.dsp.toggles.first { $0.id == "NB" }?.isOn ?? false }
-    private var balanceText: String {
-        let balance = snapshot.audio.balance
-        return abs(balance) < 0.02 ? "C" : String(format: "%@%.0f", balance < 0 ? "L" : "R", abs(balance) * 100)
+    nonisolated static func balanceText(_ balance: Double) -> String {
+        abs(balance) < 0.02 ? "C" : String(format: "%@%.0f", balance < 0 ? "L" : "R", abs(balance) * 100)
+    }
+
+    /// The output device menu: reads the engine's device, writes its index.
+    private var outputSelection: Binding<String> {
+        Binding(
+            get: { snapshot.audio.outputDevice },
+            set: { name in
+                if let index = snapshot.audio.outputDevices.firstIndex(of: name) { send(.setOutputDevice(index)) }
+            })
     }
 
     var body: some View {
@@ -111,32 +119,47 @@ struct ReceiverColumnContent: View {
         let status = capabilities.control(.audio)
         return VStack(alignment: .leading, spacing: 0) {
             ConsoleSectionHeader("Audio", detail: a.outputDevice)
-            ConsoleSliderRow(label: "AF", help: "AF gain", value: .constant(a.afGainDb), range: -20...60, step: 1,
-                             readout: Self.signed(a.afGainDb, "dB"), status: status)
+            ConsoleThrottledSliderRow(
+                label: "AF", help: "AF gain, both receivers", value: a.afGainDb, range: 0...40, step: 1,
+                readout: { Self.signed($0, "dB") }, status: status) { send(.setAFGain($0)) }
             HStack(spacing: 6) {
-                ConsoleSliderRow(label: "Vol", help: "RX1 volume", value: .constant(a.volume), range: 0...1,
-                                 step: 0.01, readout: String(format: "%.2f", a.volume), status: status)
-                ConsoleChip(title: "Mute", help: "Mute RX1", kind: a.muted ? .hot : .plain, status: status)
+                ConsoleThrottledSliderRow(
+                    label: "Vol", help: "RX1 volume", value: a.volume, range: 0...1, step: 0.01,
+                    readout: { String(format: "%.2f", $0) }, status: status) { send(.setVolume(.main, $0)) }
+                ConsoleChip(title: "Mute", help: "Mute RX1", kind: a.muted ? .hot : .plain, status: status) {
+                    send(.setMute(.main, !a.muted))
+                }
             }
             HStack(spacing: 6) {
-                ConsoleSliderRow(label: "Vol 2", help: "RX2 volume", value: .constant(a.volume2), range: 0...1,
-                                 step: 0.01, readout: String(format: "%.2f", a.volume2), dimmed: subOff,
-                                 status: status)
+                ConsoleThrottledSliderRow(
+                    label: "Vol 2", help: "RX2 volume", value: a.volume2, range: 0...1, step: 0.01,
+                    readout: { String(format: "%.2f", $0) }, dimmed: subOff, status: status) {
+                    send(.setVolume(.sub, $0))
+                }
                 ConsoleChip(title: "Mute 2", help: "Mute RX2", kind: subOff ? .dim : (a.muted2 ? .hot : .plain),
-                            status: status)
+                            status: status) { send(.setMute(.sub, !a.muted2)) }
             }
-            ConsoleSliderRow(label: "Balance", help: "Balance", value: .constant(a.balance), range: -1...1,
-                             step: 0.01, readout: balanceText, tint: LyraDS.Palette.magenta, status: status)
+            ConsoleThrottledSliderRow(
+                label: "Balance", help: "Balance, left to right", value: a.balance, range: -1...1, step: 0.01,
+                readout: { Self.balanceText($0) }, tint: LyraDS.Palette.magenta, status: status) {
+                send(.setBalance($0))
+            }
             HStack(spacing: 5) {
-                ConsoleMenuChip(label: "Output", help: "Audio output device", options: [a.outputDevice],
-                                selection: .constant(a.outputDevice), status: status)
+                ConsoleMenuChip(label: "Output", help: "Audio output device",
+                                options: a.outputDevices.isEmpty ? [a.outputDevice] : a.outputDevices,
+                                selection: outputSelection, status: status)
                 ConsoleChip(title: "Binaural", help: "Binaural audio", kind: a.binaural ? .on : .plain,
                             status: status)
                 Spacer(minLength: 0)
-                ConsoleChip(title: "MON TX", help: "Monitor transmit audio", kind: a.monitorTx ? .on : .plain,
-                            status: status)
+                ConsoleChip(title: "MON TX", help: "Monitor transmit audio, heard only while keyed",
+                            kind: a.monitorTx ? .on : .plain, status: status) { send(.setMonitor(!a.monitorTx)) }
             }
             .padding(.top, 4)
+            ConsoleThrottledSliderRow(
+                label: "MON", help: "Monitor level, heard only while keyed", value: a.monLevel, range: 0...1,
+                step: 0.01, readout: { String(format: "%.2f", $0) }, dimmed: !a.monitorTx, status: status) {
+                send(.setMonitorLevel($0))
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .consolePanel()

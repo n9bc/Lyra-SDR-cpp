@@ -56,4 +56,15 @@ enum RadioCommand: Equatable, Sendable {
     case tuneLandmark(hz: Int64, mode: String)
     /// A 60 m channel: tune to its QSY frequency in USB.
     case tuneChannel(qsyHz: Int64)
+
+    // Audio. AF gain is one value shared by both receivers; volume and mute are per receiver.
+    case setAFGain(Double)
+    case setVolume(ReceiverID, Double)
+    case setMute(ReceiverID, Bool)
+    case setBalance(Double)
+    /// Transmit monitor on or off (heard only while keyed).
+    case setMonitor(Bool)
+    case setMonitorLevel(Double)
+    /// An index into `AudioSnapshot.outputDevices` (0 is the HL2 jack).
+    case setOutputDevice(Int)
 }

@@ -41,4 +41,10 @@ enum EngineCall: Equatable, Sendable {
     case setStepPref(ReceiverID, Int)
     /// `SpotStore::activate`: tunes to the spot. The engine guards transmit itself.
     case activateSpot(String)
+    case setAfGainDb(Double)
+    case setVolume(Double), setVolumeRx2(Double)
+    case setMuted(Bool), setMutedRx2(Bool)
+    case setBalance(Double)
+    case setMonEnabled(Bool), setMonVolume(Double)
+    case setAudioOutputDevice(Int)
 }

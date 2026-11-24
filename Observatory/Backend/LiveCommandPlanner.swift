@@ -112,7 +112,30 @@ enum LiveCommandPlanner {
             return vfoLocked ? [] : jump(r, toHz: hz, mode: RadioMode(rawValue: mode)?.rawValue)
         case .tuneChannel(let qsy):
             return vfoLocked ? [] : jump(r, toHz: qsy, mode: RadioMode.usb.rawValue)
+
+        case .setAFGain(let db): return [.setAfGainDb(clampAudio(db, 0, 40))]
+        case .setVolume(let id, let v):
+            let level = clampAudio(v, 0, 1)
+            return [id == .main ? .setVolume(level) : .setVolumeRx2(level)]
+        case .setMute(let id, let on): return [id == .main ? .setMuted(on) : .setMutedRx2(on)]
+        case .setBalance(let v): return [.setBalance(snappedBalance(v))]
+        case .setMonitor(let on): return [.setMonEnabled(on)]
+        case .setMonitorLevel(let v): return [.setMonVolume(clampAudio(v, 0, 1))]
+        case .setOutputDevice(let index): return index >= 0 ? [.setAudioOutputDevice(index)] : []
         }
+    }
+
+    // MARK: - Audio
+
+    /// Clamps to the engine's range; NaN becomes the low end.
+    private nonisolated static func clampAudio(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        v.isNaN ? lo : min(max(v, lo), hi)
+    }
+
+    /// The QML balance policy (`AudioPanel.qml`): within 0.06 of centre snaps to centre.
+    private nonisolated static func snappedBalance(_ v: Double) -> Double {
+        let b = clampAudio(v, -1, 1)
+        return abs(b) < 0.06 ? 0 : b
     }
 
     // MARK: - Spectrum gestures

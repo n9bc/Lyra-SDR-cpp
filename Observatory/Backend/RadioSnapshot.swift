@@ -118,7 +118,12 @@ struct AudioSnapshot: Equatable, Sendable {
     var balance: Double
     var outputDevice: String
     var binaural: Bool
+    /// Transmit monitor on; heard only while keyed.
     var monitorTx: Bool
+    var monLevel: Double = 0.5
+    /// Index 0 is the HL2 jack, then the PC outputs.
+    var outputDevices: [String] = []
+    var outputDeviceIndex: Int = 0
 }
 
 struct DSPSnapshot: Equatable, Sendable {
@@ -371,7 +376,9 @@ extension RadioSnapshot {
             inputs: ["RF1", "Alt"], selectedInput: "RF1"),
         audio: AudioSnapshot(
             afGainDb: 12, volume: 0.62, muted: false, volume2: 0.50, muted2: false, balance: 0.0,
-            outputDevice: "MacBook Pro Speakers", binaural: false, monitorTx: false),
+            outputDevice: "MacBook Pro Speakers", binaural: false, monitorTx: false,
+            monLevel: 0.40, outputDevices: ["HL2 audio jack (AK4951)", "MacBook Pro Speakers"],
+            outputDeviceIndex: 1),
         dsp: DSPSnapshot(
             toggles: toggles(
                 ["NB", "BIN", "NR", "NNR", "ANF", "LMS", "SQ", "APF", "NF 2", "SNB"],

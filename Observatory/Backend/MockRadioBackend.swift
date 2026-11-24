@@ -144,6 +144,21 @@ final class MockRadioBackend: RadioBackend {
             s.main.mode = .usb
             retune(&s, .main, to: qsy)
             announceTuning(&s, .main)
+        case .setAFGain(let db): s.audio.afGainDb = db.isNaN ? 0 : min(max(db, 0), 40)
+        case .setVolume(let id, let v):
+            let level = v.isNaN ? 0 : min(max(v, 0), 1)
+            if id == .main { s.audio.volume = level } else { s.audio.volume2 = level }
+        case .setMute(let id, let on):
+            if id == .main { s.audio.muted = on } else { s.audio.muted2 = on }
+        case .setBalance(let v):
+            let b = v.isNaN ? 0 : min(max(v, -1), 1)
+            s.audio.balance = abs(b) < 0.06 ? 0 : b
+        case .setMonitor(let on): s.audio.monitorTx = on
+        case .setMonitorLevel(let v): s.audio.monLevel = v.isNaN ? 0 : min(max(v, 0), 1)
+        case .setOutputDevice(let index):
+            guard s.audio.outputDevices.indices.contains(index) else { return s }
+            s.audio.outputDeviceIndex = index
+            s.audio.outputDevice = s.audio.outputDevices[index]
         }
         refreshOverlays(&s)
         return s

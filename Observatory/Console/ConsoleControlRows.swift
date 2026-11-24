@@ -13,6 +13,8 @@ struct ConsoleSliderRow: View {
     var dimmed: Bool = false
     /// Backend availability; an unavailable slider is disabled and its one tooltip is the reason.
     var status: CapabilityStatus = .available
+    /// Called with true when a drag starts and false when it ends.
+    var onEditingChanged: (Bool) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -21,7 +23,7 @@ struct ConsoleSliderRow: View {
                 .foregroundStyle(LyraDS.Palette.textMuted)
                 .lineLimit(1)
                 .frame(width: 54, alignment: .leading)
-            Slider(value: $value, in: range, step: step)
+            Slider(value: $value, in: range, step: step, onEditingChanged: onEditingChanged)
                 .controlSize(.small)
                 .tint(dimmed ? LyraDS.Palette.textDim : tint)
                 .accessibilityLabel(help)
@@ -36,6 +38,45 @@ struct ConsoleSliderRow: View {
                 .frame(width: 58, alignment: .trailing)
         }
         .frame(height: 24)
+    }
+}
+
+/// A slider that shows the engine's value, sends at most one write per 33 ms while dragging
+/// (map H14) and sends the final value on release. While a drag is live the thumb follows the
+/// pointer, since the engine's confirmation arrives a tick later; afterwards it is the snapshot's
+/// value again.
+struct ConsoleThrottledSliderRow: View {
+    let label: String
+    let help: String
+    /// The engine's value, from the snapshot.
+    let value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let readout: (Double) -> String
+    var tint: Color = LyraDS.Palette.cyan
+    var dimmed: Bool = false
+    var status: CapabilityStatus = .available
+    let send: (Double) -> Void
+
+    @State private var throttle = WriteThrottle<Double>()
+    @State private var dragValue: Double?
+
+    var body: some View {
+        let shown = dragValue ?? value
+        ConsoleSliderRow(
+            label: label, help: help,
+            value: Binding(
+                get: { dragValue ?? value },
+                set: { new in
+                    dragValue = new
+                    if let out = throttle.offer(new, now: ProcessInfo.processInfo.systemUptime) { send(out) }
+                }),
+            range: range, step: step, readout: readout(shown), tint: tint, dimmed: dimmed, status: status,
+            onEditingChanged: { editing in
+                guard !editing else { return }
+                if let out = throttle.flush() { send(out) }
+                dragValue = nil
+            })
     }
 }
 

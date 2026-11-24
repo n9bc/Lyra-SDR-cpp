@@ -473,4 +473,19 @@ final class LiveSnapshotMapperTests: XCTestCase {
         XCTAssertEqual(map(e).display.waterfallColors, .lut([UInt8](repeating: 7, count: 768)))
         XCTAssertTrue(map(e).display.averaging)
     }
+
+    func testAudioSnapshotFromEngine() {
+        var e = EngineState.idle
+        e.audio.monVolume = 0.35
+        e.audio.monEnabled = true
+        e.audio.outputDevices = ["HL2 audio jack (AK4951)", "MacBook Speakers"]
+        e.audio.outputDeviceIndex = 1
+        e.audio.outputDevice = "MacBook Speakers"
+        let a = map(e).audio
+        XCTAssertEqual(a.monLevel, 0.35)
+        XCTAssertTrue(a.monitorTx)
+        XCTAssertEqual(a.outputDevices, ["HL2 audio jack (AK4951)", "MacBook Speakers"])
+        XCTAssertEqual(a.outputDeviceIndex, 1)
+        XCTAssertEqual(a.outputDevice, "MacBook Speakers")
+    }
 }

@@ -124,7 +124,6 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
     /// Every control the live console has no engine path for, with the reason it shows.
     private let noEnginePath: [ConsoleControl: String] = [
         .frontEnd: "Arrives in Milestone 5",
-        .audio: "Arrives in Milestone 5",
         .agcLevels: "DSP levels arrive in Milestone 5",
         .dspLevels: "DSP levels arrive in Milestone 5",
         .noiseCapture: "DSP levels arrive in Milestone 5",
@@ -147,6 +146,13 @@ final class ConsoleAvailabilityDecisionTests: XCTestCase {
                 XCTAssertEqual(ConsoleAvailability.help(status, normal: "Normal help"), reason,
                                "\(control)")
             }
+        }
+    }
+
+    /// Milestone 5a Task 1 wired the audio controls to the engine.
+    func testLiveAudioControlsAreAvailable() {
+        for isP2 in [false, true] {
+            XCTAssertEqual(BackendCapabilities.live(nnrAvailable: true, isP2: isP2).control(.audio), .available)
         }
     }
 

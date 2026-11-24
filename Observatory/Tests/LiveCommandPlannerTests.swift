@@ -380,6 +380,45 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.setTuningStep(.sub, 5000), .idle), [.setStepPref(.sub, 5000)])
     }
 
+    // MARK: - Audio
+
+    func testAfGainClampsToEngineRange() {
+        XCTAssertEqual(plan(.setAFGain(55), .idle), [.setAfGainDb(40)])
+        XCTAssertEqual(plan(.setAFGain(-5), .idle), [.setAfGainDb(0)])
+        XCTAssertEqual(plan(.setAFGain(12), .idle), [.setAfGainDb(12)])
+        XCTAssertEqual(plan(.setAFGain(.nan), .idle), [.setAfGainDb(0)])
+    }
+
+    func testVolumeTargetsReceiver() {
+        XCTAssertEqual(plan(.setVolume(.main, 0.7), .idle), [.setVolume(0.7)])
+        XCTAssertEqual(plan(.setVolume(.sub, 0.4), .idle), [.setVolumeRx2(0.4)])
+        XCTAssertEqual(plan(.setVolume(.main, 1.5), .idle), [.setVolume(1)])
+        XCTAssertEqual(plan(.setVolume(.sub, -1), .idle), [.setVolumeRx2(0)])
+    }
+
+    func testMuteTargetsReceiver() {
+        XCTAssertEqual(plan(.setMute(.main, true), .idle), [.setMuted(true)])
+        XCTAssertEqual(plan(.setMute(.sub, false), .idle), [.setMutedRx2(false)])
+    }
+
+    func testBalanceSnapsToCentre() {
+        XCTAssertEqual(plan(.setBalance(0.05), .idle), [.setBalance(0)])
+        XCTAssertEqual(plan(.setBalance(-0.059), .idle), [.setBalance(0)])
+        XCTAssertEqual(plan(.setBalance(0.07), .idle), [.setBalance(0.07)])
+        XCTAssertEqual(plan(.setBalance(-3), .idle), [.setBalance(-1)])
+    }
+
+    func testMonitorCommands() {
+        XCTAssertEqual(plan(.setMonitor(true), .idle), [.setMonEnabled(true)])
+        XCTAssertEqual(plan(.setMonitorLevel(2), .idle), [.setMonVolume(1)])
+        XCTAssertEqual(plan(.setMonitorLevel(0.3), .idle), [.setMonVolume(0.3)])
+    }
+
+    func testOutputDeviceIndex() {
+        XCTAssertEqual(plan(.setOutputDevice(2), .idle), [.setAudioOutputDevice(2)])
+        XCTAssertEqual(plan(.setOutputDevice(-1), .idle), [])
+    }
+
     // MARK: - Band plan, landmarks and spots
 
     func testLandmarkClickGuardsThenSetsModeThenFreq() {

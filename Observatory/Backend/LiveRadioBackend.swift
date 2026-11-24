@@ -206,7 +206,7 @@ extension BackendCapabilities {
         var controls: [ConsoleControl: CapabilityStatus] = [:]
         let live: [ConsoleControl] = [
             .connect, .focus, .subReceiver, .copyAB, .swapAB, .split, .ctun, .vfoLock, .rit, .xit,
-            .mode, .filterPreset, .bwLock, .band, .agcMode,
+            .mode, .filterPreset, .bwLock, .band, .agcMode, .audio,
             .displaySettings, .tuningStep, .spectrumTuning,
         ]
         for c in live { controls[c] = .available }
@@ -228,8 +228,7 @@ extension BackendCapabilities {
         controls[.dspLevels] = levels
         controls[.noiseCapture] = levels
         controls[.frontEnd] = m5
-        controls[.audio] = m5
-        controls[.attenuator] = isP2 ? m5 : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
+                controls[.attenuator] = isP2 ? m5 : .unavailable("Hermes-Lite 2 has no attenuator; use LNA")
         controls[.transmit] = tx
         controls[.txDSP] = tx
         controls[.rxEqualizer] = .unavailable("The receive equaliser arrives in Milestone 5")

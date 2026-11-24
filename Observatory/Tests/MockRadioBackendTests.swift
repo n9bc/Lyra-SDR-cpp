@@ -311,4 +311,32 @@ private final class Flag: @unchecked Sendable {
             XCTAssertEqual(m.snapshot.main.frequencyHz % Int64(wheelGrid), 0, "\(step) \(exact)")
         }
     }
+
+    func testMockAppliesAudioCommands() {
+        let b = MockRadioBackend()
+        b.send(.setAFGain(55))
+        XCTAssertEqual(b.snapshot.audio.afGainDb, 40)
+        b.send(.setVolume(.sub, 0.2))
+        XCTAssertEqual(b.snapshot.audio.volume2, 0.2)
+        XCTAssertNotEqual(b.snapshot.audio.volume, 0.2)
+        b.send(.setMute(.main, true))
+        b.send(.setMute(.sub, true))
+        XCTAssertTrue(b.snapshot.audio.muted)
+        XCTAssertTrue(b.snapshot.audio.muted2)
+        b.send(.setBalance(0.03))
+        XCTAssertEqual(b.snapshot.audio.balance, 0)
+        b.send(.setBalance(0.5))
+        XCTAssertEqual(b.snapshot.audio.balance, 0.5)
+        b.send(.setMonitor(true))
+        b.send(.setMonitorLevel(0.8))
+        XCTAssertTrue(b.snapshot.audio.monitorTx)
+        XCTAssertEqual(b.snapshot.audio.monLevel, 0.8)
+        let n = b.snapshot.audio.outputDevices.count
+        XCTAssertGreaterThan(n, 1)
+        b.send(.setOutputDevice(1))
+        XCTAssertEqual(b.snapshot.audio.outputDeviceIndex, 1)
+        XCTAssertEqual(b.snapshot.audio.outputDevice, b.snapshot.audio.outputDevices[1])
+        b.send(.setOutputDevice(n))
+        XCTAssertEqual(b.snapshot.audio.outputDeviceIndex, 1, "an out-of-range index is ignored")
+    }
 }

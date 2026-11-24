@@ -113,7 +113,8 @@ enum LiveSnapshotMapper {
                 afGainDb: e.audio.afGainDb, volume: e.audio.volume, muted: e.audio.muted,
                 volume2: e.audio.volumeRx2, muted2: e.audio.mutedRx2, balance: e.audio.balance,
                 outputDevice: e.audio.outputDevice, binaural: e.dsp.binEnabled,
-                monitorTx: e.audio.monEnabled),
+                monitorTx: e.audio.monEnabled, monLevel: e.audio.monVolume,
+                outputDevices: e.audio.outputDevices, outputDeviceIndex: e.audio.outputDeviceIndex),
             dsp: DSPSnapshot(
                 toggles: DSPFunction.allCases.map { f in
                     QuickToggle(id: f.rawValue, label: dspLabel(f, e), isOn: dspOn(f, e.dsp))

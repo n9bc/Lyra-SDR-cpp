@@ -87,6 +87,9 @@ struct EngineState: Equatable, Sendable {
         var monEnabled = false
         var monVolume = 0.0
         var outputDevice = ""
+        /// Index 0 is the HL2 jack, then the PC outputs. The engine enumerates them once.
+        var outputDevices: [String] = []
+        var outputDeviceIndex = 0
     }
 
     struct Meters: Equatable, Sendable {
