@@ -6,8 +6,8 @@
 // usual ComboBox properties (model / currentIndex / onActivated / textRole /
 // displayText) pass through — callers only change `ComboBox {` → `LyraComboBox {`.
 //
-// Look: compact dark field (#161e28), light text, cyan chevron + cyan focus
-// border, dark popup list with a cyan highlight.
+// Look: compact elevated-surface field, primary text, cyan chevron + cyan
+// focus border, dark popup list with a cyan highlight.
 import QtQuick
 import QtQuick.Controls
 
@@ -38,10 +38,10 @@ ComboBox {
 
     // Optional theme (VFO styles colour their Step/Mode pickers).  Defaults
     // are the standard Lyra look, so every other combo is unchanged.
-    property color fieldColor: "#161e28"
-    property color fieldBorderColor: "#2a3a4a"
-    property color textColor: "#f2f8fc"
-    property color accentColor: "#50d0ff"
+    property color fieldColor: LyraDS.palette.surfaceElevated
+    property color fieldBorderColor: LyraDS.palette.panelBorder
+    property color textColor: LyraDS.palette.textPrimary
+    property color accentColor: LyraDS.palette.cyan
 
     // Selected-value text.  Leaves room on the right for the chevron.
     contentItem: Text {
@@ -49,7 +49,7 @@ ComboBox {
         rightPadding: control.textRightPad
         text: control.displayText
         font: control.font
-        color: control.enabled ? control.textColor : "#5a6670"
+        color: control.enabled ? control.textColor : LyraDS.palette.textDim
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
@@ -60,14 +60,14 @@ ComboBox {
         y: control.topPadding + (control.availableHeight - height) / 2
         text: "▾"
         font.pixelSize: 11
-        color: control.enabled ? control.accentColor : "#5a6670"
+        color: control.enabled ? control.accentColor : LyraDS.palette.textDim
     }
 
     background: Rectangle {
         implicitWidth: 64
-        color: control.enabled ? control.fieldColor : "#12171d"
+        color: control.enabled ? control.fieldColor : LyraDS.palette.surface
         border.color: control.activeFocus ? control.accentColor
-                    : control.hovered      ? "#3a5a6a"
+                    : control.hovered      ? Qt.alpha(control.accentColor, 0.5)
                     :                        control.fieldBorderColor
         border.width: 1
         radius: 3
@@ -85,12 +85,12 @@ ComboBox {
                         : model[control.textRole])
                   : modelData
             font: control.font
-            color: control.currentIndex === index ? "#8fe0ff" : "#eaf2f7"
+            color: control.currentIndex === index ? LyraDS.palette.cyan : LyraDS.palette.textPrimary
             verticalAlignment: Text.AlignVCenter
         }
         highlighted: control.highlightedIndex === index
         background: Rectangle {
-            color: highlighted ? "#1f4655" : "transparent"
+            color: highlighted ? Qt.alpha(LyraDS.palette.cyan, 0.18) : "transparent"
         }
     }
 
@@ -131,8 +131,8 @@ ComboBox {
             ScrollBar.vertical: ScrollBar { id: popupBar; active: true }
         }
         background: Rectangle {
-            color: "#12181f"
-            border.color: "#2a3a4a"
+            color: LyraDS.palette.surface
+            border.color: LyraDS.palette.chipBorder
             border.width: 1
             radius: 3
         }

@@ -8,8 +8,8 @@
 // onToggled / font / enabled / ToolTip) pass straight through — callers
 // only change `Button {` → `LyraButton {`.
 //
-// Look matches the hand-styled SPLIT/SUB buttons: dark fill, slate border,
-// light label; checked = cyan border + label (Lyra's accent #00e5ff).
+// Look: Observatory tokens — elevated surface fill, hairline panel border,
+// chip-text label; checked = cyan tint + cyan border + cyan label.
 import QtQuick
 import QtQuick.Controls
 
@@ -23,21 +23,21 @@ Button {
 
     background: Rectangle {
         radius: 4
-        color: control.down ? "#0c2a32"
-             : control.checked ? "#10323a"
-             : control.hovered ? "#1e2a38"
-             : "#161e28"
-        border.width: control.checked ? 2 : 1
-        border.color: control.checked ? "#00e5ff"
-                    : control.hovered ? "#6a8aa8"
-                    : "#4a6078"
+        color: control.down ? LyraDS.palette.surface
+             : control.checked ? Qt.alpha(LyraDS.palette.cyan, 0.10)
+             : control.hovered ? LyraDS.palette.surface
+             : LyraDS.palette.surfaceElevated
+        border.width: 1
+        border.color: control.checked ? LyraDS.palette.cyan
+                    : control.hovered ? LyraDS.palette.cyan
+                    : LyraDS.palette.panelBorder
         opacity: control.enabled ? 1.0 : 0.45
     }
 
     contentItem: Text {
         text: control.text
         font: control.font
-        color: control.checked ? "#00e5ff" : "#cdd9e5"
+        color: control.checked ? LyraDS.palette.cyan : LyraDS.palette.chipText
         opacity: control.enabled ? 1.0 : 0.45
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

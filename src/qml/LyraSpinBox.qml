@@ -8,7 +8,7 @@
 // onValueModified) pass through — callers only change `SpinBox {` →
 // `LyraSpinBox {`.
 //
-// Look: compact dark field (#161e28), light centred value, cyan stacked
+// Look: compact elevated-surface field, primary-text centred value, cyan stacked
 // chevrons on the right, cyan focus border.
 import QtQuick
 import QtQuick.Controls
@@ -42,9 +42,9 @@ SpinBox {
     contentItem: TextInput {
         text: control.displayText
         font: control.font
-        color: control.enabled ? "#f2f8fc" : "#5a6670"
-        selectionColor: "#50d0ff"
-        selectedTextColor: "#0a0e12"
+        color: control.enabled ? LyraDS.palette.textPrimary : LyraDS.palette.textDim
+        selectionColor: LyraDS.palette.cyan
+        selectedTextColor: LyraDS.palette.void_
         horizontalAlignment: control.valueHAlign
         verticalAlignment: Qt.AlignVCenter
         leftPadding: control.textLeftPad
@@ -73,11 +73,11 @@ SpinBox {
         y: 0
         implicitWidth: 16
         height: control.height / 2
-        color: control.up.pressed ? "#1f4655" : "transparent"
+        color: control.up.pressed ? Qt.alpha(LyraDS.palette.cyan, 0.18) : "transparent"
         Text {
             anchors.centerIn: parent
             text: "▴"; font.pixelSize: 10
-            color: control.enabled ? "#50d0ff" : "#5a6670"
+            color: control.enabled ? LyraDS.palette.cyan : LyraDS.palette.textDim
         }
     }
     down.indicator: Rectangle {
@@ -85,20 +85,20 @@ SpinBox {
         y: control.height / 2
         implicitWidth: 16
         height: control.height / 2
-        color: control.down.pressed ? "#1f4655" : "transparent"
+        color: control.down.pressed ? Qt.alpha(LyraDS.palette.cyan, 0.18) : "transparent"
         Text {
             anchors.centerIn: parent
             text: "▾"; font.pixelSize: 10
-            color: control.enabled ? "#50d0ff" : "#5a6670"
+            color: control.enabled ? LyraDS.palette.cyan : LyraDS.palette.textDim
         }
     }
 
     background: Rectangle {
         implicitWidth: 60
-        color: control.enabled ? "#161e28" : "#12171d"
-        border.color: control.activeFocus ? "#50d0ff"
-                    : control.hovered      ? "#3a5a6a"
-                    :                        "#2a3a4a"
+        color: control.enabled ? LyraDS.palette.surfaceElevated : LyraDS.palette.surface
+        border.color: control.activeFocus ? LyraDS.palette.cyan
+                    : control.hovered      ? Qt.alpha(LyraDS.palette.cyan, 0.5)
+                    :                        LyraDS.palette.panelBorder
         border.width: 1
         radius: 3
     }

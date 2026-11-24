@@ -8,7 +8,7 @@
 // pass straight through — callers only change `Slider {` → `LyraSlider {`.
 //
 // Look: thin dark groove with a cyan-filled track up to a compact round
-// handle (Lyra's cyan accent #50d0ff, dark surfaces).
+// handle (Observatory cyan on the meter-track groove).
 import QtQuick
 import QtQuick.Controls
 
@@ -39,28 +39,27 @@ Slider {
     readonly property int labelCount:
         showTickNumbers ? Math.floor(to) - _labelFirst + 1 : 0
 
-    // White track with a subtle light-grey fill up to the handle.
+    // Dark meter-track groove with a cyan fill up to the handle.
     background: Rectangle {
         x: control.leftPadding
         y: control.topPadding + control.availableHeight / 2 - height / 2
         width: control.availableWidth
         height: 4
         radius: 2
-        color: control.enabled ? "#ffffff" : "#c8ccd0"
-        border.color: "#8fa6b8"
-        border.width: 1
+        color: LyraDS.palette.meterTrack
         Rectangle {
             width: control.visualPosition * parent.width
             height: parent.height
             radius: parent.radius
-            color: control.enabled ? "#b9c6d0" : "#c8ccd0"
+            color: control.enabled ? LyraDS.palette.cyan : LyraDS.palette.textDim
         }
         // Step ticks — short vertical marks at each snap position.
         Repeater {
             model: control.tickCount
             delegate: Rectangle {
                 width: 2; height: 7; radius: 1
-                color: control.enabled ? "#8fa6b8" : "#c8ccd0"
+                color: LyraDS.palette.textDim
+                opacity: control.enabled ? 1.0 : 0.5
                 x: (control.tickCount > 1
                     ? index / (control.tickCount - 1) : 0) * (parent.width - width)
                 y: parent.height + 2
@@ -74,7 +73,8 @@ Slider {
                 readonly property real pos:
                     (val - control.from) / (control.to - control.from)
                 text: val === 0 ? "0" : (val > 0 ? "+" + val : "" + val)
-                color: control.enabled ? "#5a6670" : "#a8b0b8"
+                color: LyraDS.palette.textDim
+                opacity: control.enabled ? 1.0 : 0.5
                 font.pixelSize: 8
                 x: pos * (parent.width - 2) + 1 - width / 2
                 y: parent.height + 10
@@ -83,7 +83,7 @@ Slider {
     }
 
     // Compact round handle — fixed 14 px so the style can't resize it.
-    // A tad darker than the panel accent so it reads on the white track.
+    // Cyan; brighter on hover, dimmer on press.
     handle: Rectangle {
         x: control.leftPadding
            + control.visualPosition * (control.availableWidth - width)
@@ -91,11 +91,11 @@ Slider {
         implicitWidth: 14
         implicitHeight: 14
         radius: 7
-        color: !control.enabled ? "#5a6670"
-             : control.pressed  ? "#1f88b0"
-             : control.hovered  ? "#369fc6"
-             :                     "#2f93bd"
-        border.color: "#0a2530"
+        color: !control.enabled ? LyraDS.palette.textDim
+             : control.pressed  ? Qt.darker(LyraDS.palette.cyan, 1.25)
+             : control.hovered  ? Qt.lighter(LyraDS.palette.cyan, 1.2)
+             :                     LyraDS.palette.cyan
+        border.color: LyraDS.palette.void_
         border.width: 1
     }
 }
