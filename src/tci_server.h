@@ -309,8 +309,9 @@ private:
     int                    txResamplerInRate_     = 0;
     int                    txResamplerOutRate_    = 0;
     // Drop-oldest cap so a stuck/idle client can't grow the
-    // accumulator unbounded (recomputeStreaming turns the engine
-    // tap off when no clients subscribed; cap is belt-and-braces).
+    // accumulator unbounded (onTciAudioBlock drops blocks while no
+    // client subscribes, since the console's flag can keep the engine
+    // tap on; cap is belt-and-braces).
     static constexpr int   kAudioPendingCap   = 4 * kAudioPacketSamples;
 
     // Task #33: single active TX-audio listener (Thetis-faithful per
