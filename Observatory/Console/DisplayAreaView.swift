@@ -92,12 +92,16 @@ struct DisplayAreaView: View {
     let sampleSpectrum: Bool
     let sampleWaterfall: Bool
     let sampleTerrain: Bool
-    /// One bridge per Metal view: a second view on the main bridge would bind the wrong source.
-    @State private var subSpectrum = SpectrumBridge.mock()
+    /// One bridge per Metal view (a second view on the main bridge would bind the wrong receiver);
+    /// `ConsoleView` builds it on the same pump as the main bridge.
+    let subSpectrum: SpectrumBridge
+    @Environment(SpectrumBridge.self) private var mainSpectrum
 
     init(display: DisplaySnapshot, main: ReceiverSnapshot, sub: ReceiverSnapshot,
          capabilities: BackendCapabilities, focused: ReceiverID,
-         store: DisplayStore, sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool) {
+         store: DisplayStore, subSpectrum: SpectrumBridge = .mock(receiver: .sub),
+         sampleSpectrum: Bool, sampleWaterfall: Bool, sampleTerrain: Bool) {
+        self.subSpectrum = subSpectrum
         self.display = display
         self.main = main
         self.sub = sub
@@ -144,6 +148,12 @@ struct DisplayAreaView: View {
                     AudioTerrainView(store: store, focused: focused, sample: sampleTerrain)
                 }
                 .frame(height: lay.terrain + DisplayAreaLayout.terrainHeaderHeight)
+            }
+            // Both bridges must agree, or whichever stack draws first would decide whether the
+            // pump's shared pull includes the Sub streams.
+            .onChange(of: subStack, initial: true) {
+                mainSpectrum.pullsSub = subStack
+                subSpectrum.pullsSub = subStack
             }
         }
         .background(LyraDS.Palette.surface)

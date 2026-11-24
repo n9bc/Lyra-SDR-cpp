@@ -1,10 +1,15 @@
 #if LYRA_BRIDGE
 // Compiled only in the CMake build. Wraps the facade's non-blocking analyzer read.
 extension LyraEngineFacade: SpectrumSource {
-    func copySpectrum(into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
-        guard let base = buffer.baseAddress, buffer.count > 0 else { return 0 }
-        let result = copySpectrum(into: base, maxBins: Int32(min(buffer.count, Int(Int32.max))))
-        return Int(max(0, result))
+    func copySpectrum(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
+        // TODO(M4 Task 7): .main -> copySpectrum, .sub -> copySpectrumRx2 once the facade has them.
+        // Until then the live console reads no spectrum (0 means "keep the last frame").
+        0
+    }
+
+    func copyWaterfallRow(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
+        // TODO(M4 Task 7): .main -> copyWaterfallSpectrum, .sub -> copySpectrumRx2.
+        0
     }
 }
 #endif

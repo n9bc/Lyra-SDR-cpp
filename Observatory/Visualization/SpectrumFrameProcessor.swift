@@ -1,12 +1,12 @@
 import Foundation
 
-/// Reduces a dB spectrum frame to smoothed 0...1 column heights. Pure CPU, no Metal.
+/// Reduces a dB trace to 0...1 column heights, one peak per column. Pure CPU, no Metal.
+/// Smoothing and peak hold happen upstream in `SpectrumTraceProcessor`; this only maps to pixels.
 struct SpectrumFrameProcessor {
-    nonisolated static let attack: Float = 0.6
-    nonisolated static let release: Float = 0.15
-
-    /// Smoothed column heights, 0...1.
+    /// Trace column heights, 0...1.
     private(set) var heights: [Float] = []
+    /// Peak-hold line column heights, 0...1.
+    private(set) var peakHeights: [Float] = []
 
     nonisolated init() {}
 
@@ -24,12 +24,26 @@ struct SpectrumFrameProcessor {
     nonisolated mutating func resize(columns: Int) {
         guard columns != heights.count else { return }
         heights = [Float](repeating: 0, count: columns)
+        peakHeights = [Float](repeating: 0, count: columns)
     }
 
-    /// Peak-per-column reduction, normalise, then attack/release smoothing.
-    /// Does not allocate; call `resize` first.
+    /// Peak-per-column reduction of the trace, normalised to the dB range. No allocation.
     nonisolated mutating func ingest(_ bins: UnsafeBufferPointer<Float>, floor: Float, ceiling: Float) {
-        let cols = heights.count
+        Self.reduce(bins, into: &heights, floor: floor, ceiling: ceiling)
+    }
+
+    /// Same reduction for the peak-hold trace.
+    nonisolated mutating func ingestPeaks(_ bins: UnsafeBufferPointer<Float>, floor: Float, ceiling: Float) {
+        Self.reduce(bins, into: &peakHeights, floor: floor, ceiling: ceiling)
+    }
+
+    nonisolated mutating func clearPeaks() {
+        for i in peakHeights.indices { peakHeights[i] = 0 }
+    }
+
+    private nonisolated static func reduce(_ bins: UnsafeBufferPointer<Float>, into out: inout [Float],
+                                           floor: Float, ceiling: Float) {
+        let cols = out.count
         let n = bins.count
         for c in 0..<cols {
             var target: Float = 0
@@ -43,10 +57,9 @@ struct SpectrumFrameProcessor {
                     if v.isFinite && v > peak { peak = v }
                     i += 1
                 }
-                target = Self.normalize(peak, floor: floor, ceiling: ceiling)
+                target = normalize(peak, floor: floor, ceiling: ceiling)
             }
-            let h = heights[c]
-            heights[c] = h + (target - h) * (target > h ? Self.attack : Self.release)
+            out[c] = target
         }
     }
 }

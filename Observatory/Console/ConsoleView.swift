@@ -8,14 +8,21 @@ struct ConsoleView: View {
     /// The top bar's gear runs this; nil leaves the gear disabled with its reason.
     let openSettings: (@MainActor () -> Void)?
     /// Held for the view's lifetime: `NeonSpectrumView`'s renderer binds to the first bridge it sees,
-    /// so creating one per body evaluation would leave it reading a stale instance.
-    @State private var spectrum = SpectrumBridge.mock()
+    /// so creating one per body evaluation would leave it reading a stale instance. Both bridges
+    /// share one `SpectrumPump`, so the two stacks drawing in one frame make a single engine pull.
+    @State private var spectrum: SpectrumBridge
+    @State private var subSpectrum: SpectrumBridge
 
+    /// `spectrumSource` is where frames come from; sample data until Task 7 wires the engine's.
     init(backend: any RadioBackend, displayStore: DisplayStore = DisplayStore(),
+         spectrumSource: any SpectrumSource = SyntheticSpectrumSource(),
          openSettings: (@MainActor () -> Void)? = nil) {
         self.backend = backend
         self.displayStore = displayStore
         self.openSettings = openSettings
+        let pump = SpectrumPump(source: spectrumSource)
+        _spectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .main))
+        _subSpectrum = State(initialValue: SpectrumBridge(pump: pump, receiver: .sub))
     }
 
     var body: some View {
@@ -50,6 +57,7 @@ struct ConsoleView: View {
                 DisplayAreaView(display: snapshot.display, main: snapshot.main, sub: snapshot.sub,
                                 capabilities: backend.capabilities,
                                 focused: snapshot.session.focused, store: displayStore,
+                                subSpectrum: subSpectrum,
                                 sampleSpectrum: DisplayAreaView.showsSampleMarker(backend.capabilities),
                                 sampleWaterfall: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .waterfall),
                                 sampleTerrain: DisplayAreaView.showsSampleMarker(backend.capabilities, for: .audioTerrain))

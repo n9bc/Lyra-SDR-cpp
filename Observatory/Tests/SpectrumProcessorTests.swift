@@ -20,31 +20,40 @@ final class SpectrumProcessorTests: XCTestCase {
     func testPeakReductionKeepsNarrowCarrier() {
         var p = SpectrumFrameProcessor(); p.resize(columns: 64)
         var bins = [Float](repeating: -130, count: 4096); bins[2050] = -20
-        for _ in 0..<40 { bins.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) } }
+        bins.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) }
         XCTAssertEqual(p.heights[32], 1, accuracy: 1e-3)
         XCTAssertEqual(p.heights[0], 0, accuracy: 1e-3)
     }
-    func testAttackFasterThanRelease() {
+    func testHeightsFollowTheTraceWithoutSmoothing() {
         var p = SpectrumFrameProcessor(); p.resize(columns: 64)
         let hi = [Float](repeating: -20, count: 4096)
         hi.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) }
-        XCTAssertEqual(p.heights[0], 0.6, accuracy: 1e-5)
+        XCTAssertEqual(p.heights[0], 1, accuracy: 1e-5)
         let lo = [Float](repeating: -130, count: 4096)
         lo.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) }
-        XCTAssertEqual(p.heights[0], 0.6 * 0.85, accuracy: 1e-5)
+        XCTAssertEqual(p.heights[0], 0, accuracy: 1e-5)
     }
-    func testEmptyFrameDecaysTowardFloor() {
+    func testPeakHeightsUseTheSameReduction() {
+        var p = SpectrumFrameProcessor(); p.resize(columns: 64)
+        var bins = [Float](repeating: -130, count: 4096); bins[2050] = -75
+        bins.withUnsafeBufferPointer { p.ingestPeaks($0, floor: -130, ceiling: -20) }
+        XCTAssertEqual(p.peakHeights[32], 0.5, accuracy: 1e-5)
+        XCTAssertEqual(p.peakHeights[0], 0, accuracy: 1e-5)
+    }
+    func testEmptyFrameDropsToFloor() {
         var p = SpectrumFrameProcessor(); p.resize(columns: 64)
         let hi = [Float](repeating: -20, count: 4096)
-        for _ in 0..<20 { hi.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) } }
-        for _ in 0..<60 { p.ingest(UnsafeBufferPointer(start: nil, count: 0), floor: -130, ceiling: -20) }
-        XCTAssertLessThan(p.heights.max()!, 0.01)
+        hi.withUnsafeBufferPointer { p.ingest($0, floor: -130, ceiling: -20) }
+        p.ingest(UnsafeBufferPointer(start: nil, count: 0), floor: -130, ceiling: -20)
+        XCTAssertEqual(p.heights.max()!, 0)
     }
     @MainActor func testSyntheticSourceFillsBuffer() {
         let s = SyntheticSpectrumSource()
         var buf = [Float](repeating: 0, count: 4096)
-        let n = buf.withUnsafeMutableBufferPointer { s.copySpectrum(into: $0) }
+        let n = buf.withUnsafeMutableBufferPointer { s.copySpectrum(.main, into: $0) }
         XCTAssertEqual(n, 4096)
         XCTAssertTrue(buf.allSatisfy { $0.isFinite && $0 <= -50 && $0 >= -130 })
+        let w = buf.withUnsafeMutableBufferPointer { s.copyWaterfallRow(.sub, into: $0) }
+        XCTAssertEqual(w, 4096)
     }
 }

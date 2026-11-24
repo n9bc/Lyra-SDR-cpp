@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import Metal
 import MetalKit
 import SwiftUI
@@ -25,8 +26,14 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
     private let fillPipeline: MTLRenderPipelineState
     private let glowPipeline: MTLRenderPipelineState
     private var processor = SpectrumFrameProcessor()
-    private var scratch = [Float](repeating: 0, count: SpectrumBridge.maxBins)
+    private var trace = SpectrumTraceProcessor()
+    private var autoRange = AutoRange()
+    private var lastSerial: UInt64 = 0
+    private var lastIngest: TimeInterval?
+    private var lastAutoFeed: TimeInterval = -.infinity
+    private var wasAuto = false
     private let heightBuffers: [MTLBuffer]
+    private let peakBuffers: [MTLBuffer]
     private var bufferIndex = 0
     private let semaphore = DispatchSemaphore(value: NeonSpectrumRenderer.inFlight)
     private var uniforms: SpectrumUniforms
@@ -88,6 +95,18 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
         }
         heightBuffers = buffers
 
+        var peaks: [MTLBuffer] = []
+        for i in 0..<Self.inFlight {
+            guard let b = device.makeBuffer(length: Self.maxColumns * MemoryLayout<Float>.stride,
+                                            options: .storageModeShared) else {
+                throw NeonSpectrumRendererError.bufferAllocation
+            }
+            b.label = "Spectrum peaks \(i)"
+            peaks.append(b)
+        }
+        peakBuffers = peaks
+        trace.resize(bins: SpectrumPump.bins)
+
         uniforms = SpectrumUniforms(stops: LyraDS.Palette.spectrumStops)
         clearColor = Self.voidClearColor()
     }
@@ -108,21 +127,52 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
         let columns = min(processor.heights.count, Self.maxColumns)
         guard columns > 1 else { semaphore.signal(); return }
 
-        let source = bridge.source
-        let written = scratch.withUnsafeMutableBufferPointer { source.copySpectrum(into: $0) }
-        if written > 0 {
-            let floor = Float(bridge.dbFloor), ceiling = Float(bridge.dbCeiling)
-            let n = min(written, scratch.count)
-            scratch.withUnsafeBufferPointer { all in
-                processor.ingest(UnsafeBufferPointer(rebasing: all[0..<n]), floor: floor, ceiling: ceiling)
+        // One pump pull per display tick; the pump skips it if the other stack already pulled.
+        let now = CACurrentMediaTime()
+        let pump = bridge.pump
+        pump.tick(now: now, sub: bridge.pullsSub)
+
+        let serial = pump.spectrumSerial(bridge.receiver)
+        if serial != lastSerial, let frame = pump.spectrum(bridge.receiver) {
+            lastSerial = serial
+            let dt = lastIngest.map { min(max(now - $0, 0), 1) } ?? 1.0 / 60
+            lastIngest = now
+            trace.ingest(frame, dt: dt, smoothing: bridge.smoothing, peak: bridge.peakHold,
+                         decayDbps: bridge.peakDecayDbps)
+            if bridge.dbRange.auto {
+                if !wasAuto { autoRange.reset(); lastAutoFeed = -.infinity }
+                if now - lastAutoFeed >= AutoRange.feedInterval {
+                    lastAutoFeed = now
+                    autoRange.feed(frame)
+                    bridge.publishAutoRange(floor: autoRange.floor, ceiling: autoRange.ceiling)
+                }
             }
         }
-        // No new frame: keep showing the last smoothed trace.
+        wasAuto = bridge.dbRange.auto
+        // No new frame: keep showing the last trace.
+
+        let floor = Float(bridge.dbFloor), ceiling = Float(bridge.dbCeiling)
+        trace.trace.withUnsafeBufferPointer { processor.ingest($0, floor: floor, ceiling: ceiling) }
+        let peakColumns: Bool
+        if let peaks = trace.peaks {
+            peaks.withUnsafeBufferPointer { processor.ingestPeaks($0, floor: floor, ceiling: ceiling) }
+            peakColumns = true
+        } else {
+            peakColumns = false
+        }
 
         let buffer = heightBuffers[bufferIndex]
         processor.heights.withUnsafeBufferPointer { src in
             if let base = src.baseAddress {
                 buffer.contents().copyMemory(from: base, byteCount: columns * MemoryLayout<Float>.stride)
+            }
+        }
+        let peakBuffer = peakBuffers[bufferIndex]
+        if peakColumns {
+            processor.peakHeights.withUnsafeBufferPointer { src in
+                if let base = src.baseAddress {
+                    peakBuffer.contents().copyMemory(from: base, byteCount: columns * MemoryLayout<Float>.stride)
+                }
             }
         }
 
@@ -138,7 +188,8 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
 
         let viewport = SIMD2<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height))
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) {
-            encode(encoder, heights: buffer, columns: columns, viewport: viewport)
+            encode(encoder, heights: buffer, columns: columns, viewport: viewport,
+                   peaks: peakColumns ? peakBuffer : nil)
             encoder.endEncoding()
         }
         commandBuffer.present(drawable)
@@ -149,7 +200,7 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
     // MARK: - Shared encoding
 
     private func encode(_ encoder: MTLRenderCommandEncoder, heights: MTLBuffer, columns: Int,
-                        viewport: SIMD2<Float>) {
+                        viewport: SIMD2<Float>, peaks: MTLBuffer? = nil) {
         uniforms.columns = UInt32(columns)
         uniforms.viewportSize = viewport
         var u = uniforms
@@ -164,6 +215,18 @@ final class NeonSpectrumRenderer: LyraMetalRenderer {
 
         encoder.setRenderPipelineState(glowPipeline)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: vertexCount)
+
+        // Peak hold: the glow strip with a hairline core and almost no halo.
+        if let peaks {
+            var thin = u
+            thin.lineHalfWidthPx = 0.75
+            thin.glowRadiusPx = 2
+            thin.glowSigmaPx = 0.6
+            encoder.setVertexBuffer(peaks, offset: 0, index: 0)
+            encoder.setVertexBytes(&thin, length: size, index: 1)
+            encoder.setFragmentBytes(&thin, length: size, index: 0)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: vertexCount)
+        }
     }
 
     // MARK: - Test support

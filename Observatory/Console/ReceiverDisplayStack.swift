@@ -5,6 +5,7 @@ import SwiftUI
 /// always shows (above the waterfall when the spectrum is omitted, otherwise between the two).
 /// Reads `SpectrumBridge` from the environment (via `NeonSpectrumView`).
 struct ReceiverDisplayStack: View {
+    @Environment(SpectrumBridge.self) private var bridge
     let display: DisplaySnapshot
     let receiver: ReceiverSnapshot
     /// "MAIN" / "SUB"; nil when Sub is off and there is nothing to tell apart.
@@ -65,6 +66,7 @@ struct ReceiverDisplayStack: View {
                     waterfall(axis: axis, width: w)
                 }
             }
+            .onChange(of: display, initial: true) { bridge.apply(display) }
         }
     }
 

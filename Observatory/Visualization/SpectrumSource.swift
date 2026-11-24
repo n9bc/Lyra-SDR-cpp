@@ -7,8 +7,11 @@ import Foundation
 /// `LyraEngineFacade+Spectrum.swift`; previews and tests use `SyntheticSpectrumSource`.
 @MainActor
 protocol SpectrumSource: AnyObject {
-    /// Copies the latest frame into `buffer`. Returns bins written; 0 means no frame.
-    func copySpectrum(into buffer: UnsafeMutableBufferPointer<Float>) -> Int
+    /// Copies the latest spectrum for `rx` into `buffer`. Returns bins written; 0 means no frame.
+    /// Only `SpectrumPump` calls this, on the main thread, with a 4096-bin buffer.
+    func copySpectrum(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int
+    /// Copies the latest waterfall row for `rx` into `buffer`. Returns bins written; 0 means no row.
+    func copyWaterfallRow(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int
 }
 
 /// Deterministic-ish fake spectrum: noise floor plus three drifting carriers.
@@ -25,7 +28,15 @@ final class SyntheticSpectrumSource: SpectrumSource {
         return Float((rng >> 40) & 0xFFFF) / 65535 * 2 - 1   // -1...1
     }
 
-    func copySpectrum(into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
+    func copySpectrum(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
+        fill(buffer)
+    }
+
+    func copyWaterfallRow(_ rx: ReceiverID, into buffer: UnsafeMutableBufferPointer<Float>) -> Int {
+        fill(buffer)
+    }
+
+    private func fill(_ buffer: UnsafeMutableBufferPointer<Float>) -> Int {
         guard buffer.baseAddress != nil else { return 0 }
         let n = min(buffer.count, Self.binCount)
         frame &+= 1
