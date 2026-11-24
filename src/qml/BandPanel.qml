@@ -12,7 +12,8 @@
 // Active-band highlight is set IMPERATIVELY on the rx1FreqChanged signal
 // (Bands.indexForFreq / broadcastIndexForFreq) — never a per-button
 // reactive read of Stream.rx1FreqHz (that proved unreliable here).  Each
-// chip's look derives from `chipActive` (RX1, red) and `chipSub` (SUB, green).
+// chip's look derives from `chipActive` (RX1, cyan "on") and `chipSub`
+// (SUB, purple "sub") via ConsoleChip.kind.
 
 import QtQuick
 import QtQuick.Controls
@@ -23,8 +24,8 @@ Rectangle {
     readonly property bool compact: Qt.platform.os === "osx"
     implicitHeight: col.implicitHeight + (compact ? 10 : 16)
     implicitWidth:  compact ? 620 : 720
-    color: Prefs.panelBgColor
-    border.color: "#2a4a5a"
+    color: LyraDS.palette.surface
+    border.color: LyraDS.palette.panelBorder
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
     readonly property int lyraMinWidth:  col.implicitWidth + 16
@@ -100,17 +101,17 @@ Rectangle {
         function onChanged() { root.refreshMem() }
     }
 
-    // Shared flat-chip button (same look across all three rows).  Active
-    // colours default to the amateur red-glow; GEN overrides them to cyan.
+    // Shared band chip (same look across all three rows): a ConsoleChip whose
+    // kind follows the RX1 / SUB state: RX1 "on" (cyan), SUB "sub" (purple).
     readonly property string bandTip:
         qsTr("Click: VFO A (or SUB if TUNE B)\n"
            + "Click again on this band: next stored frequency (1 / 2 / 3)\n"
            + "Shift+click / right-click: SUB")
 
-    component ChipButton : Button {
+    component ChipButton : ConsoleChip {
         id: cb
         property bool chipActive: false
-        property bool chipSub: false     // SUB parked on this band (green)
+        property bool chipSub: false     // SUB parked on this band (purple)
         property string bandKey: ""
         // 1..3 on the chip that owns a stack.  Reading stackGeneration makes
         // the mark refresh when a second click advances the slot.
@@ -124,68 +125,47 @@ Rectangle {
                 return BandMemory.stackSlotRx2(bandKey)
             return 0
         }
-        property color activeFill:   "#260808"
-        property color activeBorder: "#ff3344"
-        property color activeText:   "#ffcc88"
         property string helpText: root.bandTip
+        kind: chipActive ? "on" : (chipSub ? "sub" : "plain")
         LyraHoverHelp {
             title: cb.text
             text: cb.helpText
             hovered: cb.hovered && cb.helpText.length > 0
         }
         Layout.preferredWidth: root.compact ? 38 : 44
-        Layout.preferredHeight: root.compact ? 20 : 22
-        padding: 0
+        Layout.preferredHeight: height
+        height: root.compact ? 22 : 24
+        leftPadding: 2
+        rightPadding: 2
         focusPolicy: Qt.NoFocus
-        ToolTip.visible: false
-        background: Rectangle {
-            radius: 4
-            color: cb.chipActive ? cb.activeFill
-                   : (cb.chipSub ? "#082610"
-                      : (cb.down ? "#1d2b38" : "#b416202a"))
-            border.width: (cb.chipActive || cb.chipSub) ? 2 : 1
-            border.color: cb.chipActive
-                          ? (cb.chipSub ? "#34c759" : cb.activeBorder)
-                          : (cb.chipSub ? "#34c759"
-                             : (cb.hovered ? "#8fdcff" : "#5ec8ff"))
-            Text {
-                visible: cb.stackMark > 0
-                text: cb.stackMark
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.rightMargin: 2
-                anchors.bottomMargin: 0
-                font.pixelSize: 8
-                font.bold: true
-                color: cb.chipActive ? "#ffcc88" : "#88ffcc"
-            }
-        }
-        contentItem: Text {
-            text: cb.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.pixelSize: 13
+        Text {
+            visible: cb.stackMark > 0
+            text: cb.stackMark
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.rightMargin: 3
+            anchors.bottomMargin: 1
+            font.pixelSize: 8
             font.bold: true
-            color: cb.chipActive ? cb.activeText
-                   : (cb.chipSub ? "#88ffcc" : "#5ec8ff")
-            // Without this the band label paints outside its shrinking chip and
-            // the whole row smears together at narrow widths.
-            elide: Text.ElideRight
-            clip: true
+            color: cb.chipActive ? LyraDS.palette.cyan : LyraDS.palette.chipSubText
         }
     }
 
-    component RowLabel : Label {
+    // Row label: Observatory section header, with the row's hover help.
+    component RowLabel : Item {
+        id: rl
         property string tip: ""
-        color: "#8fa6ba"
-        font.bold: true
-        Layout.preferredWidth: root.compact ? 28 : 34
+        property alias text: hdr.title
+        implicitWidth: root.compact ? 38 : 42
+        implicitHeight: hdr.implicitHeight
+        Layout.preferredWidth: implicitWidth
         Layout.alignment: Qt.AlignVCenter
+        ConsoleSectionHeader { id: hdr }
         HoverHandler { id: rowTipHov }
         LyraHoverHelp {
-            title: text
-            text: tip
-            hovered: tip.length > 0 && rowTipHov.hovered
+            title: hdr.title
+            text: rl.tip
+            hovered: rl.tip.length > 0 && rowTipHov.hovered
         }
     }
 
@@ -358,9 +338,6 @@ Rectangle {
                     text: "GEN" + slot
                     Layout.preferredWidth: 50
                     chipActive: Gen.activeSlot === slot
-                    activeFill:   "#10303a"
-                    activeBorder: "#7ff7ff"
-                    activeText:   "#d8fbff"
                     onClicked: Gen.recall(slot)
                     MouseArea {
                         anchors.fill: parent
@@ -424,13 +401,13 @@ Rectangle {
                                 contentItem: Rectangle {
                                     implicitWidth: 11
                                     radius: 5
-                                    color: timeScroll.pressed ? "#8fdcff" : "#5ec8ff"
+                                    color: timeScroll.pressed ? LyraDS.palette.textPrimary : LyraDS.palette.cyan
                                     opacity: 0.85
                                 }
                                 background: Rectangle {
                                     radius: 5
-                                    color: "#14202a"
-                                    border.color: "#2a4a5a"
+                                    color: LyraDS.palette.surfaceElevated
+                                    border.color: LyraDS.palette.panelBorder
                                     border.width: 1
                                 }
                             }
@@ -569,9 +546,6 @@ Rectangle {
                         }
                         chipActive: Xvtr.activeSlot === index
                         chipSub: Stream.subEnabled && Xvtr.activeSlotRx2 === index
-                        activeFill: "#082026"
-                        activeBorder: "#34d0ff"
-                        activeText: "#b8f0ff"
                         onClicked: {
                             if (!Xvtr.slotEnabled(index)) {
                                 xvtrEditor.openFor(index)
@@ -713,15 +687,15 @@ Rectangle {
             function onFrontEndChanged() { antMapPopup.feRev++ }
         }
         background: Rectangle {
-            color: "#0d141b"
+            color: LyraDS.palette.surface
             radius: 8
-            border.color: "#2a4a5a"
+            border.color: LyraDS.palette.panelBorder
         }
         contentItem: ColumnLayout {
             spacing: 8
             Label {
                 text: qsTr("Antenna map")
-                color: "#50d0ff"
+                color: LyraDS.palette.cyan
                 font.bold: true
                 font.pixelSize: 13
             }
@@ -729,7 +703,7 @@ Rectangle {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("Same ANT jack for TX and RX. RX-only jacks are the extra column — not a second TX antenna.")
-                color: "#8a9aac"
+                color: LyraDS.palette.textMuted
                 font.pixelSize: 11
             }
             Repeater {
@@ -740,7 +714,7 @@ Rectangle {
                     spacing: 8
                     Label {
                         text: modelData
-                        color: "#cdd9e5"
+                        color: LyraDS.palette.textPrimary
                         font.pixelSize: 12
                         font.bold: true
                         Layout.preferredWidth: 40
@@ -805,24 +779,10 @@ Rectangle {
                     }
                 }
             }
-            Button {
+            ConsoleChip {
                 Layout.alignment: Qt.AlignRight
-                text: qsTr("Close")
-                implicitHeight: 26
+                title: qsTr("Close")
                 onClicked: antMapPopup.close()
-                background: Rectangle {
-                    radius: 4
-                    color: parent.down ? "#1a3040"
-                         : parent.hovered ? "#1f4655" : "#161e28"
-                    border.color: "#50d0ff"
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "#eaf2f7"
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
             }
         }
     }
@@ -843,11 +803,11 @@ Rectangle {
         x: Math.round((parent.width - width) / 2)
         y: 12
         property int idx: 0
-        readonly property color cAccent: "#50d0ff"
-        readonly property color cText:   "#cdd9e5"
-        readonly property color cMuted:  "#8a9aac"
-        readonly property color cField:  "#161e28"
-        readonly property color cBorder: "#2a3a4a"
+        readonly property color cAccent: LyraDS.palette.cyan
+        readonly property color cText:   LyraDS.palette.textPrimary
+        readonly property color cMuted:  LyraDS.palette.textMuted
+        readonly property color cField:  LyraDS.palette.chipFill
+        readonly property color cBorder: LyraDS.palette.chipBorder
         function mhz(field) {
             var v = parseFloat(field.text)
             return isNaN(v) ? 0 : v * 1e6
@@ -899,7 +859,7 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 26
                 selectByMouse: true
-                color: "#f2f8fc"
+                color: LyraDS.palette.textPrimary
                 font.family: parent.mono ? "Consolas" : "Segoe UI"
                 font.pixelSize: 13
                 placeholderTextColor: xvtrEditor.cMuted
@@ -923,7 +883,7 @@ Rectangle {
                 y: parent.height / 2 - height / 2
                 radius: 3
                 color: xvtrEditor.cField
-                border.color: cb.checked ? xvtrEditor.cAccent : "#3a5a6a"
+                border.color: cb.checked ? xvtrEditor.cAccent : xvtrEditor.cBorder
                 Text {
                     anchors.centerIn: parent
                     visible: cb.checked
@@ -942,30 +902,15 @@ Rectangle {
             }
         }
 
-        component GhostButton: Button {
-            implicitHeight: 26
-            font.pixelSize: 12
+        component GhostButton : ConsoleChip {
             property bool accent: false
-            background: Rectangle {
-                radius: 4
-                color: parent.down ? "#1a3040"
-                     : parent.hovered ? "#1f4655" : xvtrEditor.cField
-                border.color: parent.accent ? xvtrEditor.cAccent
-                                            : xvtrEditor.cBorder
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "#eaf2f7"
-                font: parent.font
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
+            kind: accent ? "on" : "plain"
         }
 
         background: Rectangle {
-            color: "#0d141b"
+            color: LyraDS.palette.surface
             radius: 8
-            border.color: "#2a4a5a"
+            border.color: LyraDS.palette.panelBorder
         }
         contentItem: ColumnLayout {
             id: xvtrForm

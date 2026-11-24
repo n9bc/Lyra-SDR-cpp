@@ -21,8 +21,8 @@ Rectangle {
     readonly property bool compact: Qt.platform.os === "osx"
     implicitHeight: compact ? 54 : 64
     implicitWidth:  compact ? 380 : 460
-    color: Prefs.panelBgColor
-    border.color: "#2a4a5a"
+    color: LyraDS.palette.surface
+    border.color: LyraDS.palette.panelBorder
 
     // Honest floor, measured from the content — see AudioPanel for the rationale.
     readonly property int lyraMinWidth:  body.implicitWidth + 24
@@ -106,7 +106,7 @@ Rectangle {
 
         Label {
             Layout.row: 0; Layout.column: 0
-            text: qsTr("Rate"); color: "#cccccc"; font.bold: true
+            text: qsTr("Rate"); color: LyraDS.palette.textMuted; font.bold: true
             HoverHandler { id: rateLblHov }
             LyraHoverHelp {
                 title: qsTr("Rate")
@@ -133,13 +133,13 @@ Rectangle {
             Layout.preferredWidth: 1
             Layout.fillHeight: true
             Layout.topMargin: 4; Layout.bottomMargin: 4
-            color: "#2a4a5a"
+            color: LyraDS.palette.panelBorder
         }
 
         Label {
             Layout.row: 0; Layout.column: 3
             text: root.rx2Focus ? qsTr("RX2 BW") : qsTr("RX BW")
-            color: "#cccccc"; font.bold: true
+            color: LyraDS.palette.textMuted; font.bold: true
             HoverHandler { id: rxBwLblHov }
             LyraHoverHelp {
                 title: root.rx2Focus ? qsTr("RX2 BW") : qsTr("RX BW")
@@ -175,13 +175,16 @@ Rectangle {
         // mirrors to the other (handled in Prefs::setRxBandwidth /
         // setTxBandwidth), and the low edges track the same way.
         // Toggling ON pulls RX into TX.
-        LyraButton {
+        ConsoleChip {
             id: bwLockBtn
             Layout.row: 0; Layout.column: 5; Layout.rowSpan: 2
             Layout.preferredWidth: 32
             Layout.alignment: Qt.AlignVCenter
             checkable: true
             checked: Prefs.bwLocked
+            kind: checked ? "hot" : "plain"
+            leftPadding: 0
+            rightPadding: 0
             enabled: !root.isFm           // no TX-BW to lock to in FM
             text: "🔗"
             onToggled: Prefs.bwLocked = checked
@@ -196,7 +199,7 @@ Rectangle {
         Label {
             Layout.row: 0; Layout.column: 6
             text: qsTr("TX BW"); font.bold: true
-            color: root.isFm ? "#666666" : "#cccccc"
+            color: root.isFm ? LyraDS.palette.textDim : LyraDS.palette.textMuted
             HoverHandler { id: txBwLblHov }
             LyraHoverHelp {
                 title: qsTr("TX BW")
@@ -232,7 +235,7 @@ Rectangle {
 
         Label {
             Layout.row: 1; Layout.column: 3
-            text: qsTr("RX lo"); color: "#cccccc"; font.bold: true
+            text: qsTr("RX lo"); color: LyraDS.palette.textMuted; font.bold: true
             HoverHandler { id: rxLoLblHov }
             LyraHoverHelp {
                 title: qsTr("RX lo")
@@ -262,7 +265,7 @@ Rectangle {
         Label {
             Layout.row: 1; Layout.column: 6
             text: qsTr("TX lo"); font.bold: true
-            color: root.isFm ? "#666666" : "#cccccc"
+            color: root.isFm ? LyraDS.palette.textDim : LyraDS.palette.textMuted
             HoverHandler { id: txLoLblHov }
             LyraHoverHelp {
                 title: qsTr("TX lo")
