@@ -72,3 +72,24 @@ final class TerrainSTFTTests: XCTestCase {
         wait(for: [done], timeout: 5)
     }
 }
+
+extension TerrainSTFTTests {
+    /// The in-place vDSP steps carry no state between rows: the same input gives the same row
+    /// every time, and a different input in between does not leak into the next row.
+    func testRepeatedRowsAreIdenticalAndStateless() {
+        var stft = TerrainSTFT()
+        let a = sine(1000), b = sine(2000)
+        let first = a.withUnsafeBufferPointer { stft.row(from: $0) }
+        for _ in 0..<50 {
+            _ = b.withUnsafeBufferPointer { stft.row(from: $0) }
+            let again = a.withUnsafeBufferPointer { stft.row(from: $0) }
+            XCTAssertEqual(again, first)
+        }
+        let peak = first.indices.max { first[$0] < first[$1] }!
+        XCTAssertTrue(abs(peak - 67) <= 1)
+        // 750 Hz sits exactly on FFT bin 64 (and point 50): a 0.5-amplitude sine reads -6 dBFS.
+        let onBin = sine(750)
+        let row = onBin.withUnsafeBufferPointer { stft.row(from: $0) }
+        XCTAssertEqual(row[50], -6.02, accuracy: 0.3)
+    }
+}

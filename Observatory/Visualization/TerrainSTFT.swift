@@ -63,7 +63,12 @@ struct TerrainSTFT {
                 (w.baseAddress! + pad).update(from: base + (samples.count - have), count: have)
             }
         }
-        vDSP.multiply(windowed, window, result: &windowed)
+        // In place through one pointer: aliasing the array as input and `&` output would copy it.
+        windowed.withUnsafeMutableBufferPointer { w in
+            window.withUnsafeBufferPointer { win in
+                vDSP_vmul(w.baseAddress!, 1, win.baseAddress!, 1, w.baseAddress!, 1, vDSP_Length(n))
+            }
+        }
 
         real.withUnsafeMutableBufferPointer { rp in
             imag.withUnsafeMutableBufferPointer { ip in
@@ -83,11 +88,14 @@ struct TerrainSTFT {
         }
         // zrip output is 2x the DFT; a full-scale sine of amplitude A gives |X| = A * sum(w) / 2.
         var scale = 1 / windowSum
-        vDSP_vsmul(mags, 1, &scale, &mags, 1, vDSP_Length(n / 2))
         var eps: Float = 1e-10
-        vDSP_vsadd(mags, 1, &eps, &mags, 1, vDSP_Length(n / 2))
         var one: Float = 1
-        vDSP_vdbcon(mags, 1, &one, &mags, 1, vDSP_Length(n / 2), 1)
+        mags.withUnsafeMutableBufferPointer { mp in
+            let m = mp.baseAddress!
+            vDSP_vsmul(m, 1, &scale, m, 1, vDSP_Length(n / 2))
+            vDSP_vsadd(m, 1, &eps, m, 1, vDSP_Length(n / 2))
+            vDSP_vdbcon(m, 1, &one, m, 1, vDSP_Length(n / 2), 1)
+        }
 
         var out = [Float](repeating: Self.floorDb, count: points)
         for p in 0..<points {
