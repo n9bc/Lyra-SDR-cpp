@@ -379,4 +379,33 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.setTuningStep(.main, 50), .idle), [.setStepPref(.main, 50)])
         XCTAssertEqual(plan(.setTuningStep(.sub, 5000), .idle), [.setStepPref(.sub, 5000)])
     }
+
+    // MARK: - Band plan, landmarks and spots
+
+    func testLandmarkClickGuardsThenSetsModeThenFreq() {
+        let e = state(rx1: 7_100_000)
+        XCTAssertEqual(plan(.tuneLandmark(hz: 7_074_000, mode: "DIGU"), e),
+                       [.requireJumpAllowed(fromHz: 7_100_000, toHz: 7_074_000),
+                        .setMode("DIGU"), .setRx1Hz(7_074_000)])
+    }
+
+    func testLandmarkWithUnknownModeOmitsSetMode() {
+        XCTAssertEqual(plan(.tuneLandmark(hz: 7_074_000, mode: "ZZZ"), state()),
+                       [.requireJumpAllowed(fromHz: 7_100_000, toHz: 7_074_000), .setRx1Hz(7_074_000)])
+    }
+
+    func testChannelClickSetsUSBAndQsy() {
+        XCTAssertEqual(plan(.tuneChannel(qsyHz: 5_330_500), state(rx1: 7_100_000)),
+                       [.requireJumpAllowed(fromHz: 7_100_000, toHz: 5_330_500),
+                        .setMode("USB"), .setRx1Hz(5_330_500)])
+    }
+
+    func testSpotClickActivates() {
+        XCTAssertEqual(plan(.activateSpot(call: "K1ABC"), state()), [.activateSpot("K1ABC")])
+    }
+
+    func testOverlayClicksDoNothingWhileVfoLocked() {
+        XCTAssertEqual(plan(.tuneLandmark(hz: 7_074_000, mode: "DIGU"), state(), locked: true), [])
+        XCTAssertEqual(plan(.tuneChannel(qsyHz: 5_330_500), state(), locked: true), [])
+    }
 }

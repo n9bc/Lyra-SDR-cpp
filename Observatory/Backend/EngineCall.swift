@@ -9,6 +9,8 @@ struct EngineChange: OptionSet, Sendable {
     static let meters = EngineChange(rawValue: 1 << 3)
     static let stats = EngineChange(rawValue: 1 << 4)
     static let session = EngineChange(rawValue: 1 << 5)
+    /// Spots or the band-plan preferences changed.
+    static let overlays = EngineChange(rawValue: 1 << 6)
 }
 
 /// One engine call. The command planner turns a `RadioCommand` into a list of these and the
@@ -37,4 +39,6 @@ enum EngineCall: Equatable, Sendable {
     case setBandPlanSegmentsPref(Bool)
     case setShowSpotsPref(Bool)
     case setStepPref(ReceiverID, Int)
+    /// `SpotStore::activate`: tunes to the spot. The engine guards transmit itself.
+    case activateSpot(String)
 }

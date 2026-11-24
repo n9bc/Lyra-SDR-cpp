@@ -21,9 +21,19 @@ final class LiveRadioBackend: RadioBackend {
     /// The last non-zero smoothing the engine reported, restored when averaging comes back on.
     @ObservationIgnored private var lastSmoothing: Int?
     @ObservationIgnored private var capabilityKey: CapabilityKey
+    /// The cached band plan, landmarks and spots, and the window and flags they were read for.
+    @ObservationIgnored private var overlays = EngineOverlays()
+    @ObservationIgnored private var overlayKey: OverlayKey?
     @ObservationIgnored private var lastApply: Date
     @ObservationIgnored private var meterPending = false
     @ObservationIgnored private nonisolated(unsafe) var timer: Timer?
+
+    /// What the overlays depend on: the main window and the display flags.
+    private struct OverlayKey: Equatable {
+        var centreHz: Int64
+        var spanHz: Int64
+        var segments: Bool, landmarks: Bool, beacons: Bool, spots: Bool
+    }
 
     private struct CapabilityKey: Equatable {
         var nnrAvailable: Bool
@@ -45,6 +55,8 @@ final class LiveRadioBackend: RadioBackend {
         capabilities = .live(nnrAvailable: initial.dsp.nnrAvailable, isP2: initial.link.isP2Rig)
         lastApply = .distantPast
         snapshot = Self.render(initial, phase: tracker.phase, vfoLocked: false, now: t)
+        refreshOverlays(force: false)
+        snapshot = Self.render(initial, phase: tracker.phase, vfoLocked: false, now: t, overlays: overlays)
 
         facade.observe { [weak self] change in self?.engineChanged(change) }
         if startTimer {
@@ -108,6 +120,9 @@ final class LiveRadioBackend: RadioBackend {
         if state.display.smoothing > 0 { lastSmoothing = state.display.smoothing }
         feedTracker(at: t)
         updateCapabilities()
+        // Meter ticks never re-read; any other change re-reads only when the key moved or the
+        // engine said the overlays changed.
+        if !change.subtracting(.meters).isEmpty { refreshOverlays(force: change.contains(.overlays)) }
         if change.subtracting(.meters).isEmpty {
             // Meters only: at most one apply per interval; `tick` applies the deferred one.
             if t.timeIntervalSince(lastApply) < Self.meterInterval {
@@ -131,6 +146,22 @@ final class LiveRadioBackend: RadioBackend {
         capabilities = .live(nnrAvailable: key.nnrAvailable, isP2: key.isP2)
     }
 
+    /// Re-reads the overlays when the key (window and flags) changed, or when `force`d.
+    private func refreshOverlays(force: Bool) {
+        let d = state.display, r = state.radio
+        let key = OverlayKey(
+            centreHz: SpectrumGeometry.mainCentreHz(
+                rx1Hz: Int64(r.rx1Hz), ritEnabled: r.ritEnabled, ritHz: Int64(r.ritHz),
+                ctuneEnabled: r.ctuneEnabled, ctuneCentreHz: Int64(r.ctuneCenterHz)),
+            spanHz: Int64(d.spanHz), segments: d.bandPlanSegments, landmarks: d.bandPlanLandmarks,
+            beacons: d.bandPlanBeacons, spots: d.showSpots)
+        guard force || key != overlayKey else { return }
+        overlayKey = key
+        let anyShown = key.segments || key.landmarks || key.beacons || key.spots
+        overlays = anyShown && key.spanHz > 0
+            ? facade.readOverlays(centreHz: key.centreHz, spanHz: key.spanHz) : EngineOverlays()
+    }
+
     private func refresh() { refresh(at: now()) }
 
     /// Rebuilds the snapshot and assigns it only when it differs, so unchanged state does not
@@ -138,16 +169,16 @@ final class LiveRadioBackend: RadioBackend {
     private func refresh(at t: Date) {
         meterPending = false
         lastApply = t
-        let next = Self.render(state, phase: tracker.phase, vfoLocked: vfoLocked, now: t)
+        let next = Self.render(state, phase: tracker.phase, vfoLocked: vfoLocked, now: t, overlays: overlays)
         if next != snapshot { snapshot = next }
     }
 
     private static func render(_ e: EngineState, phase: ConnectionPhase, vfoLocked: Bool,
-                               now: Date) -> RadioSnapshot {
+                               now: Date, overlays: EngineOverlays = EngineOverlays()) -> RadioSnapshot {
         // The clock shows whole seconds; truncating keeps an identical engine state equal
         // between refreshes inside one second, so the snapshot is not reassigned for nothing.
         LiveSnapshotMapper.snapshot(from: e, phase: phase, vfoLocked: vfoLocked,
-                                    now: wholeSecond(now), timeZone: .current)
+                                    now: wholeSecond(now), timeZone: .current, overlays: overlays)
     }
 
     private static func wholeSecond(_ d: Date) -> Date {

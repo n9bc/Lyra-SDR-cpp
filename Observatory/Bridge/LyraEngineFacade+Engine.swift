@@ -126,6 +126,7 @@ extension LyraEngineFacade: EngineFacade {
             case .setBandPlanSegmentsPref(let on): setBandPlanSegmentsPreference(on)
             case .setShowSpotsPref(let on): setShowSpotsPreference(on)
             case .setStepPref(let id, let hz): setStepPreference(id, hz: hz)
+            case .activateSpot(let call): activateSpot(call)
             }
         }
     }
@@ -143,6 +144,10 @@ extension LyraEngineFacade: EngineFacade {
     func setBandPlanSegmentsPreference(_ on: Bool) {}
     func setShowSpotsPreference(_ on: Bool) {}
     func setStepPreference(_ receiver: ReceiverID, hz: Int) {}
+    // TODO(M4 Task 7): `BandPlan::segments/landmarks` and `SpotStore::spotsInSpan/activate`; until
+    // then the live console has no overlays.
+    func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays { EngineOverlays() }
+    func activateSpot(_ call: String) {}
 
     /// One `-amateurBands` entry, or nil if a key is missing.
     private nonisolated static func band(from d: [String: Any]) -> EngineBand? {

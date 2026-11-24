@@ -49,4 +49,11 @@ enum RadioCommand: Equatable, Sendable {
     case setSpotsVisible(Bool)
     /// One receiver's tuning step in Hz (the STEP chip).
     case setTuningStep(ReceiverID, Int)
+
+    // Band plan, landmarks and spots on the axis.
+    case activateSpot(call: String)
+    /// A watering-hole or beacon label: tune the dial to `hz` in `mode`.
+    case tuneLandmark(hz: Int64, mode: String)
+    /// A 60 m channel: tune to its QSY frequency in USB.
+    case tuneChannel(qsyHz: Int64)
 }

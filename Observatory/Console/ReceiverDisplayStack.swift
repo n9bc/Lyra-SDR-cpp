@@ -82,7 +82,7 @@ struct ReceiverDisplayStack: View {
         }
     }
 
-    /// Above the overlays, which are display-only; it must stay the topmost interactive layer.
+    /// Above the display-only overlays; only `SpectrumOverlayControls` sits higher.
     private var gestureSurface: some View {
         SpectrumInteractionView(stack: receiverID, display: display, inputs: gestures)
             .help(gestures.disabledReason ?? SpectrumGestureInputs.help)
@@ -99,6 +99,11 @@ struct ReceiverDisplayStack: View {
                                  bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
                                  height: spectrumHeight)
                 gestureSurface
+                // Above the gesture surface so its labels and channels are clickable; empty
+                // elsewhere, so the surface still gets every other gesture.
+                SpectrumOverlayControls(display: display, axis: axis, status: capabilities.status(.spots),
+                                        bandPlanTrailingInset: sampleSpectrum ? DisplayAreaView.sampleMarkerWidth + 4 : 0,
+                                        send: gestures.send)
             }
             .overlay(alignment: .bottomLeading) {
                 // Bottom, right of the dB labels: clear of the band-plan row, spot labels and the Sample marker.

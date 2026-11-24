@@ -13,7 +13,8 @@ enum LiveSnapshotMapper {
     private nonisolated static let sMeterFloorDbm = -140.0
 
     nonisolated static func snapshot(from e: EngineState, phase: ConnectionPhase, vfoLocked: Bool,
-                                     now: Date, timeZone: TimeZone) -> RadioSnapshot {
+                                     now: Date, timeZone: TimeZone,
+                                     overlays: EngineOverlays = EngineOverlays()) -> RadioSnapshot {
         let sample = RadioSnapshot.sample
         let r = e.radio
         let subOn = r.subEnabled
@@ -131,7 +132,7 @@ enum LiveSnapshotMapper {
                 spanLowHz: spanLow, spanHighHz: spanHigh,
                 subSpanLowHz: subCentre - subSpan / 2, subSpanHighHz: subCentre + subSpan / 2,
                 zoom: zoom, wheelStepHz: d.scrollStepHz,
-                peakHold: peakHold(d), bandPlanVisible: d.bandPlanSegments, bandPlan: [], spots: [],
+                peakHold: peakHold(d), bandPlanVisible: d.bandPlanSegments, bandPlan: bandPlan(overlays, d), spots: spots(overlays, d),
                 mainCarrierHz: mainCarrier, mainPassband: mainPassband,
                 subCarrierHz: subCarrier, subPassband: subPassband,
                 subOverlay: subOverlay, subSpectrumAvailable: d.rx2SpectrumAvailable,
@@ -179,6 +180,44 @@ enum LiveSnapshotMapper {
             return String(engineName.dropLast())
         }
         return engineName
+    }
+
+    // MARK: - Band plan, landmarks and spots
+
+    /// The kind from the engine's segment label; the engine does not report the kind itself, and
+    /// its colour is user-overridable, so it is not a classifier.
+    nonisolated static func bandPlanKind(label: String, channel: Bool) -> BandPlanKind {
+        if channel { return .channel }
+        switch label {
+        case "CW": return .cw
+        case "DIG": return .digital
+        case "CW/DIG": return .cwDigital
+        case "SSB": return .phone
+        case "FM": return .fm
+        default: return .mixed
+        }
+    }
+
+    private nonisolated static func bandPlan(_ o: EngineOverlays, _ d: EngineState.Display) -> [BandPlanSegment] {
+        guard d.bandPlanSegments else { return [] }
+        return o.segments.map {
+            BandPlanSegment(lowHz: $0.lowHz, highHz: $0.highHz, label: $0.label,
+                            kind: bandPlanKind(label: $0.label, channel: $0.channel),
+                            channelQsyHz: $0.channel ? $0.qsyHz : nil)
+        }
+    }
+
+    /// Landmarks first (in the engine's order), then spots; each group follows its own flags.
+    private nonisolated static func spots(_ o: EngineOverlays, _ d: EngineState.Display) -> [Spot] {
+        let marks = o.landmarks.filter { $0.beacon ? d.bandPlanBeacons : d.bandPlanLandmarks }.map {
+            Spot(call: $0.label, frequencyHz: $0.hz, kind: $0.beacon ? .beacon : .watering,
+                 label: $0.label, mode: $0.mode.isEmpty ? nil : $0.mode)
+        }
+        let live = d.showSpots ? o.spots.map {
+            Spot(call: $0.call, frequencyHz: $0.hz, kind: $0.mine ? .own : .dx,
+                 label: $0.call, mode: $0.mode.isEmpty ? nil : $0.mode)
+        } : []
+        return marks + live
     }
 
     // MARK: - Helpers

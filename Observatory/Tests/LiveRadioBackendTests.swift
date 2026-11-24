@@ -14,7 +14,15 @@ final class FakeEngineFacade: EngineFacade {
     /// Runs inside `perform`, before it returns, as the engine's synchronous signals do.
     var onPerform: ((FakeEngineFacade, [EngineCall]) -> Void)?
 
+    var overlays = EngineOverlays()
+    private(set) var overlayReads: [(centreHz: Int64, spanHz: Int64)] = []
+    private(set) var activatedSpots: [String] = []
+
     func readState() -> EngineState { state }
+    func readOverlays(centreHz: Int64, spanHz: Int64) -> EngineOverlays {
+        overlayReads.append((centreHz, spanHz))
+        return overlays
+    }
     func observe(_ onChange: @escaping @MainActor (EngineChange) -> Void) { self.onChange = onChange }
     func quitApplication() {}
     private(set) var ctuneCentres: [UInt32] = []
@@ -45,6 +53,7 @@ final class FakeEngineFacade: EngineFacade {
             case .setBandPlanSegmentsPref(let on): setBandPlanSegmentsPreference(on)
             case .setShowSpotsPref(let on): setShowSpotsPreference(on)
             case .setStepPref(let id, let hz): setStepPreference(id, hz: hz)
+            case .activateSpot(let call): activatedSpots.append(call)
             default: break
             }
             applied.append(call)
@@ -433,5 +442,54 @@ final class LiveRadioBackendTests: XCTestCase {
         let backend = make()
         XCTAssertEqual(backend.snapshot.display.wheelStepHz, 500)
         XCTAssertTrue(backend.snapshot.display.exactTuning)
+    }
+
+    // MARK: - Overlays
+
+    func testOverlaysRequeriedOnlyOnKeyChange() {
+        facade.state.radio.rx1Hz = 7_100_000
+        facade.state.display.spanHz = 200_000
+        facade.state.link.running = true
+        facade.state.link.datagramsPerSec = 380
+        let backend = make()
+        XCTAssertEqual(facade.overlayReads.count, 1)
+        XCTAssertEqual(facade.overlayReads[0].centreHz, 7_100_000)
+        XCTAssertEqual(facade.overlayReads[0].spanHz, 200_000)
+
+        // Meter and unrelated radio changes do not re-read.
+        facade.state.meters.sMeterDbm = -80
+        facade.fire(.meters)
+        advance(1)
+        facade.state.audio.volume = 0.3
+        facade.fire(.audio)
+        XCTAssertEqual(facade.overlayReads.count, 1)
+
+        // A new centre does.
+        facade.state.radio.rx1Hz = 7_110_000
+        facade.fire(.radio)
+        XCTAssertEqual(facade.overlayReads.count, 2)
+        // A new span does.
+        facade.state.display.spanHz = 100_000
+        facade.fire(.dsp)
+        XCTAssertEqual(facade.overlayReads.count, 3)
+        // A flag does.
+        facade.state.display.bandPlanBeacons = true
+        facade.fire(.dsp)
+        XCTAssertEqual(facade.overlayReads.count, 4)
+        // `.overlays` forces a read at the same key, and the result is shown.
+        facade.overlays = EngineOverlays(spots: [EngineSpot(call: "K1ABC", hz: 7_110_500, mine: false, mode: "USB")])
+        facade.fire(.overlays)
+        XCTAssertEqual(facade.overlayReads.count, 5)
+        XCTAssertEqual(backend.snapshot.display.spots.map(\.call), ["K1ABC"])
+    }
+
+    func testOverlaysNotReadWhileEveryFlagIsOff() {
+        facade.state.display.spanHz = 200_000
+        facade.state.display.bandPlanSegments = false
+        facade.state.display.bandPlanLandmarks = false
+        facade.state.display.bandPlanBeacons = false
+        facade.state.display.showSpots = false
+        _ = make()
+        XCTAssertTrue(facade.overlayReads.isEmpty)
     }
 }

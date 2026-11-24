@@ -47,9 +47,11 @@ enum TransmitState: Equatable, Sendable {
 
 enum ReceiverID: Equatable, Sendable { case main, sub }
 
-enum BandPlanKind: Equatable, Sendable { case digital, ft8, phoneExtra, phoneGeneral, phoneAll }
+/// The band-plan segment kinds the engine labels (CW, DIG, CW/DIG, SSB, FM, a 60 m channel, or
+/// the unlabelled mixed segments).
+enum BandPlanKind: Equatable, Sendable { case cw, digital, cwDigital, phone, fm, mixed, channel }
 
-enum SpotKind: Equatable, Sendable { case dx, watering, own }
+enum SpotKind: Equatable, Sendable { case dx, watering, beacon, own }
 
 enum TerrainView: String, CaseIterable, Sendable {
     case threeD = "3D", waterfall = "Waterfall", both = "Both"
@@ -150,13 +152,25 @@ struct BandPlanSegment: Equatable, Sendable {
     var highHz: Int64
     var label: String
     var kind: BandPlanKind
+    /// A channel's QSY frequency (its unclipped low edge); nil for every other segment.
+    var channelQsyHz: Int64? = nil
 }
 
 struct Spot: Identifiable, Equatable, Sendable {
-    var id: String { call }
+    /// A landmark and its sibling share a label, so the frequency is part of the identity.
+    var id: String { "\(call)@\(frequencyHz)" }
     var call: String
     var frequencyHz: Int64
     var kind: SpotKind
+    /// What the label shows: the call, or a landmark's name.
+    var label: String
+    /// The operating mode a click tunes to, when the engine reports one ("DIGU", "USB").
+    var mode: String?
+
+    init(call: String, frequencyHz: Int64, kind: SpotKind, label: String? = nil, mode: String? = nil) {
+        self.call = call; self.frequencyHz = frequencyHz; self.kind = kind
+        self.label = label ?? call; self.mode = mode
+    }
 }
 
 enum PeakHoldSetting: Equatable, Sendable { case off, hold, live, seconds(Double) }
@@ -376,20 +390,20 @@ extension RadioSnapshot {
             subSpanLowHz: 14_125_000, subSpanHighHz: 14_265_000, zoom: 2.0, wheelStepHz: 500,
             peakHold: .seconds(2), bandPlanVisible: true,
             bandPlan: [
-                BandPlanSegment(lowHz: 7_060_000, highHz: 7_074_000, label: "Digital", kind: .digital),
-                BandPlanSegment(lowHz: 7_074_000, highHz: 7_080_000, label: "FT8", kind: .ft8),
-                BandPlanSegment(lowHz: 7_080_000, highHz: 7_125_000, label: "Phone · Extra", kind: .phoneExtra),
-                BandPlanSegment(lowHz: 7_125_000, highHz: 7_175_000, label: "Phone · General", kind: .phoneGeneral),
-                BandPlanSegment(lowHz: 7_175_000, highHz: 7_200_000, label: "Phone · all", kind: .phoneAll),
+                BandPlanSegment(lowHz: 7_060_000, highHz: 7_074_000, label: "CW/DIG", kind: .cwDigital),
+                BandPlanSegment(lowHz: 7_074_000, highHz: 7_080_000, label: "DIG", kind: .digital),
+                BandPlanSegment(lowHz: 7_080_000, highHz: 7_125_000, label: "SSB", kind: .phone),
+                BandPlanSegment(lowHz: 7_125_000, highHz: 7_175_000, label: "SSB", kind: .phone),
+                BandPlanSegment(lowHz: 7_175_000, highHz: 7_200_000, label: "SSB", kind: .phone),
             ],
             spots: [
-                Spot(call: "LA7TN", frequencyHz: 7_085_500, kind: .dx),
-                Spot(call: "FT8", frequencyHz: 7_074_500, kind: .watering),
-                Spot(call: "IQ2CF", frequencyHz: 7_100_300, kind: .dx),
-                Spot(call: "EA3BDE", frequencyHz: 7_137_200, kind: .own),
-                Spot(call: "MM7CEH", frequencyHz: 7_163_000, kind: .dx),
-                Spot(call: "G0AKH/P", frequencyHz: 7_176_000, kind: .dx),
-                Spot(call: "S52DC", frequencyHz: 7_188_000, kind: .dx),
+                Spot(call: "LA7TN", frequencyHz: 7_085_500, kind: .dx, mode: "LSB"),
+                Spot(call: "FT8", frequencyHz: 7_074_500, kind: .watering, mode: "DIGU"),
+                Spot(call: "IQ2CF", frequencyHz: 7_100_300, kind: .dx, mode: "LSB"),
+                Spot(call: "EA3BDE", frequencyHz: 7_137_200, kind: .own, mode: "LSB"),
+                Spot(call: "MM7CEH", frequencyHz: 7_163_000, kind: .dx, mode: "LSB"),
+                Spot(call: "G0AKH/P", frequencyHz: 7_176_000, kind: .dx, mode: "LSB"),
+                Spot(call: "S52DC", frequencyHz: 7_188_000, kind: .dx, mode: "LSB"),
             ],
             // Main 7.1285 MHz LSB 2.7 kHz; Sub 14.195 MHz USB 2.7 kHz.
             mainCarrierHz: 7_128_500, mainPassband: 7_125_800...7_128_500,

@@ -106,6 +106,12 @@ enum LiveCommandPlanner {
         case .setBandPlanVisible(let on): return [.setBandPlanSegmentsPref(on)]
         case .setSpotsVisible(let on): return [.setShowSpotsPref(on)]
         case .setTuningStep(let id, let hz): return [.setStepPref(id, hz)]
+
+        case .activateSpot(let call): return [.activateSpot(call)]
+        case .tuneLandmark(let hz, let mode):
+            return vfoLocked ? [] : jump(r, toHz: hz, mode: RadioMode(rawValue: mode)?.rawValue)
+        case .tuneChannel(let qsy):
+            return vfoLocked ? [] : jump(r, toHz: qsy, mode: RadioMode.usb.rawValue)
         }
     }
 
@@ -222,6 +228,17 @@ enum LiveCommandPlanner {
 
     private nonisolated static func moved(_ hz: UInt32, by delta: Int64) -> UInt32 {
         clamp(Int64(hz) &+ delta)
+    }
+
+    /// A guarded Main jump to a listed frequency; a blocked guard skips the mode and the retune.
+    /// An unknown mode is left alone rather than sent to the engine.
+    private nonisolated static func jump(_ r: EngineState.Radio, toHz hz: Int64,
+                                         mode: String?) -> [EngineCall] {
+        let target = clamp(hz)
+        var plan: [EngineCall] = [.requireJumpAllowed(fromHz: r.rx1Hz, toHz: target)]
+        if let mode { plan.append(.setMode(mode)) }
+        plan.append(.setRx1Hz(target))
+        return plan
     }
 
     private nonisolated static func clamp(_ v: Int64) -> UInt32 {

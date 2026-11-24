@@ -129,6 +129,21 @@ final class MockRadioBackend: RadioBackend {
         case .setSpotsVisible(let on): s.display.spotsVisible = on
         case .setTuningStep(let id, let hz):
             if id == .main { s.main.stepHz = hz } else { s.sub.stepHz = hz }
+        case .activateSpot(let call):
+            guard !s.session.vfoLocked, let spot = s.display.spots.first(where: { $0.call == call }) else { return s }
+            if let m = spot.mode.flatMap(RadioMode.init(rawValue:)) { s.main.mode = m }
+            retune(&s, .main, to: spot.frequencyHz)
+            announceTuning(&s, .main)
+        case .tuneLandmark(let hz, let mode):
+            guard !s.session.vfoLocked else { return s }
+            if let m = RadioMode(rawValue: mode) { s.main.mode = m }
+            retune(&s, .main, to: hz)
+            announceTuning(&s, .main)
+        case .tuneChannel(let qsy):
+            guard !s.session.vfoLocked else { return s }
+            s.main.mode = .usb
+            retune(&s, .main, to: qsy)
+            announceTuning(&s, .main)
         }
         refreshOverlays(&s)
         return s
