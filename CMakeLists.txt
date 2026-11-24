@@ -650,6 +650,8 @@ qt_add_qml_module(lyra
     VERSION 1.0
     QML_FILES
         src/qml/LyraDS.qml
+        src/qml/ConsoleChip.qml
+        src/qml/ConsoleSectionHeader.qml
         src/qml/LyraSlider.qml
         src/qml/LyraButton.qml
         src/qml/VfoBox.qml
