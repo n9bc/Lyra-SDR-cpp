@@ -101,6 +101,34 @@ enum SpectrumGestureModel {
     }
 }
 
+/// Builds fast zoom gestures (Command-scroll, pinch) on the zoom last asked for until the snapshot
+/// reports it, so steps sent between two snapshots are not lost by multiplying the same stale zoom.
+/// The snapshot wins again once it matches the request, or after `staleAfter` seconds (the engine
+/// settled elsewhere). Clamped to the engine's 1...16.
+struct SpectrumZoomAccumulator: Sendable {
+    nonisolated static let range = 1.0...16.0
+    nonisolated static let staleAfter: TimeInterval = 0.5
+
+    private var requested: Double?
+    private var requestedAt: TimeInterval = 0
+
+    nonisolated init() {}
+
+    /// The zoom to send for a gesture of `factor` at `now` (seconds, any monotonic clock).
+    nonisolated mutating func next(snapshotZoom: Double, factor: Double, now: TimeInterval) -> Double {
+        let shown = snapshotZoom.isFinite ? snapshotZoom : Self.range.lowerBound
+        var base = shown
+        if let requested {
+            let caughtUp = abs(shown - requested) <= 1e-6 * max(1, requested)
+            if !caughtUp, now - requestedAt < Self.staleAfter, now >= requestedAt { base = requested }
+        }
+        let target = min(max(base * factor, Self.range.lowerBound), Self.range.upperBound)
+        requested = target
+        requestedAt = now
+        return target
+    }
+}
+
 /// One left-button press-drag-release. Below the drag threshold it is a click; beyond it, it pans
 /// the spectrum (CTUN off) or, with CTUN on, pans the locked centre (top strip) or grabs the VFO.
 struct SpectrumGestureSession: Sendable {

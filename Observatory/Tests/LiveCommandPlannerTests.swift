@@ -407,5 +407,6 @@ final class LiveCommandPlannerTests: XCTestCase {
     func testOverlayClicksDoNothingWhileVfoLocked() {
         XCTAssertEqual(plan(.tuneLandmark(hz: 7_074_000, mode: "DIGU"), state(), locked: true), [])
         XCTAssertEqual(plan(.tuneChannel(qsyHz: 5_330_500), state(), locked: true), [])
+        XCTAssertEqual(plan(.activateSpot(call: "K1ABC"), state(), locked: true), [])
     }
 }

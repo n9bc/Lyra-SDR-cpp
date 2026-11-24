@@ -143,24 +143,64 @@ final class SpectrumGestureContextTests: XCTestCase {
                               focused: focused, status: status, send: { _ in })
     }
 
-    func testMainStackTunesPanTuneReceiver() {
+    func testMainStackTunesPanTuneReceiver() throws {
         let d = RadioSnapshot.sample.display
-        let main = SpectrumGestureModel.context(stack: .main, display: d, inputs: inputs(), width: 800)
+        let main = try XCTUnwrap(SpectrumGestureModel.context(stack: .main, display: d, inputs: inputs(), width: 800))
         XCTAssertEqual(main.receiver, .main)
         XCTAssertEqual(main.carrierHz, d.mainCarrierHz)
         // Sub focused and on, drawn on the Main axis: the click tunes Sub against the Sub line.
-        let sub = SpectrumGestureModel.context(stack: .main, display: d,
-                                               inputs: inputs(sub: true, focused: .sub), width: 800)
+        let sub = try XCTUnwrap(SpectrumGestureModel.context(stack: .main, display: d,
+                                                             inputs: inputs(sub: true, focused: .sub), width: 800))
         XCTAssertEqual(sub.receiver, .sub)
         XCTAssertEqual(sub.carrierHz, d.subCarrierHz)
         XCTAssertEqual(sub.centreHz, (d.spanLowHz + d.spanHighHz) / 2)
     }
 
-    func testSubStackAlwaysTunesSubOnItsOwnSpan() {
+    func testSubStackAlwaysTunesSubOnItsOwnSpan() throws {
         let d = RadioSnapshot.sample.display.view(for: .sub)
-        let c = SpectrumGestureModel.context(stack: .sub, display: d, inputs: inputs(), width: 800)
+        let c = try XCTUnwrap(SpectrumGestureModel.context(stack: .sub, display: d, inputs: inputs(), width: 800))
         XCTAssertEqual(c.receiver, .sub)
         XCTAssertEqual(c.spanHz, d.spanHighHz - d.spanLowHz)
+    }
+
+    /// No analyzer (span 0) means no axis to map a click to (final review, M2).
+    func testNoContextWithoutAnAnalyzer() {
+        var d = RadioSnapshot.sample.display
+        d.spanHighHz = d.spanLowHz
+        XCTAssertNil(SpectrumGestureModel.context(stack: .main, display: d, inputs: inputs(), width: 800))
+        d.spanHighHz = d.spanLowHz - 10
+        XCTAssertNil(SpectrumGestureModel.context(stack: .main, display: d, inputs: inputs(), width: 800))
+        XCTAssertNil(SpectrumGestureModel.context(stack: .main, display: RadioSnapshot.sample.display,
+                                                  inputs: inputs(), width: 0))
+    }
+
+    // MARK: - Zoom accumulation (final review, M4)
+
+    func testFastZoomStepsAccumulateUntilTheSnapshotCatchesUp() {
+        var z = SpectrumZoomAccumulator()
+        XCTAssertEqual(z.next(snapshotZoom: 2, factor: 1.25, now: 0), 2.5, accuracy: 1e-9)
+        // The snapshot still says 2: build on the 2.5 just asked for, not on 2.
+        XCTAssertEqual(z.next(snapshotZoom: 2, factor: 1.25, now: 0.01), 3.125, accuracy: 1e-9)
+        XCTAssertEqual(z.next(snapshotZoom: 2.5, factor: 0.8, now: 0.02), 2.5, accuracy: 1e-9)
+        // Caught up: the snapshot is the base again.
+        XCTAssertEqual(z.next(snapshotZoom: 2.5, factor: 1.25, now: 0.03), 3.125, accuracy: 1e-9)
+    }
+
+    func testStaleRequestYieldsToTheSnapshot() {
+        var z = SpectrumZoomAccumulator()
+        _ = z.next(snapshotZoom: 2, factor: 1.25, now: 0)
+        // The engine settled elsewhere (another control changed it) and time has passed.
+        XCTAssertEqual(z.next(snapshotZoom: 4, factor: 1.25, now: 1), 5, accuracy: 1e-9)
+    }
+
+    func testAccumulatedZoomIsClamped() {
+        var z = SpectrumZoomAccumulator()
+        XCTAssertEqual(z.next(snapshotZoom: 15, factor: 1.25, now: 0), 16)
+        XCTAssertEqual(z.next(snapshotZoom: 15, factor: 1.25, now: 0.01), 16)
+        XCTAssertEqual(z.next(snapshotZoom: 15, factor: 0.8, now: 0.02), 12.8, accuracy: 1e-9)
+        var low = SpectrumZoomAccumulator()
+        XCTAssertEqual(low.next(snapshotZoom: 1, factor: 0.8, now: 0), 1)
+        XCTAssertEqual(low.next(snapshotZoom: .nan, factor: 1.25, now: 5), 1.25, accuracy: 1e-9)
     }
 
     func testAvailability() {

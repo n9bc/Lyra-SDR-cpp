@@ -107,7 +107,7 @@ enum LiveCommandPlanner {
         case .setSpotsVisible(let on): return [.setShowSpotsPref(on)]
         case .setTuningStep(let id, let hz): return [.setStepPref(id, hz)]
 
-        case .activateSpot(let call): return [.activateSpot(call)]
+        case .activateSpot(let call): return vfoLocked ? [] : [.activateSpot(call)]
         case .tuneLandmark(let hz, let mode):
             return vfoLocked ? [] : jump(r, toHz: hz, mode: RadioMode(rawValue: mode)?.rawValue)
         case .tuneChannel(let qsy):

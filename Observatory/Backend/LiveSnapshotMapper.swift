@@ -58,7 +58,9 @@ enum LiveSnapshotMapper {
         let spanLow = mainCentre - mainSpan / 2, spanHigh = mainCentre + mainSpan / 2
         let subCentre = Int64(r.rx2Hz)
         let subSpan = Int64(d.iqRateHz)
-        let zoom = d.spanHz > 0 && d.iqRateHz > 0 ? Double(d.iqRateHz) / Double(d.spanHz) : d.zoom
+        // During TX the span is the TX analyzer's, not iqRate / zoom, so show the RX preference.
+        let zoom = !d.txOwnsAnalyzer && d.spanHz > 0 && d.iqRateHz > 0
+            ? Double(d.iqRateHz) / Double(d.spanHz) : d.zoom
         let mainCarrier = SpectrumGeometry.mainCarrierHz(
             centre: mainCentre, markerOffsetHz: Int64(r.markerOffsetHz), ctunDialOffsetHz: dialOffset)
         let subCarrier = SpectrumGeometry.subCarrierHz(

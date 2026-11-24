@@ -408,6 +408,16 @@ final class LiveSnapshotMapperTests: XCTestCase {
         XCTAssertTrue(d.txAxis)
     }
 
+    /// During TX the span is the TX analyzer's 96 kHz, not iqRate / zoom: show the RX zoom pref
+    /// (final review, M3).
+    func testZoomIsThePreferenceWhileTxOwnsTheAnalyzer() {
+        var e = EngineState.idle
+        e.display.iqRateHz = 192_000; e.display.spanHz = 48_000; e.display.zoom = 4
+        XCTAssertEqual(map(e).display.zoom, 4)
+        e.display.spanHz = 96_000; e.display.txOwnsAnalyzer = true
+        XCTAssertEqual(map(e).display.zoom, 4)
+    }
+
     func testDbRangesComeFromPrefs() {
         var e = EngineState.idle
         e.display.dbMin = -110; e.display.dbMax = -10; e.display.dbAuto = true

@@ -121,6 +121,15 @@ final class LiveRadioBackendTests: XCTestCase {
         XCTAssertFalse(backend.snapshot.session.vfoLocked)
     }
 
+    func testSpotClickReachesTheEngineOnlyWhenUnlocked() {
+        let backend = make()
+        backend.send(.activateSpot(call: "K1ABC"))
+        XCTAssertEqual(facade.activatedSpots, ["K1ABC"])
+        backend.send(.setVFOLock(true))
+        backend.send(.activateSpot(call: "W2XYZ"))
+        XCTAssertEqual(facade.activatedSpots, ["K1ABC"])
+    }
+
     func testEngineChangeUpdatesSnapshot() {
         let backend = make()
         facade.state.radio.rx1Hz = 14_200_000

@@ -289,18 +289,18 @@ private final class Flag: @unchecked Sendable {
         XCTAssertEqual(n.snapshot.display.smoothing, 5)
     }
 
-    func testClickSnapAndWheelShareTheScrollStepSource() {
+    func testClickSnapAndWheelShareTheScrollStepSource() throws {
         for (step, exact, clickGrid, wheelGrid) in [(500, false, 500, 500), (50, true, 100, 100),
                                                     (1000, true, 100, 1000), (50, false, 50, 50)] {
             var snap = RadioSnapshot.sample
             snap.display.wheelStepHz = step
             snap.display.exactTuning = exact
             snap.display.stickyWheel = true
-            let ctx = SpectrumGestureModel.context(
+            let ctx = try XCTUnwrap(SpectrumGestureModel.context(
                 stack: .main, display: snap.display,
                 inputs: SpectrumGestureInputs(ctuneEnabled: false, subEnabled: false, splitEnabled: false,
                                               focused: .main, status: .mocked, send: { _ in }),
-                width: 1000)
+                width: 1000))
             // Both read the display's one step; Exact only changes how each applies it (Qt rules).
             XCTAssertEqual(ctx.stepHz, step)
             XCTAssertEqual(ctx.round100, exact)

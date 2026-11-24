@@ -26,8 +26,10 @@ extension SpectrumGestureModel {
     /// The gesture context for `stack`'s display. The Main stack tunes whichever receiver Qt's
     /// `panTuneRx` rule picks; the Sub stack always tunes Sub. `display` is that stack's own
     /// view (`DisplaySnapshot.view(for:)`), so its span and VFO line are already the right ones.
+    /// Nil with no analyzer (an empty span) or no width: there is no axis to map a gesture to.
     nonisolated static func context(stack: ReceiverID, display: DisplaySnapshot,
-                                    inputs: SpectrumGestureInputs, width: Double) -> SpectrumGestureContext {
+                                    inputs: SpectrumGestureInputs, width: Double) -> SpectrumGestureContext? {
+        guard display.spanHighHz > display.spanLowHz, width > 0 else { return nil }
         let receiver = stack == .sub ? ReceiverID.sub
             : tuneReceiver(subEnabled: inputs.subEnabled, splitEnabled: inputs.splitEnabled,
                            focusedRx: inputs.focused == .sub ? 2 : 1)
@@ -69,6 +71,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         var inputs: SpectrumGestureInputs?
 
         private var session: SpectrumGestureSession?
+        private var zoom = SpectrumZoomAccumulator()
         private var optionClick = false
         private var scrollAccumulator = 0.0
 
@@ -82,9 +85,10 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         private func context() -> (SpectrumGestureContext, SpectrumGestureInputs)? {
-            guard let (display, inputs) = live, bounds.width > 0 else { return nil }
-            return (SpectrumGestureModel.context(stack: stack, display: display, inputs: inputs,
-                                                 width: bounds.width), inputs)
+            guard let (display, inputs) = live,
+                  let ctx = SpectrumGestureModel.context(stack: stack, display: display, inputs: inputs,
+                                                         width: bounds.width) else { return nil }
+            return (ctx, inputs)
         }
 
         private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
@@ -139,7 +143,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
                 precise: event.hasPreciseScrollingDeltas, accumulator: &scrollAccumulator)
             guard ticks != 0 else { return }
             if event.modifierFlags.contains(.command) {
-                inputs.send(.setZoom(display.zoom * SpectrumGestureModel.zoomFactor(ticks: ticks)))
+                inputs.send(.setZoom(zoom.next(snapshotZoom: display.zoom,
+                                               factor: SpectrumGestureModel.zoomFactor(ticks: ticks),
+                                               now: event.timestamp)))
             } else {
                 inputs.send(.wheelTune(ctx.receiver, ticks: ticks))
             }
@@ -147,7 +153,9 @@ struct SpectrumInteractionView: NSViewRepresentable {
 
         override func magnify(with event: NSEvent) {
             guard let (_, inputs) = context(), let display else { return super.magnify(with: event) }
-            inputs.send(.setZoom(display.zoom * max(0.1, 1 + Double(event.magnification))))
+            inputs.send(.setZoom(zoom.next(snapshotZoom: display.zoom,
+                                           factor: max(0.1, 1 + Double(event.magnification)),
+                                           now: event.timestamp)))
         }
     }
 }
