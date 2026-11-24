@@ -1,0 +1,385 @@
+--- wdsp-2.11/cfcomp.c
++++ fixed/cfcomp.c
+@@ -323,11 +323,40 @@
+ 	a->delta         = (double*)malloc0 (a->msize * sizeof(double));
+ 	a->delta_copy    = (double*)malloc0 (a->msize * sizeof(double));
+ 	a->cfc_gain_copy = (double*)malloc0 (a->msize * sizeof(double));
++
++	// comp_method 1 state
++	{
++		double hop = (double)a->incr / a->rate;
++		double fincr = a->rate / (double)a->fsize;
++		a->attmult = exp (-hop / a->tatt);
++		a->relmult = exp (-hop / a->trel);
++		a->grs = (double*)malloc0 (a->msize * sizeof(double));
++		a->pwr = (double*)malloc0 (a->msize * sizeof(double));
++		a->elo = (int*)malloc0 (a->msize * sizeof(int));
++		a->ehi = (int*)malloc0 (a->msize * sizeof(int));
++		for (i = 0; i < a->msize; i++)
++		{
++			double f = fincr * (double)i;
++			double hw = 24.7 * (4.37 * f / 1000.0 + 1.0) / 6.0;	// half of 1/3 ERB
++			int lo = (int)ceil ((f - hw) / fincr);
++			int hi = (int)floor ((f + hw) / fincr);
++			if (lo < 0) lo = 0;
++			if (hi > a->msize - 1) hi = a->msize - 1;
++			if (lo > i) lo = i;
++			if (hi < i) hi = i;
++			a->elo[i] = lo;
++			a->ehi[i] = hi;
++		}
++	}
+ }
+ 
+ void decalc_cfcomp(CFCOMP a)
+ {
+ 	int i;
++	_aligned_free (a->ehi);
++	_aligned_free (a->elo);
++	_aligned_free (a->pwr);
++	_aligned_free (a->grs);
+ 	_aligned_free (a->cfc_gain_copy);
+ 	_aligned_free (a->delta_copy);
+ 	_aligned_free (a->delta);
+@@ -379,6 +408,10 @@
+ 	a->prepeq = prepeq;
+ 	a->mtau = mtau;
+ 	a->dtau = dtau;
++	a->ratio = 20.0;
++	a->knee = 6.0;
++	a->tatt = 0.001;
++	a->trel = 0.060;
+ 	a->Fg = (double *)malloc0 (a->max_freqs * sizeof (double));
+ 	a->Fe = (double *)malloc0 (a->max_freqs * sizeof (double));
+ 	a->G  = (double *)malloc0 (a->max_freqs * sizeof (double));
+@@ -420,6 +453,7 @@
+ 	a->saveidx  = 0;
+ 	a->gain = 0.0;
+ 	memset(a->delta, 0, a->msize * sizeof(double));
++	memset(a->grs, 0, a->msize * sizeof(double));
+ }
+ 
+ void destroy_cfcomp (CFCOMP a)
+@@ -440,12 +474,12 @@
+ void calc_mask (CFCOMP a)
+ {
+ 	int i;
+-	double comp, mask, delta;
++	double comp, mask, delta, test;
+ 	switch (a->comp_method)
+ 	{
+ 	case 0:
+ 		{
+-			double mag, test;
++			double mag;
+ 			for (i = 0; i < a->msize; i++)
+ 			{
+ 				mag = sqrt (a->forfftout[2 * i + 0] * a->forfftout[2 * i + 0] 
+@@ -466,6 +500,38 @@
+ 			}
+ 			break;
+ 		}
++	case 1:
++		{
++			double L, ex, gr, slope = 1.0 / a->ratio - 1.0;
++			for (i = 0; i < a->msize; i++)
++				a->pwr[i] = a->forfftout[2 * i + 0] * a->forfftout[2 * i + 0]
++				          + a->forfftout[2 * i + 1] * a->forfftout[2 * i + 1];
++			for (i = 0; i < a->msize; i++)
++			{
++				int j;
++				double ps = 0.0;
++				for (j = a->elo[i]; j <= a->ehi[i]; j++) ps += a->pwr[j];
++				ps /= (double)(a->ehi[i] - a->elo[i] + 1);
++				comp = a->cfc_gain[i];
++				// level (dB) after the per-bin makeup gain; threshold is 0 dB (unit magnitude), as in method 0
++				L = 10.0 * log10 (ps + 1.0e-30) + 20.0 * log10 (comp);
++				ex = L;
++				if (2.0 * ex < -a->knee) gr = 0.0;
++				else if (2.0 * fabs (ex) <= a->knee) gr = slope * (ex + 0.5 * a->knee) * (ex + 0.5 * a->knee) / (2.0 * a->knee);
++				else gr = slope * ex;
++				if (gr < a->grs[i]) a->grs[i] = a->attmult * a->grs[i] + (1.0 - a->attmult) * gr;
++				else                a->grs[i] = a->relmult * a->grs[i] + (1.0 - a->relmult) * gr;
++				mask = comp * pow (10.0, 0.05 * a->grs[i]);
++				a->cmask[i] = mask;
++				test = comp * sqrt (a->pwr[i]);
++				if (test > a->gain) a->gain = test;
++				else a->gain = a->mmult * a->gain;
++				delta = a->cfc_gain[i] - a->cmask[i];
++				if (delta > a->delta[i]) a->delta[i] = delta;
++				else a->delta[i] *= a->dmult;
++			}
++			break;
++		}
+ 	}
+ 	if (a->peq_run)
+ 	{
+@@ -553,268 +619,3 @@
+ 	calc_cfcomp (a);
+ }
+ 
+-/********************************************************************************************************
+-*																										*
+-*											TXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-// Use for both Compressor and Equalizer.  Per another call below, the Equalizer can be separately
+-//    turned OFF/ON, as long as this is set to Run.  However, the Equalizer cannot run without this
+-//    being set to Run and the Compressor also being enabled.  That should be OK as there is not much
+-//    reason to have this second equalizer unless the compressor is running.
+-PORT
+-void SetTXACFCOMPRun (int channel, int run)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->run != run)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Both the compressor and post-equalizer must go the same place in the TX audio processing pipeline; hence
+-//    there are NOT separate functions for them.
+-PORT 
+-void SetTXACFCOMPPosition (int channel, int pos)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->position != pos)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->position = pos;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// This function was retained for interfaces, such as that of the Legacy UI,
+-// for which the Compressor and Equalizer have identical frequency sets.
+-PORT
+-void SetTXACFCOMPprofile (int channel, int nfreqs, double* F, double* G, double *E)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || G == 0 || E == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsG = nfreqs;
+-	a->nfreqsE = nfreqs;
+-	memcpy (a->Fg, F, a->nfreqsG * sizeof (double));
+-	memcpy (a->Fe, F, a->nfreqsE * sizeof (double));
+-	memcpy (a->G,  G, a->nfreqsG * sizeof (double));
+-	memcpy (a->E,  E, a->nfreqsE * sizeof (double));
+-	calc_compG(a);
+-	calc_compE(a);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-// Sets Frequencies and Compression for Compressor only.
+-PORT
+-void SetTXACFCOMPGprofile(int channel, int nfreqs, double* F, double* G)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || G == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsG = nfreqs;
+-	memcpy(a->Fg, F, a->nfreqsG * sizeof(double));
+-	memcpy(a->G,  G, a->nfreqsG * sizeof(double));
+-	calc_compG(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-// Sets Frequencies and Gain for Equalizer only.
+-PORT
+-void SetTXACFCOMPEprofile(int channel, int nfreqs, double* F, double* E)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || E == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsE = nfreqs;
+-	memcpy(a->Fe, F, a->nfreqsE * sizeof(double));
+-	memcpy(a->E,  E, a->nfreqsE * sizeof(double));
+-	calc_compE(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-
+-// Flat compression gain (pre-compression).
+-PORT
+-void SetTXACFCOMPPrecomp (int channel, double precomp)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->precomp != precomp)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->precomp = precomp;
+-		a->precomplin = pow (10.0, 0.05 * a->precomp);
+-		for (int i = 0; i < a->msize; i++)
+-		{
+-			a->cfc_gain[i] = a->precomplin * a->comp[i];
+-		}
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Turn Equalizer OFF/ON independently; but, Compressor must be enabled to use this Equalizer.
+-PORT
+-void SetTXACFCOMPPeqRun (int channel, int run)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->peq_run != run)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->peq_run = run;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Preamp that goes with the Equalizer
+-PORT
+-void SetTXACFCOMPPrePeq (int channel, double prepeq)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->prepeq = prepeq;
+-	a->prepeqlin = pow (10.0, 0.05 * a->prepeq);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPDisplayCompression(int channel, double* comp_values, int* ready)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (*ready = a->mask_ready)
+-	{
+-		memcpy(a->delta_copy, a->delta, a->msize * sizeof(double));
+-		memcpy(a->cfc_gain_copy, a->cfc_gain, a->msize * sizeof(double));
+-		a->mask_ready = 0;
+-	}
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-	if (*ready)
+-	{
+-		int step = (a->msize - 1) / 1024;
+-		for (int i = 0, j = 0; i < 1025; i++, j += step)
+-		{
+-			double gain = a->cfc_gain_copy[j];
+-			double delta = a->delta_copy[j];
+-			if (delta <= 0.0 || gain <= 0.0)
+-			{
+-				comp_values[i] = 0.0;
+-			}
+-			else
+-			{
+-				double denom = gain - delta;
+-				if (denom <= 1e-20)
+-				{
+-					comp_values[i] = 40.0;
+-				}
+-				else
+-				{
+-					comp_values[i] = 20.0 * mlog10(gain / denom);
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-PORT
+-void SetTXACFCOMPCompCurve (int channel, int deg, int r, int umethod)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->gdeg = deg;
+-	b->p = deg;
+-	b->r = r;
+-	if (umethod == 1) b->umethod = umethod;
+-	else b->umethod = 0;
+-	if (!checkSplineInputs (a->nfreqsG, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compG (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPCompWeights (int channel, int nfreq, double* weights)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	for (int i = 0; i < nfreq; i++)
+-		b->W[i] = weights[i];
+-	if (!checkSplineInputs (a->nfreqsG, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compG (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPCompDraw (int channel, double* X, double* Y)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	memcpy(X, b->Xs, b->upts * sizeof(double));
+-	memcpy(Y, b->Ys, b->upts * sizeof(double));
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPPeqCurve (int channel, int deg, int r, int umethod)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->edeg = deg;
+-	b->p = deg;
+-	b->r = r;
+-	if (umethod == 1) b->umethod = umethod;
+-	else b->umethod = 0;
+-	if (!checkSplineInputs (a->nfreqsE, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compE (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPPeqWeights (int channel, int nfreq, double* weights)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	for (int i = 0; i < nfreq; i++)
+-		b->W[i] = weights[i];
+-	if (!checkSplineInputs (a->nfreqsE, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compE (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPPeqDraw (int channel, double* X, double* Y)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	memcpy (X, b->Xs, b->upts * sizeof(double));
+-	memcpy (Y, b->Ys, b->upts * sizeof(double));
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-

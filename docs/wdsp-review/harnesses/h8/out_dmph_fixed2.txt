@@ -1,0 +1,7 @@
+theory 75us: 10000Hz rel 1k -12.79 dB  15000Hz rel 1k -16.20 dB  
+theory 50us: 10000Hz rel 1k -9.95 dB  15000Hz rel 1k -13.25 dB  
+phase 0 default (create: on, 75us)   dmphL.run=1 tau=75us | A1k=0.1174 A10k=0.0269 A15k=0.0177 | 10k rel 1k -12.80 dB, 15k rel 1k -16.44 dB | sqgain=1.000 | max|dy| first 64 samples after set=0.0000
+phase 1 Set(on, 50us)                dmphL.run=1 tau=50us | A1k=0.1238 A10k=0.0393 A15k=0.0262 | 10k rel 1k -9.97 dB, 15k rel 1k -13.48 dB | sqgain=1.000 | max|dy| first 64 samples after set=0.0125
+phase 2 Set(off)                     dmphL.run=0 tau=75us | A1k=0.1298 A10k=0.1298 A15k=0.1269 | 10k rel 1k 0.00 dB, 15k rel 1k -0.20 dB | sqgain=1.000 | max|dy| first 64 samples after set=0.1015
+phase 3 Set(on, 75us)                dmphL.run=1 tau=75us | A1k=0.1174 A10k=0.0269 A15k=0.0177 | 10k rel 1k -12.80 dB, 15k rel 1k -16.44 dB | sqgain=1.000 | max|dy| first 64 samples after set=0.0910
+steady-state max|dy| (phase 0, second half) = 0.0106

@@ -1,0 +1,7 @@
+orig   S2   I/C=-10dB usb cnr=30               lock_s= 0.002 fin_df=   0.004Hz rms_e= 0.022rad slips=   0 snr_pll= 12.87dB snr_genie= 14.38dB acq=0
+orig   S2   I/C=+0dB usb cnr=30                lock_s=11.732 fin_df=   0.035Hz rms_e= 0.067rad slips=   0 snr_pll=  8.36dB snr_genie= 14.31dB acq=0
+orig   S2   I/C=+6dB usb cnr=30                lock_s=19.989 fin_df=  -0.142Hz rms_e= 0.148rad slips=   0 snr_pll=  4.24dB snr_genie= 14.13dB acq=0
+orig   S2   I/C=+10dB usb cnr=30               lock_s=19.999 fin_df=   0.046Hz rms_e= 0.260rad slips=   0 snr_pll=  0.94dB snr_genie= 13.73dB acq=0
+orig   S2   I/C=+15dB usb cnr=30               lock_s=20.000 fin_df=1608.798Hz rms_e= 1.819rad slips=27565 snr_pll=-29.66dB snr_genie= 12.61dB acq=0
+orig   S2   I/C=+20dB usb cnr=30               lock_s=20.000 fin_df=1586.750Hz rms_e= 1.816rad slips=30535 snr_pll=-34.97dB snr_genie= 10.31dB acq=0
+orig   S2   I/C=+25dB usb cnr=30               lock_s=20.000 fin_df=1511.094Hz rms_e= 1.815rad slips=30017 snr_pll=-39.86dB snr_genie=  6.55dB acq=0

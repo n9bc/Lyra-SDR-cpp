@@ -1,0 +1,15 @@
+--- wdsp-2.11/rmatch.h
++++ fixed/rmatch.h
+@@ -112,6 +112,12 @@
+ 	volatile long overflows;
+ 	int force;
+ 	double fvar;
++	// time-based type-II (PI) fill-level loop [h14 fix]
++	double pi_bw;		// loop natural frequency (Hz)
++	double pi_zeta;		// damping
++	double pi_tau;		// 1-pole error smoothing time constant (s)
++	double pi_kp, pi_ki;
++	double pi_integ, pi_efilt, var0;
+ } rmatch, *RMATCH;
+ 
+ extern __declspec (dllexport) void* create_rmatchV(int in_size, int out_size, int nom_inrate, int nom_outrate, int ringsize, double var);

@@ -1,0 +1,298 @@
+--- wdsp-2.11/wcpAGC.c
++++ orig/wcpAGC.c
+@@ -363,295 +363,5 @@
+ 	decalc_wcpagc (a);
+ 	a->io_buffsize = size;
+ 	calc_wcpagc (a);
+-}
+-
+-/********************************************************************************************************
+-*																										*
+-*											RXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-PORT void
+-SetRXAAGCMode (int channel, int mode)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	switch (mode)
+-	{
+-		case 0:	//agcOFF
+-			rxa[channel].agc.p->mode = 0;
+-			loadWcpAGC ( rxa[channel].agc.p );
+-			break;
+-		case 1:	//agcLONG
+-			rxa[channel].agc.p->mode = 1;
+-			rxa[channel].agc.p->hangtime = 2.000;
+-			rxa[channel].agc.p->tau_decay = 2.000;
+-			loadWcpAGC ( rxa[channel].agc.p );
+-			break;
+-		case 2:	//agcSLOW
+-			rxa[channel].agc.p->mode = 2;
+-			rxa[channel].agc.p->hangtime = 1.000;
+-			rxa[channel].agc.p->tau_decay = 0.500;
+-			loadWcpAGC ( rxa[channel].agc.p );
+-			break;
+-		case 3:	//agcMED
+-			rxa[channel].agc.p->mode = 3;
+-			rxa[channel].agc.p->hang_thresh = 1.0;
+-			rxa[channel].agc.p->hangtime = 0.000;
+-			rxa[channel].agc.p->tau_decay = 0.250;
+-			loadWcpAGC ( rxa[channel].agc.p );
+-			break;
+-		case 4:	//agcFAST
+-			rxa[channel].agc.p->mode = 4;
+-			rxa[channel].agc.p->hang_thresh = 1.0;
+-			rxa[channel].agc.p->hangtime = 0.000;
+-			rxa[channel].agc.p->tau_decay = 0.050;
+-			loadWcpAGC ( rxa[channel].agc.p );
+-			break;
+-		default:
+-			rxa[channel].agc.p->mode = 5;
+-			break;
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCAttack (int channel, int attack)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->tau_attack = (double)attack / 1000.0;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCDecay (int channel, int decay)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->tau_decay = (double)decay / 1000.0;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCHang (int channel, int hang)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->hangtime = (double)hang / 1000.0;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void				
+-GetRXAAGCHangLevel(int channel, double *hangLevel)
+-//for line on bandscope
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	*hangLevel = 20.0 * log10( rxa[channel].agc.p->hang_level / 0.637 );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void			
+-SetRXAAGCHangLevel(int channel, double hangLevel)
+-//for line on bandscope
+-{
+-	double convert, tmp;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	if (rxa[channel].agc.p->max_input > rxa[channel].agc.p->min_volts)
+-	{
+-		convert = pow (10.0, hangLevel / 20.0);
+-		tmp = max(1e-8, (convert - rxa[channel].agc.p->min_volts) / 
+-			(rxa[channel].agc.p->max_input - rxa[channel].agc.p->min_volts));
+-		rxa[channel].agc.p->hang_thresh = 1.0 + 0.125 * log10 (tmp);
+-	}
+-	else
+-		rxa[channel].agc.p->hang_thresh = 1.0;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void				
+-GetRXAAGCHangThreshold(int channel, int *hangthreshold)
+-//for slider in setup
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	*hangthreshold = (int)(100.0 * rxa[channel].agc.p->hang_thresh);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCHangThreshold (int channel, int hangthreshold)
+-//For slider in setup
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->hang_thresh = (double)hangthreshold / 100.0;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-static double agc_noise_bw (int channel)
+-{
+-	return rxa[channel].nbp0.p->fhigh - rxa[channel].nbp0.p->flow;
+-}
+-
+-PORT void				
+-GetRXAAGCThresh(int channel, double *thresh, double size, double rate)
+-//for line on bandscope.
+-{
+-	double noise_offset;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	noise_offset = 10.0 * log10(agc_noise_bw (channel) * size / rate);
+-	*thresh = 20.0 * log10( rxa[channel].agc.p->min_volts ) - noise_offset;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void				
+-SetRXAAGCThresh(int channel, double thresh, double size, double rate)
+-//for line on bandscope
+-{
+-	double noise_offset;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	noise_offset = 10.0 * log10(agc_noise_bw (channel) * size / rate);
+-	rxa[channel].agc.p->max_gain = rxa[channel].agc.p->out_target / 
+-		(rxa[channel].agc.p->var_gain * pow (10.0, (thresh + noise_offset) / 20.0));
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+ }
+ 
+-PORT void			
+-GetRXAAGCTop(int channel, double *max_agc)
+-//for AGC Max Gain in setup
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	*max_agc = 20 * log10 (rxa[channel].agc.p->max_gain);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCTop (int channel, double max_agc)
+-//for AGC Max Gain in setup
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->max_gain = pow (10.0, (double)max_agc / 20.0);
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCSlope (int channel, int slope)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->var_gain = pow (10.0, (double)slope / 20.0 / 10.0);
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCFixed (int channel, double fixed_agc)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->fixed_gain = pow (10.0, (double)fixed_agc / 20.0);
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAGCMaxInputLevel (int channel, double level)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].agc.p->max_input = level;
+-	loadWcpAGC ( rxa[channel].agc.p );
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-/********************************************************************************************************
+-*																										*
+-*											TXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-PORT void
+-SetTXAALCSt (int channel, int state)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].alc.p->run = state;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXAALCAttack (int channel, int attack)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].alc.p->tau_attack = (double)attack / 1000.0;
+-	loadWcpAGC(txa[channel].alc.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-PORT void
+-SetTXAALCDecay (int channel, int decay)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].alc.p->tau_decay = (double)decay / 1000.0;
+-	loadWcpAGC(txa[channel].alc.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXAALCHang (int channel, int hang)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].alc.p->hangtime = (double)hang / 1000.0;
+-	loadWcpAGC(txa[channel].alc.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXAALCMaxGain (int channel, double maxgain)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].alc.p->max_gain = pow (10.0,(double)maxgain / 20.0);
+-	loadWcpAGC(txa[channel].alc.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXALevelerSt (int channel, int state)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].leveler.p->run = state;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXALevelerAttack (int channel, int attack)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].leveler.p->tau_attack = (double)attack / 1000.0;
+-	loadWcpAGC(txa[channel].leveler.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXALevelerDecay (int channel, int decay)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].leveler.p->tau_decay = (double)decay / 1000.0;
+-	loadWcpAGC(txa[channel].leveler.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXALevelerHang (int channel, int hang)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].leveler.p->hangtime = (double)hang / 1000.0;
+-	loadWcpAGC(txa[channel].leveler.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetTXALevelerTop (int channel, double maxgain)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	txa[channel].leveler.p->max_gain = pow (10.0,(double)maxgain / 20.0);
+-	loadWcpAGC(txa[channel].leveler.p);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}

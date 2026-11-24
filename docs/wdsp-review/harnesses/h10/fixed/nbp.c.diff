@@ -1,0 +1,91 @@
+--- wdsp-2.11/nbp.c
++++ fixed/nbp.c
+@@ -85,26 +85,26 @@
+ 	switch (a->wintype)
+ 	{
+ 	case 0:
+-		min_width = 1600.0 / (a->nc / 256) * (a->rate / 48000);
++		min_width = 1600.0 / ((double)a->nc / 256.0) * (a->rate / 48000);
+ 		break;
+ 	case 1:
+-		min_width = 2200.0 / (a->nc / 256) * (a->rate / 48000);
++		min_width = 2200.0 / ((double)a->nc / 256.0) * (a->rate / 48000);
+ 		break;
+ 	default:
+-		min_width = 2200.0 / (a->nc / 256) * (a->rate / 48000);
++		min_width = 2200.0 / ((double)a->nc / 256.0) * (a->rate / 48000);
+ 		break;
+ 	}
+ 	return min_width;
+ }
+ 
+ int make_nbp (int nn, int* active, double* center, double* width, double* nlow, double* nhigh, 
+-	double minwidth, int autoincr, double flow, double fhigh, double* bplow, double* bphigh, int* havnotch)
++	double minwidth, int autoincr, double flow, double fhigh, double* bplow, double* bphigh, int* havnotch, int maxpb)
+ {
+ 	int nbp;
+-	int nnbp, adds;
++	int w, adds;
+ 	int i, j, k;
+ 	double nl, nh;
+-	int* del = (int *) malloc0 (1024 * sizeof (int));
++	int* del = (int *) malloc0 (maxpb * sizeof (int));
+ 	if (fhigh > flow)
+ 	{
+ 		bplow[0]  = flow;
+@@ -141,7 +141,7 @@
+ 					{
+ 						del[i] = 1;
+ 					}
+-					else if (nl > bplow[i] && nh < bphigh[i])
++					else if (nl > bplow[i] && nh < bphigh[i] && nbp + adds < maxpb)
+ 					{
+ 						
+ 						bplow[nbp + adds] = nh;
+@@ -160,21 +160,17 @@
+ 				}
+ 			}
+ 			nbp += adds;
+-			nnbp = nbp;
+-			for (i = 0; i < nbp; i++)
++			for (i = 0, w = 0; i < nbp; i++)
+ 			{
+-				if (del[i] == 1)
++				if (del[i] != 1)
+ 				{
+-					nnbp--;
+-					for (j = i; j < nnbp; j++)
+-					{
+-						bplow[j] = bplow[j + 1];
+-						bphigh[j] = bphigh[j + 1];
+-					}
+-					del[i] = 0;
++					bplow[w] = bplow[i];
++					bphigh[w] = bphigh[i];
++					w++;
+ 				}
++				del[i] = 0;
+ 			}
+-			nbp = nnbp;
++			nbp = w;
+ 		}
+ 	}
+ 	_aligned_free (del);
+@@ -193,7 +189,7 @@
+ 		fl = a->flow  + offset;
+ 		fh = a->fhigh + offset;
+ 		a->numpb = make_nbp (b->nn, b->active, b->fcenter, b->fwidth, b->nlow, b->nhigh, 
+-			min_notch_width (a), a->autoincr, fl, fh, a->bplow, a->bphigh, &a->havnotch);
++			min_notch_width (a), a->autoincr, fl, fh, a->bplow, a->bphigh, &a->havnotch, a->maxpb);
+ 		// when tuning, no need to recalc filter if there were not and are not any notches in passband
+ 		if (a->hadnotch || a->havnotch)
+ 		{
+@@ -226,7 +222,7 @@
+ 		fl = a->flow  + offset;
+ 		fh = a->fhigh + offset;
+ 		a->numpb = make_nbp (b->nn, b->active, b->fcenter, b->fwidth, b->nlow, b->nhigh, 
+-			min_notch_width (a), a->autoincr, fl, fh, a->bplow, a->bphigh, &a->havnotch);
++			min_notch_width (a), a->autoincr, fl, fh, a->bplow, a->bphigh, &a->havnotch, a->maxpb);
+ 		for (i = 0; i < a->numpb; i++)
+ 		{
+ 			a->bplow[i]  -=	offset;

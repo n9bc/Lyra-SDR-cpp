@@ -1,0 +1,2 @@
+.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.F..F......F..F......F..F..F......F..F......F..F......F..F......F..F..F...F..F..F
+orig frozen in 54 of 117 silence lengths 1.0..30.0 s step 0.25 s

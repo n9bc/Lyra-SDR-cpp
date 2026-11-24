@@ -1,0 +1,22 @@
+== orig npe0 Z=0.5
+  suppression: pre-silence -20.03 dB | post 5-10s -20.04 dB | post last 5s -20.05 dB | sigma2N frozen for 0 blocks at end
+== orig npe0 Z=1
+  suppression: pre-silence -20.03 dB | post 5-10s -20.07 dB | post last 5s -20.05 dB | sigma2N frozen for 0 blocks at end
+== orig npe0 Z=1.3
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 2813 blocks at end
+== orig npe0 Z=1.5
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 2814 blocks at end
+== orig npe0 Z=2
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 2815 blocks at end
+== orig npe0 Z=3
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 2812 blocks at end
+== orig npe0 Z=5
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 2812 blocks at end
+== orig npe0 Z=10
+  suppression: pre-silence -20.03 dB | post 5-10s -20.08 dB | post last 5s -20.02 dB | sigma2N frozen for 2 blocks at end
+== orig npe0 Z=20
+  suppression: pre-silence -20.03 dB | post 5-10s -20.07 dB | post last 5s -20.05 dB | sigma2N frozen for 0 blocks at end
+== orig npe0 Z=30
+  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 3831 blocks at end
+== orig npe0 Z=60
+  suppression: pre-silence -20.03 dB | post 5-10s -20.06 dB | post last 5s -20.03 dB | sigma2N frozen for 0 blocks at end

@@ -1,0 +1,4 @@
+E2 keep  talker 0 300s: live coefficient events 18, final fc 397.3 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -168.6 worst -8.4; events > -40 dB: 2, > -30 dB: 2 | HF>3k click median -159.4 worst -42.3
+E2 keep  talker 2 300s: live coefficient events 18, final fc 348.1 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -54.5 worst -18.1; events > -40 dB: 7, > -30 dB: 6 | HF>3k click median -69.6 worst -47.2
+E2 keep  talker 100 300s: live coefficient events 18, final fc 245.5 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -156.5 worst -14.0; events > -40 dB: 6, > -30 dB: 5 | HF>3k click median -147.4 worst -48.8
+E2 keep  talker 101 300s: live coefficient events 18, final fc 202.2 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -164.0 worst -19.9; events > -40 dB: 5, > -30 dB: 4 | HF>3k click median -154.3 worst -56.4

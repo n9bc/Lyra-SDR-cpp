@@ -1,0 +1,273 @@
+--- wdsp-2.11/cfcomp.c
++++ orig/cfcomp.c
+@@ -551,270 +551,5 @@
+ 	decalc_cfcomp (a);
+ 	a->bsize = size;
+ 	calc_cfcomp (a);
+-}
+-
+-/********************************************************************************************************
+-*																										*
+-*											TXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-// Use for both Compressor and Equalizer.  Per another call below, the Equalizer can be separately
+-//    turned OFF/ON, as long as this is set to Run.  However, the Equalizer cannot run without this
+-//    being set to Run and the Compressor also being enabled.  That should be OK as there is not much
+-//    reason to have this second equalizer unless the compressor is running.
+-PORT
+-void SetTXACFCOMPRun (int channel, int run)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->run != run)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Both the compressor and post-equalizer must go the same place in the TX audio processing pipeline; hence
+-//    there are NOT separate functions for them.
+-PORT 
+-void SetTXACFCOMPPosition (int channel, int pos)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->position != pos)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->position = pos;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// This function was retained for interfaces, such as that of the Legacy UI,
+-// for which the Compressor and Equalizer have identical frequency sets.
+-PORT
+-void SetTXACFCOMPprofile (int channel, int nfreqs, double* F, double* G, double *E)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || G == 0 || E == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsG = nfreqs;
+-	a->nfreqsE = nfreqs;
+-	memcpy (a->Fg, F, a->nfreqsG * sizeof (double));
+-	memcpy (a->Fe, F, a->nfreqsE * sizeof (double));
+-	memcpy (a->G,  G, a->nfreqsG * sizeof (double));
+-	memcpy (a->E,  E, a->nfreqsE * sizeof (double));
+-	calc_compG(a);
+-	calc_compE(a);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-// Sets Frequencies and Compression for Compressor only.
+-PORT
+-void SetTXACFCOMPGprofile(int channel, int nfreqs, double* F, double* G)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || G == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsG = nfreqs;
+-	memcpy(a->Fg, F, a->nfreqsG * sizeof(double));
+-	memcpy(a->G,  G, a->nfreqsG * sizeof(double));
+-	calc_compG(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+ }
+ 
+-// Sets Frequencies and Gain for Equalizer only.
+-PORT
+-void SetTXACFCOMPEprofile(int channel, int nfreqs, double* F, double* E)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (nfreqs < 1 || nfreqs > a->max_freqs || F == 0 || E == 0)
+-	{
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-		return;
+-	}
+-	a->nfreqsE = nfreqs;
+-	memcpy(a->Fe, F, a->nfreqsE * sizeof(double));
+-	memcpy(a->E,  E, a->nfreqsE * sizeof(double));
+-	calc_compE(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-
+-// Flat compression gain (pre-compression).
+-PORT
+-void SetTXACFCOMPPrecomp (int channel, double precomp)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->precomp != precomp)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->precomp = precomp;
+-		a->precomplin = pow (10.0, 0.05 * a->precomp);
+-		for (int i = 0; i < a->msize; i++)
+-		{
+-			a->cfc_gain[i] = a->precomplin * a->comp[i];
+-		}
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Turn Equalizer OFF/ON independently; but, Compressor must be enabled to use this Equalizer.
+-PORT
+-void SetTXACFCOMPPeqRun (int channel, int run)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	if (a->peq_run != run)
+-	{
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->peq_run = run;
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-// Preamp that goes with the Equalizer
+-PORT
+-void SetTXACFCOMPPrePeq (int channel, double prepeq)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->prepeq = prepeq;
+-	a->prepeqlin = pow (10.0, 0.05 * a->prepeq);
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPDisplayCompression(int channel, double* comp_values, int* ready)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (*ready = a->mask_ready)
+-	{
+-		memcpy(a->delta_copy, a->delta, a->msize * sizeof(double));
+-		memcpy(a->cfc_gain_copy, a->cfc_gain, a->msize * sizeof(double));
+-		a->mask_ready = 0;
+-	}
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-	if (*ready)
+-	{
+-		int step = (a->msize - 1) / 1024;
+-		for (int i = 0, j = 0; i < 1025; i++, j += step)
+-		{
+-			double gain = a->cfc_gain_copy[j];
+-			double delta = a->delta_copy[j];
+-			if (delta <= 0.0 || gain <= 0.0)
+-			{
+-				comp_values[i] = 0.0;
+-			}
+-			else
+-			{
+-				double denom = gain - delta;
+-				if (denom <= 1e-20)
+-				{
+-					comp_values[i] = 40.0;
+-				}
+-				else
+-				{
+-					comp_values[i] = 20.0 * mlog10(gain / denom);
+-				}
+-			}
+-		}
+-	}
+-}
+-
+-PORT
+-void SetTXACFCOMPCompCurve (int channel, int deg, int r, int umethod)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->gdeg = deg;
+-	b->p = deg;
+-	b->r = r;
+-	if (umethod == 1) b->umethod = umethod;
+-	else b->umethod = 0;
+-	if (!checkSplineInputs (a->nfreqsG, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compG (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPCompWeights (int channel, int nfreq, double* weights)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	for (int i = 0; i < nfreq; i++)
+-		b->W[i] = weights[i];
+-	if (!checkSplineInputs (a->nfreqsG, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compG (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPCompDraw (int channel, double* X, double* Y)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->png;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	memcpy(X, b->Xs, b->upts * sizeof(double));
+-	memcpy(Y, b->Ys, b->upts * sizeof(double));
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPPeqCurve (int channel, int deg, int r, int umethod)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->edeg = deg;
+-	b->p = deg;
+-	b->r = r;
+-	if (umethod == 1) b->umethod = umethod;
+-	else b->umethod = 0;
+-	if (!checkSplineInputs (a->nfreqsE, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compE (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetTXACFCOMPPeqWeights (int channel, int nfreq, double* weights)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	for (int i = 0; i < nfreq; i++)
+-		b->W[i] = weights[i];
+-	if (!checkSplineInputs (a->nfreqsE, b->p, b->r, b->umethod, b->W))
+-	{
+-		calc_compE (a);
+-	}
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void GetTXACFCOMPPeqDraw (int channel, double* X, double* Y)
+-{
+-	CFCOMP a = txa[channel].cfcomp.p;
+-	NURBS b = a->pne;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	memcpy (X, b->Xs, b->upts * sizeof(double));
+-	memcpy (Y, b->Ys, b->upts * sizeof(double));
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-

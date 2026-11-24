@@ -1,0 +1,21 @@
+--- wdsp-2.11/cfcomp.h
++++ fixed/cfcomp.h
+@@ -102,6 +102,18 @@
+ 	double* delta_copy;
+ 	double* cfc_gain_copy;
+ 
++	// comp_method 1 (low-latency smoothed soft-knee) state
++	double ratio;      // compression ratio above threshold
++	double knee;       // knee width, dB
++	double tatt;       // attack time constant, s
++	double trel;       // release time constant, s
++	double attmult;
++	double relmult;
++	double* grs;       // smoothed per-bin gain reduction, dB (<= 0)
++	double* pwr;       // per-bin power scratch
++	int* elo;          // ERB-smoothing lower bin
++	int* ehi;          // ERB-smoothing upper bin
++
+ 	// nurbs stuff
+ 	int gdeg;
+ 	int edeg;

@@ -1,0 +1,12 @@
+--- wdsp-2.11/nurbs_spline.c
++++ fixed/nurbs_spline.c
+@@ -901,7 +901,8 @@
+         if (e->count == 0) {
+             e->ys[i] = fmax(e->y_clip_lo, fmin(e->y_clip_hi, new_y));
+         } else {
+-            e->ys[i] = local_alpha * new_y + (1.0 - local_alpha) * e->ys[i];
++            e->ys[i] = fmax(e->y_clip_lo, fmin(e->y_clip_hi,
++                       local_alpha * new_y + (1.0 - local_alpha) * e->ys[i]));  /* [h19 fix] clip every update */
+         }
+     }
+ 

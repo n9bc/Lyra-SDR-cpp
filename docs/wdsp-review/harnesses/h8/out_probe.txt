@@ -1,0 +1,36 @@
+orig fs=384000 probe f= 72000 Hz 10.0% dev: pwrNoise=0.00002  (disc sine power 0.0200 -> pwrNoise/power =  -30.72 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 19000 Hz 10.0% dev: pwrNoise=0.00003  (disc sine power 0.0200 -> pwrNoise/power =  -28.24 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 57000 Hz 10.0% dev: pwrNoise=0.00000  (disc sine power 0.0200 -> pwrNoise/power =  -36.90 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f=130000 Hz 10.0% dev: pwrNoise=0.02995  (disc sine power 0.0200 -> pwrNoise/power =    1.75 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f=116000 Hz 10.0% dev: pwrNoise=0.00373  (disc sine power 0.0200 -> pwrNoise/power =   -7.30 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 90000 Hz 10.0% dev: pwrNoise=0.00010  (disc sine power 0.0200 -> pwrNoise/power =  -22.83 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 67000 Hz 10.0% dev: pwrNoise=0.00006  (disc sine power 0.0200 -> pwrNoise/power =  -24.94 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 38000 Hz 10.0% dev: pwrNoise=0.00004  (disc sine power 0.0200 -> pwrNoise/power =  -27.53 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f=150000 Hz 10.0% dev: pwrNoise=0.00362  (disc sine power 0.0200 -> pwrNoise/power =   -7.42 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f= 62000 Hz 10.0% dev: pwrNoise=0.00005  (disc sine power 0.0200 -> pwrNoise/power =  -25.62 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=384000 probe f=170000 Hz 10.0% dev: pwrNoise=0.00048  (disc sine power 0.0200 -> pwrNoise/power =  -16.24 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 57000 Hz 10.0% dev: pwrNoise=0.00000  (disc sine power 0.0200 -> pwrNoise/power =  -36.82 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 38000 Hz 10.0% dev: pwrNoise=0.00002  (disc sine power 0.0200 -> pwrNoise/power =  -30.22 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 72000 Hz 10.0% dev: pwrNoise=0.00002  (disc sine power 0.0200 -> pwrNoise/power =  -30.54 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 19000 Hz 10.0% dev: pwrNoise=0.00002  (disc sine power 0.0200 -> pwrNoise/power =  -30.97 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f=116000 Hz 10.0% dev: pwrNoise=0.00405  (disc sine power 0.0200 -> pwrNoise/power =   -6.94 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 90000 Hz 10.0% dev: pwrNoise=0.00012  (disc sine power 0.0200 -> pwrNoise/power =  -22.39 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f=130000 Hz 10.0% dev: pwrNoise=0.00811  (disc sine power 0.0200 -> pwrNoise/power =   -3.92 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 62000 Hz 10.0% dev: pwrNoise=0.00003  (disc sine power 0.0200 -> pwrNoise/power =  -27.98 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f= 67000 Hz 10.0% dev: pwrNoise=0.00004  (disc sine power 0.0200 -> pwrNoise/power =  -27.10 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 19000 Hz 10.0% dev: pwrNoise=0.00012  (disc sine power 0.0200 -> pwrNoise/power =  -22.13 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 62000 Hz 10.0% dev: pwrNoise=0.02510  (disc sine power 0.0200 -> pwrNoise/power =    0.99 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 38000 Hz 10.0% dev: pwrNoise=0.00173  (disc sine power 0.0200 -> pwrNoise/power =  -10.63 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 19000 Hz 10.0% dev: pwrNoise=0.00008  (disc sine power 0.0200 -> pwrNoise/power =  -24.26 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f=170000 Hz 10.0% dev: pwrNoise=0.00049  (disc sine power 0.0200 -> pwrNoise/power =  -16.08 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 57000 Hz 10.0% dev: pwrNoise=0.03256  (disc sine power 0.0200 -> pwrNoise/power =    2.12 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 90000 Hz 10.0% dev: pwrNoise=0.00090  (disc sine power 0.0200 -> pwrNoise/power =  -13.47 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=384000 probe f=150000 Hz 10.0% dev: pwrNoise=0.00408  (disc sine power 0.0200 -> pwrNoise/power =   -6.91 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 67000 Hz 10.0% dev: pwrNoise=0.01353  (disc sine power 0.0200 -> pwrNoise/power =   -1.70 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+orig fs=192000 probe f= 72000 Hz 10.0% dev: pwrNoise=0.00639  (disc sine power 0.0200 -> pwrNoise/power =   -4.96 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 72000 Hz 10.0% dev: pwrNoise=0.00598  (disc sine power 0.0200 -> pwrNoise/power =   -5.25 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 38000 Hz 10.0% dev: pwrNoise=0.00204  (disc sine power 0.0200 -> pwrNoise/power =   -9.91 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 67000 Hz 10.0% dev: pwrNoise=0.00763  (disc sine power 0.0200 -> pwrNoise/power =   -4.18 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 62000 Hz 10.0% dev: pwrNoise=0.00817  (disc sine power 0.0200 -> pwrNoise/power =   -3.89 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 57000 Hz 10.0% dev: pwrNoise=0.00819  (disc sine power 0.0200 -> pwrNoise/power =   -3.88 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0
+fixed fs=192000 probe f= 90000 Hz 10.0% dev: pwrNoise=0.00104  (disc sine power 0.0200 -> pwrNoise/power =  -12.85 dB)  npwr.in==disc_out:1 npwr.size=1024 disc_out[1]=0

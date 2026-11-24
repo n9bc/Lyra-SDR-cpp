@@ -1,0 +1,8 @@
+# build=fixed size=64 nc=2048 mp=0 xfade_blocks=1
+S1 edge-across-carrier : oob   -45.7 dB (steady -131.3) | inband>300Hz-from-tone   -20.5 dB (steady -106.0) | inband>1kHz-from-tone   -53.1 dB (steady -135.9) | max|d2| 0.0183 (steady 0.0171)
+S2 notch-insert        : oob   -47.0 dB (steady -131.3) | inband>300Hz-from-tone   -21.8 dB (steady -106.0) | inband>1kHz-from-tone   -54.4 dB (steady -135.9) | max|d2| 0.0181 (steady 0.0171)
+S3 cw-narrow           : oob   -21.4 dB (steady -116.9) | inband>300Hz-from-tone   -16.1 dB (steady -101.0) | inband>1kHz-from-tone -3000.0 dB (steady -3000.0) | max|d2| 0.0215 (steady 0.0215)
+S4 edge-in-noise       : oob   -56.4 dB (steady  -62.6) | inband>300Hz-from-tone   -32.4 dB (steady  -33.0) | inband>1kHz-from-tone   -32.4 dB (steady  -33.0) | max|d2| 0.0029 (steady 0.0029)
+S5 continuous-drag     : oob   -75.1 dB (steady -131.3) | inband>300Hz-from-tone   -56.5 dB (steady -106.0) | inband>1kHz-from-tone   -79.6 dB (steady -135.9) | max|d2| 0.0007 (steady 0.0171)
+S6 notch-walk-off      : oob   -61.1 dB (steady -148.3) | inband>300Hz-from-tone   -42.5 dB (steady -122.9) | inband>1kHz-from-tone   -65.7 dB (steady -152.8) | max|d2| 0.0151 (steady 0.0024)
+COST xfircore ns/block: normal 6947, exchange-block 19950

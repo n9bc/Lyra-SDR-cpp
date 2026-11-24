@@ -1,0 +1,13 @@
+orig   S5   cnr=0dB sb=0                       lock_s=19.841 fin_df=   0.019Hz rms_e= 0.154rad slips=   0 snr_pll=-12.56dB snr_genie=-12.59dB acq=0
+orig   S5   cnr=3dB sb=0                       lock_s=19.145 fin_df=   0.016Hz rms_e= 0.110rad slips=   0 snr_pll= -9.58dB snr_genie= -9.60dB acq=0
+orig   S5   cnr=6dB sb=0                       lock_s= 0.002 fin_df=  -0.031Hz rms_e= 0.072rad slips=   0 snr_pll= -6.58dB snr_genie= -6.59dB acq=0
+orig   S5   cnr=10dB sb=0                      lock_s= 0.002 fin_df=  -0.009Hz rms_e= 0.044rad slips=   0 snr_pll= -2.57dB snr_genie= -2.58dB acq=0
+orig   S5   cnr=15dB sb=0                      lock_s= 0.002 fin_df=  -0.016Hz rms_e= 0.024rad slips=   0 snr_pll=  2.41dB snr_genie=  2.40dB acq=0
+orig   S5   cnr=20dB sb=0                      lock_s= 0.003 fin_df=   0.009Hz rms_e= 0.013rad slips=   0 snr_pll=  7.41dB snr_genie=  7.41dB acq=0
+orig   S5   cnr=0dB sb=2                       lock_s=19.841 fin_df=   0.019Hz rms_e= 0.154rad slips=   0 snr_pll=-15.68dB snr_genie=-15.62dB acq=0
+orig   S5   cnr=3dB sb=2                       lock_s=19.145 fin_df=   0.016Hz rms_e= 0.110rad slips=   0 snr_pll=-12.69dB snr_genie=-12.62dB acq=0
+orig   S5   cnr=6dB sb=2                       lock_s= 0.002 fin_df=  -0.031Hz rms_e= 0.072rad slips=   0 snr_pll= -9.67dB snr_genie= -9.61dB acq=0
+orig   S5   cnr=10dB sb=2                      lock_s= 0.002 fin_df=  -0.009Hz rms_e= 0.044rad slips=   0 snr_pll= -5.65dB snr_genie= -5.60dB acq=0
+orig   S5   cnr=15dB sb=2                      lock_s= 0.002 fin_df=  -0.016Hz rms_e= 0.024rad slips=   0 snr_pll= -0.68dB snr_genie= -0.63dB acq=0
+orig   S5   cnr=20dB sb=2                      lock_s= 0.003 fin_df=   0.009Hz rms_e= 0.013rad slips=   0 snr_pll=  4.35dB snr_genie=  4.40dB acq=0
+orig   S5   clean cnr=60 sb=2                  lock_s= 0.002 fin_df=  -0.000Hz rms_e= 0.000rad slips=   0 snr_pll= 44.34dB snr_genie= 44.39dB acq=0

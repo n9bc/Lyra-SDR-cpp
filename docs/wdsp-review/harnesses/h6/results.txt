@@ -1,0 +1,40 @@
+fs=48000 buf=1024 scenario: isolated impulses (113 impulses)
+  orig                         delay= 1227 samp (25.562 ms)  gated=   1657 samp  leak_samps=    0 leak_E=0  maxerr=1.06  SER=20.75 dB
+fs=48000 buf=1024 scenario: bursts 10x @0.8ms (380 impulses)
+  orig                         delay= 1227 samp (25.562 ms)  gated=   5477 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=15.59 dB
+fs=48000 buf=1024 scenario: bursts 5x @4ms (190 impulses)
+  orig                         delay= 1227 samp (25.562 ms)  gated=   2756 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=18.56 dB
+fs=48000 buf=1024 scenario: long train 60ms @0.2ms (4500 impulses)
+  orig                         delay= 1227 samp (25.562 ms)  gated=   4828 samp  leak_samps= 8000 leak_E=4.752e+07  maxerr=100  SER=-24.08 dB
+fs=48000 buf=1024 scenario: dense 1kHz-rate train (3751 impulses)
+  orig                         delay= 1227 samp (25.562 ms)  gated=  50704 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=5.94 dB
+fs=48000 buf=1024 scenario: isolated impulses (113 impulses)
+  fixed                        delay=   27 samp (0.562 ms)  gated=   2659 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=18.64 dB
+fs=48000 buf=1024 scenario: bursts 10x @0.8ms (380 impulses)
+  fixed                        delay=   27 samp (0.562 ms)  gated=   8936 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=13.38 dB
+fs=48000 buf=1024 scenario: bursts 5x @4ms (190 impulses)
+  fixed                        delay=   27 samp (0.562 ms)  gated=   4467 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=16.38 dB
+fs=48000 buf=1024 scenario: long train 60ms @0.2ms (4500 impulses)
+  fixed                        delay=   27 samp (0.562 ms)  gated=   4618 samp  leak_samps= 8060 leak_E=4.788e+07  maxerr=100  SER=-24.09 dB
+fs=48000 buf=1024 scenario: dense 1kHz-rate train (3751 impulses)
+  fixed                        delay=   27 samp (0.562 ms)  gated=  88188 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=3.43 dB
+fs=192000 buf=1024 scenario: isolated impulses (109 impulses)
+  orig                         delay= 4887 samp (25.453 ms)  gated=   6926 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=20.58 dB
+fs=192000 buf=1024 scenario: bursts 10x @0.8ms (380 impulses)
+  orig                         delay= 4887 samp (25.453 ms)  gated=  22614 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=15.46 dB
+fs=192000 buf=1024 scenario: bursts 5x @4ms (190 impulses)
+  orig                         delay= 4887 samp (25.453 ms)  gated=  11298 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=18.47 dB
+fs=192000 buf=1024 scenario: long train 60ms @0.2ms (4500 impulses)
+  orig                         delay= 4887 samp (25.453 ms)  gated= 173091 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=6.33 dB
+fs=192000 buf=1024 scenario: dense 1kHz-rate train (3751 impulses)
+  orig                         delay= 4887 samp (25.453 ms)  gated= 223197 samp  leak_samps=    0 leak_E=0  maxerr=1.09  SER=5.52 dB
+fs=192000 buf=1024 scenario: isolated impulses (109 impulses)
+  fixed                        delay=   87 samp (0.453 ms)  gated=   7471 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=20.26 dB
+fs=192000 buf=1024 scenario: bursts 10x @0.8ms (380 impulses)
+  fixed                        delay=   87 samp (0.453 ms)  gated=  26033 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=14.84 dB
+fs=192000 buf=1024 scenario: bursts 5x @4ms (190 impulses)
+  fixed                        delay=   87 samp (0.453 ms)  gated=  13008 samp  leak_samps=    0 leak_E=0  maxerr=1.07  SER=17.85 dB
+fs=192000 buf=1024 scenario: long train 60ms @0.2ms (4500 impulses)
+  fixed                        delay=   87 samp (0.453 ms)  gated= 173091 samp  leak_samps=    0 leak_E=0  maxerr=1.08  SER=6.36 dB
+fs=192000 buf=1024 scenario: dense 1kHz-rate train (3751 impulses)
+  fixed                        delay=   87 samp (0.453 ms)  gated= 256956 samp  leak_samps=    0 leak_E=0  maxerr=1.09  SER=4.89 dB

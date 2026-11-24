@@ -1,0 +1,12 @@
+--- wdsp-2.11/analyzer.c
++++ fixed/analyzer.c
+@@ -332,7 +332,8 @@
+ 				pix_count = (int)(det_offset + (double)i * pix_per_bin);
+ 				if (pix_count >= num_pixels) pix_count = num_pixels - 1;
+ 				// determine the pixel number for the NEXT FFT bin
+-				next_pix_count = (int)((double)(i + 1) * pix_per_bin);
++				next_pix_count = (int)(det_offset + (double)(i + 1) * pix_per_bin);
++				if (next_pix_count >= num_pixels) next_pix_count = num_pixels - 1;
+ 				// update the minimum and maximum of the set of bins within the pixel
+ 				if (bins[i] <   mini)     mini = bins[i];
+ 				if (bins[i] >   maxi)     maxi = bins[i];

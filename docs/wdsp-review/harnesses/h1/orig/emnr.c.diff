@@ -1,0 +1,173 @@
+--- wdsp-2.11/emnr.c
++++ orig/emnr.c
+@@ -846,6 +846,8 @@
+ *										Begin Post-Processing Functions									*
+ ********************************************************************************************************/
+ 
++int emnr_dbg_N = -1;
++double emnr_dbg_zeta = 0.0;
+ void aepf(EMNR a)
+ {
+ 	int k, m;
+@@ -867,6 +869,7 @@
+ 		N = 1;				
+ 	else
+ 		N = 1 + 2 * (int)(0.5 + a->ae.psi * (1.0 - zetaT / a->ae.zetaThresh));
++	emnr_dbg_N = N; emnr_dbg_zeta = zeta;
+ 	n = N / 2;
+ 	for (k = 0; k < n; k++)
+ 	{
+@@ -976,52 +979,16 @@
+ 	}
+ }
+ 
+-PORT
+-void SetRXAEMNRpost2Run(int channel, int run)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.run = run;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRpost2Factor(int channel, double factor)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.factor = factor / 100.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRpost2Nlevel(int channel, double nlevel)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.nlevel = nlevel / 100.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRpost2Taper(int channel, int taper)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	a->post2.taper = (double)taper / 100.0;
+-	post2_calc_w(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
++
+ 
+-PORT
+-void SetRXAEMNRpost2Rate(int channel, double tc)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (tc < 0.2) tc = 0.2;
+-	a->post2.tc_decay = tc;
+-	a->post2.rate_decay = exp(-a->fsize / (a->post2.tc_decay * a->rate * a->ovrlp));
+-	a->post2.olddmag = 0.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
++
+ 
++
++
++
+ /********************************************************************************************************
+ *										End Post-Processing Functions									*
+ ********************************************************************************************************/
+@@ -1307,86 +1274,20 @@
+ *																										*
+ ********************************************************************************************************/
+ 
+-PORT
+-void SetRXAEMNRRun (int channel, int run)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	if (a->run != run)
+-	{
+-		RXAbp1Check (channel, rxa[channel].amd.p->run, rxa[channel].snba.p->run,
+-			run, getRun_nnrbypass (rxa[channel].nnrbypass.p), 
+-			rxa[channel].anf.p->run, rxa[channel].anr.p->run);
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		RXAbp1Set (channel);
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+ 
+-PORT
+-void SetRXAEMNRgainMethod (int channel, int method)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.gain_method = method;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRnpeMethod (int channel, int method)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.npe_method = method;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRaeRun (int channel, int run)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.ae_run = run;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRPosition (int channel, int position)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->position = position;
+-	RXAbp1Set (channel);
+-	flush_emnr (a);
+-	a->post2.olddmag = 0.0;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRaeZetaThresh (int channel, double zetathresh)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.zetaThresh = zetathresh;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRaePsi (int channel, double psi)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.psi = psi;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRtrainZetaThresh(int channel, double thresh)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.zeta_thresh = thresh;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+ 
+-PORT
+-void SetRXAEMNRtrainT2(int channel, double t2)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.t2 = t2;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
++
++
++
++
++
++
++
++
++

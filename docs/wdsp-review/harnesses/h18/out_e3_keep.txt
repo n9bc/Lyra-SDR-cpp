@@ -1,0 +1,40 @@
+E3 keep   talker 0: grid optimum fc=260 J*=0.0520, J(338)=0.0649 (+24.7%)
+   seed  0: final fc   222.8  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +33.19%
+   seed  1: final fc   304.8  converged yes t= 270.0 s  coefficient changes 11  objective excess over grid optimum +32.48%
+   seed  2: final fc   396.1  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +57.67%
+   seed  3: final fc   309.7  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +35.38%
+   seed  4: final fc   309.7  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +35.38%
+   seed  5: final fc   309.8  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +35.43%
+   seed  6: final fc   348.6  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +23.48%
+   seed  7: final fc   353.0  converged yes t= 300.1 s  coefficient changes 17  objective excess over grid optimum +24.82%
+E3 keep   talker 0 SUMMARY: converged 8/8, mean time 273.8 s, mean excess 34.73%, worst excess 57.67%, mean fc changes 13.5
+E3 keep   talker 2: grid optimum fc=900 J*=0.0567, J(338)=0.1277 (+125.1%)
+   seed  0: final fc   295.5  converged yes t= 270.0 s  coefficient changes 15  objective excess over grid optimum +121.20%
+   seed  1: final fc   299.9  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +117.58%
+   seed  2: final fc   218.2  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +55.29%
+   seed  3: final fc   368.0  converged yes t= 270.0 s  coefficient changes 16  objective excess over grid optimum +175.73%
+   seed  4: final fc   310.3  converged yes t= 270.0 s  coefficient changes 16  objective excess over grid optimum +115.00%
+   seed  5: final fc   271.8  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +138.37%
+   seed  6: final fc   364.1  converged yes t= 270.0 s  coefficient changes 16  objective excess over grid optimum +168.48%
+   seed  7: final fc   321.1  converged yes t= 300.1 s  coefficient changes 18  objective excess over grid optimum +115.40%
+E3 keep   talker 2 SUMMARY: converged 8/8, mean time 273.8 s, mean excess 125.88%, worst excess 175.73%, mean fc changes 14.9
+E3 keep   talker 100: grid optimum fc=80 J*=0.0527, J(338)=0.0643 (+22.0%)
+   seed  0: final fc   288.0  converged yes t= 270.0 s  coefficient changes 17  objective excess over grid optimum +31.76%
+   seed  1: final fc   341.9  converged yes t= 300.1 s  coefficient changes 18  objective excess over grid optimum +20.08%
+   seed  2: final fc   333.8  converged yes t= 270.0 s  coefficient changes 13  objective excess over grid optimum +24.74%
+   seed  3: final fc   206.6  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +13.90%
+   seed  4: final fc   222.8  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +15.09%
+   seed  5: final fc   201.6  converged yes t= 270.0 s  coefficient changes 13  objective excess over grid optimum +15.20%
+   seed  6: final fc   217.8  converged yes t= 270.0 s  coefficient changes 13  objective excess over grid optimum +13.70%
+   seed  7: final fc   326.3  converged yes t= 300.1 s  coefficient changes 18  objective excess over grid optimum +29.52%
+E3 keep   talker 100 SUMMARY: converged 8/8, mean time 277.5 s, mean excess 20.50%, worst excess 31.76%, mean fc changes 14.8
+E3 keep   talker 101: grid optimum fc=190 J*=0.0514, J(338)=0.0960 (+86.7%)
+   seed  0: final fc   210.5  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +13.31%
+   seed  1: final fc   180.7  converged yes t= 270.0 s  coefficient changes 11  objective excess over grid optimum +4.00%
+   seed  2: final fc   267.2  converged yes t= 270.0 s  coefficient changes 15  objective excess over grid optimum +52.12%
+   seed  3: final fc   304.3  converged yes t= 270.0 s  coefficient changes 12  objective excess over grid optimum +50.43%
+   seed  4: final fc   325.4  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +70.03%
+   seed  5: final fc   315.9  converged yes t= 270.0 s  coefficient changes 13  objective excess over grid optimum +59.26%
+   seed  6: final fc   230.3  converged yes t= 270.0 s  coefficient changes 13  objective excess over grid optimum +27.55%
+   seed  7: final fc   300.6  converged yes t= 270.0 s  coefficient changes 14  objective excess over grid optimum +48.35%
+E3 keep   talker 101 SUMMARY: converged 8/8, mean time 270.0 s, mean excess 40.63%, worst excess 70.03%, mean fc changes 13.2

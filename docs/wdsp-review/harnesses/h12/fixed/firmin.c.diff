@@ -1,0 +1,128 @@
+--- wdsp-2.11/firmin.c
++++ fixed/firmin.c
+@@ -287,6 +287,17 @@
+ ********************************************************************************************************/
+ 
+ 
++int fircore_xfade_blocks = 1;
++
++static void flip_fircore (FIRCORE a)
++{
++	// called with a->update held
++	a->pset = a->cset;
++	a->cset = 1 - a->cset;
++	a->xfade_total = fircore_xfade_blocks;
++	a->xfade_left = fircore_xfade_blocks;
++}
++
+ void plan_fircore (FIRCORE a)
+ {
+ 	// must call for change in 'nc', 'size', 'out', 'pfactor'
+@@ -318,6 +329,12 @@
+ 	a->crev = fftw_plan_dft_1d(2 * a->size, (fftw_complex *)a->accum, (fftw_complex *)a->out, FFTW_BACKWARD, FFTW_PATIENT);
+ 	a->masks_ready = 0;
+ 	a->pminphase = create_minphase (a->nc, a->pfactor);
++	a->accum2 = (double *) malloc0 (2 * a->size * sizeof (complex));
++	a->out2   = (double *) malloc0 (2 * a->size * sizeof (complex));
++	a->crev2  = fftw_plan_dft_1d(2 * a->size, (fftw_complex *)a->accum2, (fftw_complex *)a->out2, FFTW_BACKWARD, FFTW_PATIENT);
++	a->xfade_left = 0;
++	a->xfade_total = 0;
++	a->pset = 0;
+ }
+ 
+ void calc_fircore (FIRCORE a, int flip)
+@@ -340,7 +357,7 @@
+ 	if (flip)
+ 	{
+ 		EnterCriticalSection (&a->update);
+-		a->cset = 1 - a->cset;
++		flip_fircore (a);
+ 		LeaveCriticalSection (&a->update);
+ 		a->masks_ready = 0;
+ 	}
+@@ -368,6 +385,9 @@
+ void deplan_fircore (FIRCORE a)
+ {
+ 	destroy_minphase(a->pminphase);
++	fftw_destroy_plan (a->crev2);
++	_aligned_free (a->accum2);
++	_aligned_free (a->out2);
+ 	fftw_destroy_plan (a->crev);
+ 	_aligned_free (a->accum);
+ 	for (int i = 0; i < a->nfor; i++)
+@@ -407,14 +427,14 @@
+ 	for (i = 0; i < a->nfor; i++)
+ 		memset (a->fftout[i], 0, 2 * a->size * sizeof (complex));
+ 	a->buffidx = 0;
++	a->xfade_left = 0;
+ }
+ 
+ void xfircore (FIRCORE a)
+ {
+-	int i, j, k;
++	int i, j, k, n;
+ 	memcpy (&(a->fftin[2 * a->size]), a->in, a->size * sizeof (complex));
+ 	fftw_execute (a->pcfor[a->buffidx]);
+-	k = a->buffidx;
+ 	memset (a->accum, 0, 2 * a->size * sizeof (complex));
+ 	EnterCriticalSection (&a->update);
+ 	double* accum = a->accum;
+@@ -424,6 +444,10 @@
+ 	int idxmask = a->idxmask;
+ 	int sz = a->size;
+ 	int nfor = a->nfor;
++	int xleft = a->xfade_left;
++	int xtot = a->xfade_total;
++	int pset = a->pset;
++	k = a->buffidx;
+ 	for (j = 0; j < nfor; j++)
+ 	{
+ 		for (i = 0; i < 2 * sz; i++)
+@@ -433,9 +457,38 @@
+ 		}
+ 		k = (k + idxmask) & idxmask;
+ 	}
++	if (xleft > 0)
++	{
++		// same FDL, previous mask set
++		double* acc2 = a->accum2;
++		memset (acc2, 0, 2 * sz * sizeof (complex));
++		k = a->buffidx;
++		for (j = 0; j < nfor; j++)
++		{
++			for (i = 0; i < 2 * sz; i++)
++			{
++				acc2[2 * i + 0] += fftout[k][2 * i + 0] * fmask[pset][j][2 * i + 0] - fftout[k][2 * i + 1] * fmask[pset][j][2 * i + 1];
++				acc2[2 * i + 1] += fftout[k][2 * i + 0] * fmask[pset][j][2 * i + 1] + fftout[k][2 * i + 1] * fmask[pset][j][2 * i + 0];
++			}
++			k = (k + idxmask) & idxmask;
++		}
++		a->xfade_left = xleft - 1;
++	}
+ 	LeaveCriticalSection (&a->update);
+ 	a->buffidx = (a->buffidx + 1) & idxmask;
+ 	fftw_execute (a->crev);
++	if (xleft > 0)
++	{
++		fftw_execute (a->crev2);
++		double span = (double)(xtot * sz);
++		int base = (xtot - xleft) * sz;
++		for (n = 0; n < sz; n++)
++		{
++			double w = 0.5 - 0.5 * cos (PI * ((double)(base + n) + 0.5) / span);	// raised-cosine, 0 -> 1
++			a->out[2 * n + 0] = w * a->out[2 * n + 0] + (1.0 - w) * a->out2[2 * n + 0];
++			a->out[2 * n + 1] = w * a->out[2 * n + 1] + (1.0 - w) * a->out2[2 * n + 1];
++		}
++	}
+ 	memcpy (a->fftin, &(a->fftin[2 * a->size]), a->size * sizeof(complex));
+ }
+ 
+@@ -487,7 +540,7 @@
+ 	if (a->masks_ready)
+ 	{
+ 		EnterCriticalSection (&a->update);
+-		a->cset = 1 - a->cset;
++		flip_fircore (a);
+ 		LeaveCriticalSection (&a->update);
+ 		a->masks_ready = 0;
+ 	}

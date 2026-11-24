@@ -1,0 +1,20 @@
+orig npe1 Z=2
+  end-phase1 blk=702: lambda_d median=3.291e-03 (-1.5 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.089, sigma2N last changed blk 702
+  end-phase2 blk=795: lambda_d median=1.372e-14 (-115.3 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.581, sigma2N last changed blk 795
+  end-phase3 blk=2201: lambda_d median=3.196e-03 (-1.6 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.085, sigma2N last changed blk 2201
+  suppression: pre-silence -19.85 dB | post 5-10s -19.82 dB | post last 5s -19.95 dB | sigma2N frozen for 0 blocks at end
+orig npe1 Z=30
+  end-phase1 blk=702: lambda_d median=3.291e-03 (-1.5 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.089, sigma2N last changed blk 702
+  end-phase2 blk=2108: lambda_d median=2.124e-178 (-1753.4 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.581, sigma2N last changed blk 2108
+  end-phase3 blk=3514: lambda_d median=3.196e-03 (-1.6 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.085, sigma2N last changed blk 3514
+  suppression: pre-silence -19.85 dB | post 5-10s -19.82 dB | post last 5s -19.95 dB | sigma2N frozen for 0 blocks at end
+orig npe1 Z=120
+  end-phase1 blk=702: lambda_d median=3.291e-03 (-1.5 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.089, sigma2N last changed blk 702
+  end-phase2 blk=6327: lambda_d median=4.941e-324 (-3209.7 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.581, sigma2N last changed blk 3279
+  end-phase3 blk=7733: lambda_d median=3.196e-03 (-1.6 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.085, sigma2N last changed blk 7733
+  suppression: pre-silence -19.85 dB | post 5-10s -19.82 dB | post last 5s -19.95 dB | sigma2N frozen for 0 blocks at end
+orig npe1 Z=300
+  end-phase1 blk=702: lambda_d median=3.291e-03 (-1.5 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.089, sigma2N last changed blk 702
+  end-phase2 blk=14764: lambda_d median=4.941e-324 (-3209.7 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.581, sigma2N last changed blk 3279
+  end-phase3 blk=16170: lambda_d median=3.196e-03 (-1.6 dB re true), lambda_d NaN=0, p NaN=0, varHat<0 bins=0, mean mask=0.085, sigma2N last changed blk 16170
+  suppression: pre-silence -19.85 dB | post 5-10s -19.82 dB | post last 5s -19.95 dB | sigma2N frozen for 0 blocks at end

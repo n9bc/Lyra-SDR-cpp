@@ -1,0 +1,55 @@
+--- wdsp-2.11/impulse_cache.c
++++ fixed/impulse_cache.c
+@@ -129,13 +129,9 @@
+ {
+ 	if (!_run) return NULL;
+ 
+-	int use;
+ 	EnterCriticalSection(&_cs_use_cache);
+-	use = _use_cache;
+-	LeaveCriticalSection(&_cs_use_cache);
++	if (!_use_cache || bucket >= CACHE_BUCKETS) { LeaveCriticalSection(&_cs_use_cache); return NULL; }
+ 
+-	if (!use || bucket >= CACHE_BUCKETS) return NULL;
+-
+ 	// lru, least recently used, moves cache hit to head
+ 	// old cache entries will move towards the tail and eventually be dumped
+ 	cache_entry* prev = NULL;
+@@ -152,12 +148,14 @@
+ 			}
+ 			double* imp = (double*) malloc0(e->N * sizeof(complex));
+ 			memcpy(imp, e->impulse, e->N * sizeof(complex));
++			LeaveCriticalSection(&_cs_use_cache);
+ 			return imp;
+ 		}
+ 		prev = e;
+ 		e = e->next;
+ 	}
+ 
++	LeaveCriticalSection(&_cs_use_cache);
+ 	return NULL;
+ }
+ 
+@@ -165,13 +163,9 @@
+ {
+ 	if (!_run) return;
+ 
+-	int use;
+ 	EnterCriticalSection(&_cs_use_cache);
+-	use = _use_cache;
+-	LeaveCriticalSection(&_cs_use_cache);
++	if (!_use_cache || bucket >= CACHE_BUCKETS) { LeaveCriticalSection(&_cs_use_cache); return; }
+ 
+-	if (!use || bucket >= CACHE_BUCKETS) return;
+-
+ 	if (_cache_counts[bucket] >= MAX_CACHE_ENTRIES) remove_impulse_cache_tail(bucket);
+ 
+ 	cache_entry* e = malloc0(sizeof(cache_entry));
+@@ -182,6 +176,7 @@
+ 	e->next = _cache_heads[bucket];
+ 	_cache_heads[bucket] = e;
+ 	_cache_counts[bucket]++;
++	LeaveCriticalSection(&_cs_use_cache);
+ }
+ 
+ PORT

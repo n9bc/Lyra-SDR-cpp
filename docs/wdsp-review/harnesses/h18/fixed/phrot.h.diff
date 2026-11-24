@@ -1,0 +1,19 @@
+--- wdsp-2.11/phrot.h
++++ fixed/phrot.h
+@@ -75,6 +75,16 @@
+     double  fc_A;
+     double  fc_B;
+     double  asym_A;
++    /* fix: paired shadow-chain evaluation */
++    double *sx0[2], *sx1[2], *sy0[2], *sy1[2];
++    double  sb0[2];
++    double  sfc[2];
++    double  sh_env_pos[3], sh_env_neg[3];
++    double  sh_sum[3];
++    int     sh_nvoiced;
++    int     sh_warm;
++    double  gate_peak;
++    double *fx0, *fx1, *fy0, *fy1; double fb0; int fade_n, fade_len;
+ } phrot, *PHROT;
+ 
+ extern void calc_phrot   (PHROT a);

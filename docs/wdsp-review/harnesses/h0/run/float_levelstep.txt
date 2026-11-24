@@ -1,0 +1,12 @@
+float P2=1e-2 orig Z=10:  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 920 blocks at end
+float P2=1e-2 m1 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s -20.00 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+float P2=1e-2 m2 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 920 blocks at end
+float P2=1e-2 m4 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s -20.00 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+float P2=1e-2 m7 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s -20.00 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+double P2=1e-2 orig:  suppression: pre-silence -20.03 dB | post 5-10s -20.00 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+float P2=1e-3 orig Z=10:  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 937 blocks at end
+float P2=1e-3 m1 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 937 blocks at end
+float P2=1e-3 m2 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s 0.81 dB | post last 5s 0.81 dB | sigma2N frozen for 937 blocks at end
+float P2=1e-3 m4 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s -20.03 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+float P2=1e-3 m7 Z=10:  suppression: pre-silence -20.03 dB | post 5-10s -20.03 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end
+double P2=1e-3 orig:  suppression: pre-silence -20.03 dB | post 5-10s -20.03 dB | post last 5s -20.00 dB | sigma2N frozen for 0 blocks at end

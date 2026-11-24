@@ -1,0 +1,198 @@
+--- wdsp-2.11/comm.h
++++ common/comm.h
+@@ -1,146 +1,60 @@
+-/*  comm.h
+-
+-This file is part of a program that implements a Software-Defined Radio.
+-
+-Copyright (C) 2013, 2024, 2025, 2026 Warren Pratt, NR0V
+-
+-This program is free software; you can redistribute it and/or
+-modify it under the terms of the GNU General Public License
+-as published by the Free Software Foundation; either version 2
+-of the License, or (at your option) any later version.
+-
+-This program is distributed in the hope that it will be useful,
+-but WITHOUT ANY WARRANTY; without even the implied warranty of
+-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-GNU General Public License for more details.
+-
+-You should have received a copy of the GNU General Public License
+-along with this program; if not, write to the Free Software
+-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+-
+-The author can be reached by email at  
+-
+-warren@wpratt.com
+-
+-*/
+-
+-#include <Windows.h>
+-#include <process.h>
+-#include <intrin.h>
++/* Minimal POSIX shim comm.h for isolating WDSP nbp.c / fir.c / firmin.c on macOS. */
++#ifndef _shim_comm_h
++#define _shim_comm_h
++#include <pthread.h>
++#include <unistd.h>
+ #include <math.h>
+ #include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
+ #include <time.h>
+-#include <avrt.h>
+ #include <assert.h>
+ #include "fftw3.h"
+ 
+-#include "amd.h"
+-#include "ammod.h"
+-#include "amsq.h"
+-#include "analyzer.h"
+-#include "anf.h"
+-#include "anr.h"
+-#include "apfshadow.h"
+-#include "bandpass.h"
+-#include "calcc.h"
+-#include "cblock.h"
+-#include "cfcomp.h"
+-#include "cfir.h"
+-#include "channel.h"
+-#include "cmath.h"
+-#include "compress.h"
+-#include "delay.h"
+-#include "dexp.h"
+-#include "div.h"
+-#include "doublepole.h"
+-#include "eer.h"
+-#include "emnr.h"
+-#include "emph.h"
+-#include "eq.h"
+-#include "fcurve.h"
++/* Windows shims */
++typedef pthread_mutex_t CRITICAL_SECTION, *LPCRITICAL_SECTION;
++#define InitializeCriticalSectionAndSpinCount(cs, n) (pthread_mutex_init((cs), NULL), 1)
++#define InitializeCriticalSection(cs) pthread_mutex_init((cs), NULL)
++#define DeleteCriticalSection(cs) pthread_mutex_destroy(cs)
++#define EnterCriticalSection(cs) pthread_mutex_lock(cs)
++#define LeaveCriticalSection(cs) pthread_mutex_unlock(cs)
++#define InterlockedAnd(p, v) __atomic_fetch_and((p), (v), __ATOMIC_SEQ_CST)
++#define InterlockedExchange(p, v) __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
++#define Sleep(ms) usleep((ms) * 1000)
++#define __declspec(x)
++#define PORT
++static inline void* _aligned_malloc(size_t size, size_t al) { void* p = 0; if (posix_memalign(&p, al < sizeof(void*) ? sizeof(void*) : al, size ? size : 1)) return 0; return p; }
++#define _aligned_free(p) free(p)
++void* malloc0(int size);
++
++#define PI    3.1415926535897932
++#define TWOPI 6.2831853071795864
++typedef double complex[2];
++
++/* impulse cache: behave as if the cache is not running (get -> NULL, add -> no-op) */
++#define HASH_T uint64_t
++#define fnv1a_hash fnv1a_hash64
++#define FIR_CACHE 0
++#define MP_CACHE 1
++#define EQ_CACHE 2
++#define FC_CACHE 3
++#define GOLDEN_RATIO 0x9E3779B97F4A7C15ULL
++uint64_t fnv1a_hash64(const void* data, size_t len);
++double* get_impulse_cache_entry(size_t bucket, HASH_T hash, int N);
++void add_impulse_to_cache(size_t bucket, HASH_T hash, int N, double* impulse);
++
+ #include "fir.h"
+ #include "firmin.h"
+-#include "fmd.h"
+-#include "fmmod.h"
+-#include "fmsq.h"
+-#include "gain.h"
+-#include "gaussian.h"
+-#include "gen.h"
+-#include "icfir.h"
+-#include "iir.h"
+-#include "impulse_cache.h"
+-#include "iobuffs.h"
+-#include "iqc.h"
+-#include "lmath.h"
+-#include "main.h"
+-#include "matchedCW.h"
+-#include "meter.h"
+-#include "meterlog10.h"
+ #include "nbp.h"
+-#include "nnr.h"
+-#include "nnrbypass.h"
+-#include "nob.h"
+-#include "nobII.h"
+-#include "nurbs.h"
+-#include "osctrl.h"
+-#include "patchpanel.h"
+-#include "phrot.h"
+-#include "resample.h"
+-#include "reshb.h"
+-#include "rmatch.h"
+-#include "RXA.h"
+-#include "sender.h"
+-#include "shift.h"
+-#include "siphon.h"
+-#include "slew.h"
+-#include "snb.h"
+-#include "ssql.h"
+-#include "syncbuffs.h"
+-#include "TXA.h"
+-#include "utilities.h"
+-#include "varsamp.h"
+-#include "wbfm.h"
+-#include "wcpAGC.h"
+ 
+-// manage differences among consoles
+-#define _Thetis
+-
+-// channel definitions
+-#define MAX_CHANNELS					32					// maximum number of supported channels
+-#define DSP_MULT						2					// number of dsp_buffsizes that are held in an iobuff pseudo-ring
+-#define INREAL							float				// data type for channel input buffer
+-#define OUTREAL							float				// data type for channel output buffer
+-
+-// display definitions
+-#define dMAX_DISPLAYS					72					// maximum number of displays = max instances
+-#define dMAX_STITCH						4					// maximum number of sub-spans to stitch together
+-#define dMAX_NUM_FFT					1					// maximum number of ffts for an elimination
+-#define dMAX_PIXELS						16384				// maximum number of pixels that can be requested
+-#define dMAX_AVERAGE					60					// maximum number of pixel frames that will be window-averaged
+-#ifdef _Thetis
+-#define dINREAL							double
+-#else
+-#define dINREAL							float
++/* minimal stand-ins for RXA / channel / bpsnba used by nbp.c property functions */
++typedef struct _bpsnba { NBP bpsnba; int wintype; int autoincr; } bpsnba, *BPSNBA;
++void recalc_bpsnba_filter(BPSNBA a, int update);
++void RXAbpsnbaCheck(int channel, int mode, int notch_run);
++void RXAbpsnbaSet(int channel);
++struct _rxa_stub { struct { NOTCHDB p; } ndb; struct { NBP p; } nbp0; struct { BPSNBA p; } bpsnba; int mode; };
++extern struct _rxa_stub rxa[4];
++struct _ch_stub { CRITICAL_SECTION csDSP; };
++extern struct _ch_stub ch[4];
+ #endif
+-#define dOUTREAL						float
+-#define dSAMP_BUFF_MULT					2					// ratio of input sample buffer size to fft size (for overlap)
+-#define dNUM_PIXEL_BUFFS				3					// number of pixel output buffers
+-#define dMAX_M							1					// number of variables to calibrate
+-#define dMAX_N							100					// maximum number of frequencies at which to calibrate
+-#define dMAX_CAL_SETS					2					// maximum number of calibration data sets
+-#define dMAX_PIXOUTS					4					// maximum number of det/avg/outputs per display instance
+-
+-// wisdom definitions
+-#define MAX_WISDOM_SIZE                 262144
+-
+-// math definitions
+-#define PI								3.1415926535897932
+-#define TWOPI							6.2831853071795864
+-
+-// miscellaneous
+-typedef double complex[2];
+-#define PORT							__declspec( dllexport )
+-#ifndef M_PI
+-#  define M_PI 3.14159265358979323846
+-#endif
+-

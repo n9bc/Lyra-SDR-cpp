@@ -1,0 +1,30 @@
+== orig 16384 1500 0
+size=16384 npix=1500 clip=0
+TOTAL stale=0 diffRef=237086 carrLost=3247/8000
+== fixed 16384 1500 0
+size=16384 npix=1500 clip=0
+TOTAL stale=0 diffRef=0 carrLost=257/8000
+== orig 4096 1800 32
+size=4096 npix=1800 clip=32
+TOTAL stale=0 diffRef=588353 carrLost=0/8000
+== fixed 4096 1800 32
+size=4096 npix=1800 clip=32
+TOTAL stale=0 diffRef=588353 carrLost=0/8000
+== orig 65536 2560 0
+size=65536 npix=2560 clip=0
+TOTAL stale=0 diffRef=496983 carrLost=4192/8000
+== fixed 65536 2560 0
+size=65536 npix=2560 clip=0
+TOTAL stale=0 diffRef=0 carrLost=0/8000
+== orig 8192 1000 16
+size=8192 npix=1000 clip=16
+TOTAL stale=0 diffRef=135920 carrLost=3000/8000
+== fixed 8192 1000 16
+size=8192 npix=1000 clip=16
+TOTAL stale=0 diffRef=0 carrLost=840/8000
+== orig 16384 4000 0
+size=16384 npix=4000 clip=0
+TOTAL stale=0 diffRef=276181 carrLost=1777/8000
+== fixed 16384 4000 0
+size=16384 npix=4000 clip=0
+TOTAL stale=0 diffRef=0 carrLost=0/8000

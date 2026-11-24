@@ -1,0 +1,24 @@
+== orig BURST amp1000 every 30 samples x 40ms
+D=4887 impulses=209 residual_rms=9.8509e-01 maxresid=100.000 gatedSamples=72935 adv_slew=19 hang_slew=19
+  splatter @ carrier +1000 Hz (2.4k band):   -7.34 dBc
+  splatter @ carrier +2000 Hz (2.4k band):  -18.36 dBc
+  splatter @ carrier +3000 Hz (2.4k band):  -19.63 dBc
+  splatter @ carrier +5000 Hz (2.4k band):  -19.86 dBc
+  splatter @ carrier+10000 Hz (2.4k band):  -19.96 dBc
+  splatter @ carrier+15000 Hz (2.4k band):  -19.94 dBc
+  splatter @ carrier+20000 Hz (2.4k band):  -19.94 dBc
+  splatter @ carrier+30000 Hz (2.4k band):  -19.95 dBc
+  splatter @ carrier+50000 Hz (2.4k band):  -19.94 dBc
+  DC band (0 Hz +-1.2k):                 -19.60 dBc
+== fixed BURST amp1000 every 30 samples x 40ms
+D=4887 impulses=209 residual_rms=9.7748e-01 maxresid=100.000 gatedSamples=72935 adv_slew=19 hang_slew=19
+  splatter @ carrier +1000 Hz (2.4k band):   -7.45 dBc
+  splatter @ carrier +2000 Hz (2.4k band):  -18.30 dBc
+  splatter @ carrier +3000 Hz (2.4k band):  -19.53 dBc
+  splatter @ carrier +5000 Hz (2.4k band):  -19.85 dBc
+  splatter @ carrier+10000 Hz (2.4k band):  -19.98 dBc
+  splatter @ carrier+15000 Hz (2.4k band):  -19.95 dBc
+  splatter @ carrier+20000 Hz (2.4k band):  -19.95 dBc
+  splatter @ carrier+30000 Hz (2.4k band):  -19.96 dBc
+  splatter @ carrier+50000 Hz (2.4k band):  -19.94 dBc
+  DC band (0 Hz +-1.2k):                 -19.99 dBc

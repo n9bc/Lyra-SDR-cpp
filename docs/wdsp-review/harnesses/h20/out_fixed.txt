@@ -1,0 +1,69 @@
+S0 control: mode2 N=10 from mode0 start (no change), carrier on
+  steady +10                         f=   10  floor: out  -128.58 ideal  -128.58 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  steady +300                        f=  300  floor: out  -128.64 ideal  -128.64 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+S1: mode2 N=10 steady 300 frames, then SetDisplayNumAverage(5)
+  before +300                        f=  300  floor: out  -128.64 ideal  -128.64 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +1                      f=  301  floor: out  -129.84 ideal  -129.84 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +5                      f=  305  floor: out  -128.69 ideal  -128.69 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +20                     f=  320  floor: out  -128.67 ideal  -128.67 err   +0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +100                    f=  400  floor: out  -128.72 ideal  -128.72 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +1000                   f= 1300  floor: out  -128.69 ideal  -128.69 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->5 +3000                   f= 3300  floor: out  -128.68 ideal  -128.68 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+S2: mode2 N=30 steady, then N->2
+  after N->2 +1                      f=  301  floor: out  -129.78 ideal  -129.78 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->2 +5                      f=  305  floor: out  -129.08 ideal  -129.08 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->2 +20                     f=  320  floor: out  -129.12 ideal  -129.12 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->2 +100                    f=  400  floor: out  -129.21 ideal  -129.21 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->2 +1000                   f= 1300  floor: out  -129.04 ideal  -129.04 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+  after N->2 +3000                   f= 3300  floor: out  -128.85 ideal  -128.85 err   -0.000 dB (max|err|   0.000)  neg_av_sum=0
+S3 ghost: mode2 N=20 with -40 dB carrier, then carrier OFF and N->10
+  before (carrier on) +300           f=  300  floor: out  -128.48 ideal  -128.48 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +1              f=  301  floor: out  -129.73 ideal  -129.73 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.23 ideal  -128.23 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +5              f=  305  floor: out  -128.65 ideal  -128.65 err   -0.000 dB (max|err|   0.000)  carrpix: out  -127.58 ideal  -127.58 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +20             f=  320  floor: out  -128.56 ideal  -128.56 err   -0.000 dB (max|err|   0.000)  carrpix: out  -127.82 ideal  -127.82 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +100            f=  400  floor: out  -128.58 ideal  -128.58 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.01 ideal  -128.01 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +1000           f= 1300  floor: out  -128.57 ideal  -128.57 err   +0.000 dB (max|err|   0.000)  carrpix: out  -129.12 ideal  -129.12 err    -0.00  neg_av_sum=0
+  carrier off, N->10 +3000           f= 3300  floor: out  -128.60 ideal  -128.60 err   +0.000 dB (max|err|   0.000)  carrpix: out  -126.54 ideal  -126.54 err    -0.00  neg_av_sum=0
+S4: mode3 (backmult 0.9) with carrier, then SetDisplayAverageMode(2) N=10; +20 dB floor step at +1500
+  mode3->2 +20                       f=  320  floor: out  -128.60 ideal  -128.60 err   +0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  mode3->2 +1500                     f= 1800  floor: out  -128.52 ideal  -128.52 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  after +20dB floor step +20         f= 1820  floor: out  -108.59 ideal  -108.59 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  after +20dB floor step +1500       f= 3300  floor: out  -108.62 ideal  -108.62 err   +0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+S5: peak-hold (-1) with carrier, then carrier OFF and mode->2 N=10
+  peak->2 carrier off +1             f=  301  floor: out  -129.64 ideal  -129.64 err   +0.000 dB (max|err|   0.000)  carrpix: out  -132.15 ideal  -132.15 err    -0.00  neg_av_sum=0
+  peak->2 carrier off +5             f=  305  floor: out  -128.62 ideal  -128.62 err   -0.000 dB (max|err|   0.000)  carrpix: out  -127.95 ideal  -127.95 err    +0.00  neg_av_sum=0
+  peak->2 carrier off +20            f=  320  floor: out  -128.60 ideal  -128.60 err   +0.000 dB (max|err|   0.000)  carrpix: out  -129.32 ideal  -129.32 err    +0.00  neg_av_sum=0
+  peak->2 carrier off +100           f=  400  floor: out  -128.63 ideal  -128.63 err   -0.000 dB (max|err|   0.000)  carrpix: out  -129.38 ideal  -129.38 err    -0.00  neg_av_sum=0
+  peak->2 carrier off +1000          f= 1300  floor: out  -128.56 ideal  -128.56 err   +0.000 dB (max|err|   0.000)  carrpix: out  -130.10 ideal  -130.10 err    -0.00  neg_av_sum=0
+  peak->2 carrier off +3000          f= 3300  floor: out  -128.56 ideal  -128.56 err   +0.000 dB (max|err|   0.000)  carrpix: out  -127.55 ideal  -127.55 err    +0.00  neg_av_sum=0
+S6: mode1 (backmult 0.9) with carrier, then carrier OFF and mode->2 N=10
+  mode1->2 carrier off +1            f=  301  floor: out  -129.83 ideal  -129.83 err   -0.000 dB (max|err|   0.000)  carrpix: out  -124.91 ideal  -124.91 err    +0.00  neg_av_sum=0
+  mode1->2 carrier off +5            f=  305  floor: out  -128.83 ideal  -128.83 err   +0.000 dB (max|err|   0.000)  carrpix: out  -127.88 ideal  -127.88 err    -0.00  neg_av_sum=0
+  mode1->2 carrier off +20           f=  320  floor: out  -128.61 ideal  -128.61 err   -0.000 dB (max|err|   0.000)  carrpix: out  -130.87 ideal  -130.87 err    -0.00  neg_av_sum=0
+  mode1->2 carrier off +100          f=  400  floor: out  -128.61 ideal  -128.61 err   +0.000 dB (max|err|   0.000)  carrpix: out  -128.18 ideal  -128.18 err    -0.00  neg_av_sum=0
+  mode1->2 carrier off +1000         f= 1300  floor: out  -128.57 ideal  -128.57 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.97 ideal  -128.97 err    +0.00  neg_av_sum=0
+  mode1->2 carrier off +3000         f= 3300  floor: out  -128.68 ideal  -128.68 err   -0.000 dB (max|err|   0.000)  carrpix: out  -127.67 ideal  -127.67 err    +0.00  neg_av_sum=0
+S7 control: mode0 with carrier, then carrier OFF and mode->2 N=10
+  mode0->2 carrier off +1            f=  301  floor: out  -129.82 ideal  -129.82 err   -0.000 dB (max|err|   0.000)  carrpix: out  -134.73 ideal  -134.73 err    +0.00  neg_av_sum=0
+  mode0->2 carrier off +5            f=  305  floor: out  -128.70 ideal  -128.70 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.56 ideal  -128.56 err    +0.00  neg_av_sum=0
+  mode0->2 carrier off +20           f=  320  floor: out  -128.60 ideal  -128.60 err   -0.000 dB (max|err|   0.000)  carrpix: out  -127.04 ideal  -127.04 err    -0.00  neg_av_sum=0
+  mode0->2 carrier off +100          f=  400  floor: out  -128.54 ideal  -128.54 err   -0.000 dB (max|err|   0.000)  carrpix: out  -129.59 ideal  -129.59 err    -0.00  neg_av_sum=0
+  mode0->2 carrier off +1000         f= 1300  floor: out  -128.56 ideal  -128.56 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.71 ideal  -128.71 err    -0.00  neg_av_sum=0
+  mode0->2 carrier off +3000         f= 3300  floor: out  -128.57 ideal  -128.57 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.28 ideal  -128.28 err    -0.00  neg_av_sum=0
+S8: mode2 N=10 with carrier, then carrier OFF and ResetPixelBuffers()
+  after Reset, carrier off +1        f=  301  floor: out  -129.74 ideal  -129.74 err   -0.000 dB (max|err|   0.000)  carrpix: out  -132.73 ideal  -132.73 err    -0.00  neg_av_sum=0
+  after Reset, carrier off +5        f=  305  floor: out  -128.64 ideal  -128.64 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.74 ideal  -128.74 err    +0.00  neg_av_sum=0
+  after Reset, carrier off +20       f=  320  floor: out  -128.54 ideal  -128.54 err   -0.000 dB (max|err|   0.000)  carrpix: out  -129.08 ideal  -129.08 err    -0.00  neg_av_sum=0
+  after Reset, carrier off +100      f=  400  floor: out  -128.60 ideal  -128.60 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.59 ideal  -128.59 err    -0.00  neg_av_sum=0
+  after Reset, carrier off +1000     f= 1300  floor: out  -128.49 ideal  -128.49 err   +0.000 dB (max|err|   0.000)  carrpix: out  -129.76 ideal  -129.76 err    -0.00  neg_av_sum=0
+  after Reset, carrier off +3000     f= 3300  floor: out  -128.47 ideal  -128.47 err   +0.000 dB (max|err|   0.000)  carrpix: out  -127.13 ideal  -127.13 err    -0.00  neg_av_sum=0
+S9: N=70 (> dMAX_AVERAGE=60) from clean start; carrier on 0..499, off afterwards
+  num_average stored = 60
+  N=70 carrier on +60                f=   60  floor: out  -128.46 ideal  -128.46 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  N=70 carrier on +70                f=   70  floor: out  -128.45 ideal  -128.45 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  N=70 carrier on +100               f=  100  floor: out  -128.47 ideal  -128.47 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  N=70 carrier on +500               f=  500  floor: out  -128.46 ideal  -128.46 err   -0.000 dB (max|err|   0.000)  carrpix: out   -39.99 ideal   -39.99 err    -0.00  neg_av_sum=0
+  N=70 carrier off +70               f=  570  floor: out  -128.49 ideal  -128.49 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.55 ideal  -128.55 err    -0.00  neg_av_sum=0
+  N=70 carrier off +100              f=  600  floor: out  -128.50 ideal  -128.50 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.21 ideal  -128.21 err    +0.00  neg_av_sum=0
+  N=70 carrier off +1000             f= 1500  floor: out  -128.44 ideal  -128.44 err   -0.000 dB (max|err|   0.000)  carrpix: out  -128.80 ideal  -128.80 err    -0.00  neg_av_sum=0
+  N=70 carrier off +3000             f= 3500  floor: out  -128.46 ideal  -128.46 err   -0.000 dB (max|err|   0.000)  carrpix: out  -129.07 ideal  -129.07 err    +0.00  neg_av_sum=0

@@ -1,0 +1,4 @@
+a2/300/f0/q0 S6   cnr=-3dB sb=0                      lock_s=19.983 fin_df=  -0.058Hz rms_e= 0.208rad slips=   0 snr_pll=-15.62dB snr_genie=-15.62dB acq=0
+a2/300/f0/q0 S6   cnr=-6dB sb=0                      lock_s=19.991 fin_df=   0.084Hz rms_e= 0.297rad slips=   0 snr_pll=-18.60dB snr_genie=-18.60dB acq=0
+a2/300/f0/q0 S6   cnr=-9dB sb=0                      lock_s=19.991 fin_df=   0.098Hz rms_e= 0.452rad slips=   9 snr_pll=-21.58dB snr_genie=-21.58dB acq=0
+a2/300/f0/q0 S6   cnr=-12dB sb=0                     lock_s=19.997 fin_df=  -0.091Hz rms_e= 0.697rad slips=  73 snr_pll=-24.64dB snr_genie=-24.61dB acq=0

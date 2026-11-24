@@ -1,0 +1,3 @@
+=== ORIGINAL build ===
+
+[A] passband 0..3000 Hz, nc=2048, size=1024, wintype 0, autoincr 1. Notches added in order: 1000/200, 2000/200, 925/2050

@@ -1,0 +1,60 @@
+--- wdsp-2.11/rmatch.c
++++ fixed/rmatch.c
+@@ -145,6 +145,15 @@
+ 	a->ffmav = create_aamav (a->ff_ringmin, a->ff_ringmax, a->nom_ratio);
+ 	a->propmav = create_mav (a->prop_ringmin, a->prop_ringmax, 0.0);
+ 	a->pr_gain = a->prop_gain * 48000.0 / (double)a->nom_outrate;	// adjust gain for rate
++	{	// [h14 fix] type-II loop: wn^2 = K*ki, 2*zeta*wn = K*kp
++		double wn = TWOPI * a->pi_bw;
++		double K = (double)a->nom_outrate;
++		a->pi_kp = 2.0 * a->pi_zeta * wn / K;
++		a->pi_ki = wn * wn / K;
++		a->pi_integ = 0.0;
++		a->pi_efilt = 0.0;
++		a->var0 = a->var;
++	}
+ 	a->inv_nom_ratio = (double)a->nom_inrate / (double)a->nom_outrate;
+ 	a->feed_forward = 1.0;
+ 	a->av_deviation = 0.0;
+@@ -234,6 +243,9 @@
+ 	a->prop_gain = prop_gain;
+ 	a->varmode = varmode;
+ 	a->tslew = tslew;
++	a->pi_bw = 0.02;		// [h14 fix] defaults
++	a->pi_zeta = 0.707;
++	a->pi_tau = 0.5;
+ 	calc_rmatch(a);
+ 	return a;
+ }
+@@ -255,18 +267,20 @@
+ 
+ void control (RMATCH a, int change)
+ {
+-	{
+-		double current_ratio;
+-		xaamav (a->ffmav, change, &current_ratio);
+-		current_ratio *= a->inv_nom_ratio;
+-		a->feed_forward = a->ff_alpha * current_ratio + (1.0 - a->ff_alpha) * a->feed_forward;
+-	}
+-	{
+-		int deviation = a->n_ring - a->rsize / 2;
+-		xmav (a->propmav, deviation, &a->av_deviation);
+-	}
++	// [h14 fix] time-based PI loop on fill error. Each call advances loop time by
++	// half its block duration (in- and out-calls each cover the timeline once).
++	double dt, alpha;
++	int deviation = a->n_ring - a->rsize / 2;
++	if (change >= 0) dt = 0.5 * (double)change / (double)a->nom_inrate;
++	else             dt = 0.5 * (double)(-change) / (double)a->nom_outrate;
++	alpha = dt / a->pi_tau;
++	if (alpha > 1.0) alpha = 1.0;
++	a->pi_efilt += alpha * ((double)deviation - a->pi_efilt);
++	a->pi_integ -= a->pi_ki * a->pi_efilt * dt;
++	if (a->pi_integ >  0.04) a->pi_integ =  0.04;
++	if (a->pi_integ < -0.04) a->pi_integ = -0.04;
+ 	EnterCriticalSection (&a->cs_var);
+-	a->var = a->feed_forward - a->pr_gain * a->av_deviation;
++	a->var = a->var0 + a->pi_integ - a->pi_kp * a->pi_efilt;
+ 	if (a->var > 1.04) a->var = 1.04;
+ 	if (a->var < 0.96) a->var = 0.96;
+ 	LeaveCriticalSection (&a->cs_var);

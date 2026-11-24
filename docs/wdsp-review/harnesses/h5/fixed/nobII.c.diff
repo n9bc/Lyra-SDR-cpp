@@ -1,0 +1,72 @@
+--- wdsp-2.11/nobII.c
++++ fixed/nobII.c
+@@ -25,6 +25,10 @@
+ */
+ 
+ #include "comm.h"
++extern int ar_gap_fill(const double*,int,const double*,int,int,int,double*);
++#define AR_ORDER 16
++#define AR_CTX 512
++#define AR_MAXGAP_TIME 0.004
+ 
+ #define MAX_ADV_SLEW_TIME			(0.002)
+ #define MAX_ADV_TIME				(0.002)
+@@ -154,6 +158,26 @@
+ 	memset (a->ffbuff, 0, a->filterlen * sizeof (complex));
+ }
+ 
++static double ar_fill[2*80000]; static int ar_fpos;
++static double ar_l[2*AR_CTX], ar_r[2*AR_CTX];
++static void mode5_prepare(NOB a)
++{
++	int G = a->adv_slew_count + a->adv_count + a->blank_count + a->hang_slew_count;
++	int g0 = a->out_idx + 1, n, idx;
++	int avail_r;
++	ar_fpos = 0;
++	if (G > (int)(AR_MAXGAP_TIME * a->samplerate)) { memset(ar_fill, 0, 2*G*sizeof(double)); return; }
++	/* left context: walk back from out_idx while unflagged */
++	for (n = 0, idx = a->out_idx; n < AR_CTX; n++) { if (a->imp[idx]) break; if (--idx < 0) idx += a->dline_size; }
++	int nl = n; idx = a->out_idx - nl + 1; if (idx < 0) idx += a->dline_size;
++	for (n = 0; n < nl; n++) { ar_l[2*n] = a->dline[2*idx]; ar_l[2*n+1] = a->dline[2*idx+1]; if (++idx >= a->dline_size) idx -= a->dline_size; }
++	/* right context: from g0+G forward while unflagged and already received (<= in_idx) */
++	avail_r = a->in_idx - (g0 + G) + 1; while (avail_r < 0) avail_r += a->dline_size; if (avail_r > a->dline_size/2) avail_r = 0;
++	idx = (g0 + G) % a->dline_size;
++	for (n = 0; n < AR_CTX && n < avail_r; n++) { if (a->imp[idx]) break; ar_r[2*n] = a->dline[2*idx]; ar_r[2*n+1] = a->dline[2*idx+1]; if (++idx >= a->dline_size) idx -= a->dline_size; }
++	if (!ar_gap_fill(ar_l, nl, ar_r, n, G, AR_ORDER, ar_fill)) memset(ar_fill, 0, 2*G*sizeof(double));
++}
++
+ PORT
+ void xnob (NOB a)
+ {
+@@ -190,6 +214,7 @@
+ 				a->bfbuff[2 * a->bfb_in_idx + 1] = a->dline[2 * bf_idx + 1];
+ 			}
+ 
++			int st0 = a->state;
+ 			switch (a->state)
+ 			{
+ 				case 0:     // normal output & impulse setup
+@@ -310,6 +335,10 @@
+ 										a->I = a->I2;
+ 										a->Q = a->Q2;
+ 										break;
++									case 5: // complex AR (Burg) two-sided extrapolation, cross-faded
++										a->deltaI = a->deltaQ = a->I = a->Q = 0.0;
++										mode5_prepare (a);
++										break;
+ 									case 4: // linear interpolation
+ 										a->deltaI = (a->I2 - a->I1) / (a->adv_count + a->blank_count);
+ 										a->deltaQ = (a->Q2 - a->Q1) / (a->adv_count + a->blank_count);
+@@ -482,6 +511,12 @@
+                         }
+ 						break;
+ 					}
++			}
++			if (a->mode == 5 && a->overflow == 0 && st0 >= 1 && st0 <= 4)
++			{
++				a->out[2 * i + 0] = ar_fill[2 * ar_fpos + 0];
++				a->out[2 * i + 1] = ar_fill[2 * ar_fpos + 1];
++				ar_fpos++;
+ 			}
+ 			if (++a->in_idx == a->dline_size) a->in_idx = 0;
+ 			if (++a->scan_idx == a->dline_size) a->scan_idx = 0;

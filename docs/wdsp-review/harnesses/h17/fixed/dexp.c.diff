@@ -1,0 +1,147 @@
+--- wdsp-2.11/dexp.c
++++ fixed/dexp.c
+@@ -25,6 +25,9 @@
+ */
+ 
+ #include "comm.h"
++#define DEXP_ATTACK_FIX 1
++#define DEXP_HOLD_FIX 3
++#define DEXP_DECAY_FIX 4
+ 
+ DEXP pdexp[4];
+ 
+@@ -146,6 +149,36 @@
+ 	a->audring = calc_delring ((int)a->rate, a->size, (int)(a->audelay * a->rate), a->audbuffer, a->out);
+ }
+ 
++// FIX: recompute coefficients in place; keep state, count, avsig, vox_count and the audio ring
++void recalc_dexp_coefs (DEXP a)
++{
++	int na = (int)(a->tattack * a->rate);
++	int nd = (int)(a->tdecay * a->rate);
++	a->avm = exp(-1.0 / (a->rate * a->dettau));
++	a->onem_avm = 1.0 - a->avm;
++	if (na != a->nattack)
++	{
++		_aligned_free (a->cattack);
++		a->cattack = (double *)malloc0((na + 1) * sizeof(double));
++		if (a->state == DEXP_ATTACK_FIX)
++			a->count = (int)((double)a->count * (double)na / (double)(a->nattack > 0 ? a->nattack : 1));
++		a->nattack = na;
++	}
++	if (nd != a->ndecay)
++	{
++		_aligned_free (a->cdecay);
++		a->cdecay = (double *)malloc0((nd + 1) * sizeof(double));
++		if (a->state == DEXP_DECAY_FIX)
++			a->count = (int)((double)a->count * (double)nd / (double)(a->ndecay > 0 ? a->ndecay : 1));
++		a->ndecay = nd;
++	}
++	a->low_gain = 1.0 / a->exp_ratio;
++	calc_slews(a);
++	a->hold_thresh = a->hysteresis_ratio * a->attack_thresh;
++	a->nhold = (int)(a->thold * a->rate);
++	if (a->state == DEXP_HOLD_FIX && a->count > a->nhold) a->count = a->nhold;
++}
++
+ void decalc_dexp (DEXP a)
+ {
+ 	decalc_delring (a->audring);
+@@ -374,7 +407,19 @@
+ 			gain = a->cdecay[a->ndecay - a->count];
+ 			a->audbuffer[2 * i + 0] = a->delsig[2 * i + 0] * gain;
+ 			a->audbuffer[2 * i + 1] = a->delsig[2 * i + 1] * gain;
+-			if (a->count-- == 0)
++			if (a->antivox_run)
++				asig = a->avsig - a->antivox_gain * a->antivox_level;
++			else
++				asig = a->avsig;
++			if (asig > a->attack_thresh)
++			{
++				// FIX: retrigger during release; resume the attack curve from the current gain
++				int k = 0;
++				while (k < a->nattack && a->cattack[k] < gain) k++;
++				a->state = DEXP_ATTACK;
++				a->count = a->nattack - k;
++			}
++			else if (a->count-- == 0)
+ 				a->state = DEXP_LOW;
+ 			break;
+ 		}
+@@ -469,9 +514,8 @@
+ 	// 0.01 seconds is a good starting point to try.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->dettau = tau;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -482,9 +526,8 @@
+ 	// 0.002 - 0.100 should be a good range.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->tattack = time;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -495,9 +538,8 @@
+ 	// 0.002 - 0.999 should be a good range.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->tdecay = time;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -508,9 +550,8 @@
+ 	// 0.000 - 2.000 should be a good range.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->thold = time;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -521,9 +562,8 @@
+ 	// Range of 1.0 - 30.0 should be good.  Could use dB:  0.0 - 30.0dB.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->exp_ratio = ratio;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -534,9 +574,8 @@
+ 	// Expose to operator in dB:  0.0dB - 9.9dB should be good (1.000 - 0.320).
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->hysteresis_ratio = ratio;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 
+@@ -546,9 +585,8 @@
+ 	// Set attack threshold.
+ 	DEXP a = pdexp[id];
+ 	EnterCriticalSection (&a->cs_update);
+-	decalc_dexp (a);
+ 	a->attack_thresh = thresh;
+-	calc_dexp (a);
++	recalc_dexp_coefs (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 

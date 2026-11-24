@@ -1,0 +1,46 @@
+--- wdsp-2.11/amd.c
++++ orig/amd.c
+@@ -253,42 +253,4 @@
+ void setSize_amd (AMD a, int size)
+ {
+ 	a->buff_size = size;
+-}
+-
+-/********************************************************************************************************
+-*																										*
+-*											RXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-PORT void
+-SetRXAAMDRun(int channel, int run)
+-{
+-	AMD a = rxa[channel].amd.p;
+-	if (a->run != run)
+-	{
+-		RXAbp1Check (channel, run, rxa[channel].snba.p->run, rxa[channel].emnr.p->run, 
+-			getRun_nnrbypass (rxa[channel].nnrbypass.p), 
+-			rxa[channel].anf.p->run, rxa[channel].anr.p->run);
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		RXAbp1Set (channel);
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+ }
+-
+-PORT void
+-SetRXAAMDSBMode(int channel, int sbmode)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].amd.p->sbmode = sbmode;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAMDFadeLevel(int channel, int levelfade)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].amd.p->levelfade = levelfade;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+\ No newline at end of file

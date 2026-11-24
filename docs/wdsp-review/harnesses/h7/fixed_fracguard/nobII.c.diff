@@ -1,0 +1,70 @@
+--- wdsp-2.11/nobII.c
++++ fixed_fracguard/nobII.c
+@@ -146,6 +146,10 @@
+     a->state = 0;
+ 	a->overflow = 0;
+     a->avg = 1.0;
++    a->seeded = 0;
++    a->consec = 0;
++    a->shadow = 1.0;
++    a->guardK = (int)(0.005 * a->samplerate);
+     a->bfb_in_idx = a->filterlen - 1;
+     a->ffb_in_idx = a->filterlen - 1;
+ 	memset (a->dline, 0, a->dline_size * sizeof (complex));
+@@ -172,16 +176,52 @@
+ 	EnterCriticalSection (&a->cs_update);
+     if (a->run)
+ 	{
++		if (!a->seeded)		// FIX: seed avg from first non-silent block's median |x|
++		{
++			int n = 0;
++			double *m = (double *)malloc (a->buffsize * sizeof (double));
++			for (i = 0; i < a->buffsize; i++)
++			{
++				double v = sqrt (a->in[2 * i] * a->in[2 * i] + a->in[2 * i + 1] * a->in[2 * i + 1]);
++				if (v > 0.0) m[n++] = v;
++			}
++			if (n > a->buffsize / 2)
++			{
++				int c, d; double t;
++				for (c = 1; c < n; c++) { t = m[c]; d = c - 1; while (d >= 0 && m[d] > t) { m[d + 1] = m[d]; d--; } m[d + 1] = t; }
++				a->avg = a->shadow = 1.0645 * m[n / 2];	// Rayleigh mean/median
++				a->seeded = 1;
++			}
++			free (m);
++		}
+ 		for (i = 0; i < a->buffsize; i++)
+ 		{
+ 			a->dline[2 * a->in_idx + 0] = a->in[2 * i + 0];
+ 			a->dline[2 * a->in_idx + 1] = a->in[2 * i + 1];
+ 			mag = sqrt(a->dline[2 * a->in_idx + 0] * a->dline[2 * a->in_idx + 0] + a->dline[2 * a->in_idx + 1] * a->dline[2 * a->in_idx + 1]);
+-			a->avg = a->backmult * a->avg + a->ombackmult * mag;
+-			if (mag > (a->avg * a->threshold))
+-				a->imp[a->in_idx] = 1;
++			if (mag == 0.0)
++				a->imp[a->in_idx] = 0;		// FIX: hold avg through exact-zero input
+ 			else
+-				a->imp[a->in_idx] = 0;
++			{
++				int flag;
++				a->shadow = a->backmult * a->shadow + a->ombackmult * mag;
++				flag = (mag > (a->avg * a->threshold));
++#if FIX_CLIP
++				a->avg = a->backmult * a->avg + a->ombackmult * fmin (mag, a->threshold * a->avg);
++#else
++				if (!flag) a->avg = a->backmult * a->avg + a->ombackmult * mag;	// FIX: censored update
++#endif
++				{	// FIX variant: guard on flagged FRACTION over a guardK window (consec reused as count, seeded as window pos)
++					static int wpos = 0;
++					if (flag) a->consec++;
++					if (++wpos >= a->guardK)
++					{
++						if (a->consec > a->guardK / 4) a->avg = a->shadow;
++						a->consec = 0; wpos = 0;
++					}
++				}
++				a->imp[a->in_idx] = flag;
++			}
+ 			if ((bf_idx = a->out_idx + a->adv_slew_count) >= a->dline_size) bf_idx -= a->dline_size;
+ 			if (a->imp[bf_idx] == 0)
+ 			{

@@ -1,0 +1,20 @@
+snr=0 m=0 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=20.25 dB LKR=1.557 iso_in=0.0000 iso_out=0.0007 flicker=0.066 | SPEECH(242 fr, aepfN=1 0%): SA=14.51 dB SDR=1.68 dB dSNR=2.17 dB | SPFREE cells(14831): NA=18.24 LKR=1.474 iso_in=0.0000 iso_out=0.0009
+snr=0 m=0 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=18.91 dB LKR=3.820 iso_in=0.0000 iso_out=0.0134 flicker=0.142 | SPEECH(242 fr, aepfN=1 0%): SA=9.88 dB SDR=2.53 dB dSNR=5.31 dB | SPFREE cells(14831): NA=17.86 LKR=2.861 iso_in=0.0000 iso_out=0.0123
+snr=0 m=2 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=22.50 dB LKR=0.781 iso_in=0.0000 iso_out=0.0005 flicker=0.064 | SPEECH(242 fr, aepfN=1 0%): SA=15.21 dB SDR=1.52 dB dSNR=2.80 dB | SPFREE cells(14831): NA=19.91 LKR=1.740 iso_in=0.0000 iso_out=0.0007
+snr=0 m=2 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=20.85 dB LKR=4.389 iso_in=0.0000 iso_out=0.0130 flicker=0.136 | SPEECH(242 fr, aepfN=1 0%): SA=9.34 dB SDR=2.69 dB dSNR=6.74 dB | SPFREE cells(14831): NA=19.51 LKR=3.447 iso_in=0.0000 iso_out=0.0138
+snr=0 m=3 [ae cep soft3 ximin]=1 3 1 0 :: 
+snr=0 m=3 [ae cep soft3 ximin]=1 3 1 1 :: 
+snr=10 m=0 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=17.52 dB LKR=3.652 iso_in=0.0000 iso_out=0.0006 flicker=0.085 | SPEECH(242 fr, aepfN=1 0%): SA=7.09 dB SDR=4.17 dB dSNR=2.72 dB | SPFREE cells(4527): NA=13.88 LKR=1.955 iso_in=0.0000 iso_out=0.0013
+snr=10 m=0 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=16.21 dB LKR=4.533 iso_in=0.0000 iso_out=0.0149 flicker=0.150 | SPEECH(242 fr, aepfN=1 0%): SA=3.98 dB SDR=6.20 dB dSNR=4.76 dB | SPFREE cells(4527): NA=14.14 LKR=3.271 iso_in=0.0000 iso_out=0.0186
+snr=10 m=2 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=20.50 dB LKR=2.494 iso_in=0.0000 iso_out=0.0005 flicker=0.085 | SPEECH(242 fr, aepfN=1 1%): SA=6.82 dB SDR=4.11 dB dSNR=3.57 dB | SPFREE cells(4527): NA=15.16 LKR=1.924 iso_in=0.0000 iso_out=0.0029
+snr=10 m=2 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=18.60 dB LKR=6.393 iso_in=0.0000 iso_out=0.0155 flicker=0.154 | SPEECH(242 fr, aepfN=1 0%): SA=3.39 dB SDR=6.76 dB dSNR=5.65 dB | SPFREE cells(4527): NA=15.95 LKR=2.780 iso_in=0.0000 iso_out=0.0212
+snr=10 m=3 [ae cep soft3 ximin]=1 3 1 0 :: 
+snr=10 m=3 [ae cep soft3 ximin]=1 3 1 1 :: 
+snr=20 m=0 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=15.79 dB LKR=3.746 iso_in=0.0000 iso_out=0.0007 flicker=0.127 | SPEECH(242 fr, aepfN=1 36%): SA=2.45 dB SDR=8.93 dB dSNR=2.75 dB | SPFREE cells(897): NA=11.01 LKR=2.027 iso_in=0.0000 iso_out=0.0045
+snr=20 m=0 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=15.07 dB LKR=3.947 iso_in=0.0000 iso_out=0.0123 flicker=0.179 | SPEECH(242 fr, aepfN=1 0%): SA=1.75 dB SDR=10.97 dB dSNR=3.19 dB | SPFREE cells(897): NA=11.86 LKR=2.422 iso_in=0.0000 iso_out=0.0078
+snr=20 m=2 ae=1 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=19.95 dB LKR=4.017 iso_in=0.0000 iso_out=0.0005 flicker=0.131 | SPEECH(242 fr, aepfN=1 41%): SA=2.35 dB SDR=8.81 dB dSNR=2.90 dB | SPFREE cells(897): NA=12.18 LKR=2.086 iso_in=0.0000 iso_out=0.0056
+snr=20 m=2 ae=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(284 fr): NA=18.60 dB LKR=4.764 iso_in=0.0000 iso_out=0.0129 flicker=0.189 | SPEECH(242 fr, aepfN=1 0%): SA=1.62 dB SDR=11.33 dB dSNR=3.30 dB | SPFREE cells(897): NA=13.98 LKR=2.623 iso_in=0.0000 iso_out=0.0033
+snr=20 m=3 [ae cep soft3 ximin]=1 3 1 0 :: 
+snr=20 m=3 [ae cep soft3 ximin]=1 3 1 1 :: 
+tone m=0 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(43 fr): NA=20.13 dB LKR=2.450 iso_in=0.0000 iso_out=0.0008 flicker=0.056 | TONE: loss700=21.32 dB loss1500=21.54 dB
+tone m=2 cep=3 :: align=0.00e+00 nan=0 | NOISE-ONLY(43 fr): NA=22.27 dB LKR=0.453 iso_in=0.0000 iso_out=0.0005 flicker=0.049 | TONE: loss700=23.31 dB loss1500=23.57 dB

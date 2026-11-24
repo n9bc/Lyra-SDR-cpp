@@ -1,0 +1,30 @@
+sc=1 mode=0 hang=0.10ms imp=1 | SER(total err/clean)=-15.82 dB | in-gap err/clean=-1.52 dB (gap samples=13351) | gap out pwr/clean=-7.63 dB | band3.5-6.5k out/clean=64.44 dB
+sc=1 mode=1 hang=0.10ms imp=1 | SER(total err/clean)=-93.24 dB | in-gap err/clean=-78.94 dB (gap samples=13351) | gap out pwr/clean=-0.00 dB | band3.5-6.5k out/clean=0.17 dB
+sc=1 mode=4 hang=0.10ms imp=1 | SER(total err/clean)=-93.41 dB | in-gap err/clean=-79.12 dB (gap samples=13351) | gap out pwr/clean=-0.00 dB | band3.5-6.5k out/clean=0.20 dB
+sc=1 mode=5 hang=0.10ms imp=1 | SER(total err/clean)=-93.97 dB | in-gap err/clean=-79.67 dB (gap samples=13351) | gap out pwr/clean=0.00 dB | band3.5-6.5k out/clean=-0.18 dB
+sc=2 mode=0 hang=0.10ms imp=1 | SER(total err/clean)=-13.63 dB | in-gap err/clean=0.69 dB (gap samples=13351) | gap out pwr/clean=-7.63 dB | band3.5-6.5k out/clean=0.15 dB
+sc=2 mode=1 hang=0.10ms imp=1 | SER(total err/clean)=-13.25 dB | in-gap err/clean=1.07 dB (gap samples=13351) | gap out pwr/clean=-5.27 dB | band3.5-6.5k out/clean=0.17 dB
+sc=2 mode=4 hang=0.10ms imp=1 | SER(total err/clean)=-13.42 dB | in-gap err/clean=0.90 dB (gap samples=13351) | gap out pwr/clean=-5.67 dB | band3.5-6.5k out/clean=0.20 dB
+sc=2 mode=5 hang=0.10ms imp=1 | SER(total err/clean)=-14.28 dB | in-gap err/clean=0.04 dB (gap samples=13351) | gap out pwr/clean=-21.56 dB | band3.5-6.5k out/clean=-0.15 dB
+sc=3 mode=0 hang=0.10ms imp=1 | SER(total err/clean)=-13.55 dB | in-gap err/clean=0.79 dB (gap samples=13351) | gap out pwr/clean=-7.63 dB | band3.5-6.5k out/clean=69.86 dB
+sc=3 mode=1 hang=0.10ms imp=1 | SER(total err/clean)=-13.02 dB | in-gap err/clean=1.32 dB (gap samples=13351) | gap out pwr/clean=-4.80 dB | band3.5-6.5k out/clean=69.65 dB
+sc=3 mode=4 hang=0.10ms imp=1 | SER(total err/clean)=-13.11 dB | in-gap err/clean=1.23 dB (gap samples=13351) | gap out pwr/clean=-5.14 dB | band3.5-6.5k out/clean=66.67 dB
+sc=3 mode=5 hang=0.10ms imp=1 | SER(total err/clean)=-66.23 dB | in-gap err/clean=-51.89 dB (gap samples=13351) | gap out pwr/clean=-0.00 dB | band3.5-6.5k out/clean=-0.18 dB
+sc=0 mode=0 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-10.93 dB | in-gap err/clean=0.41 dB (gap samples=26364) | gap out pwr/clean=-10.61 dB | band3.5-6.5k out/clean=69.05 dB
+sc=0 mode=4 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-10.49 dB | in-gap err/clean=0.85 dB (gap samples=26364) | gap out pwr/clean=-6.91 dB | band3.5-6.5k out/clean=66.74 dB
+sc=0 mode=5 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-68.71 dB | in-gap err/clean=-57.37 dB (gap samples=26364) | gap out pwr/clean=0.01 dB | band3.5-6.5k out/clean=-0.34 dB
+sc=3 mode=0 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-10.98 dB | in-gap err/clean=0.42 dB (gap samples=26364) | gap out pwr/clean=-10.58 dB | band3.5-6.5k out/clean=69.06 dB
+sc=3 mode=4 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-10.52 dB | in-gap err/clean=0.87 dB (gap samples=26364) | gap out pwr/clean=-6.76 dB | band3.5-6.5k out/clean=66.45 dB
+sc=3 mode=5 hang=0.50ms imp=1 D=4964 | SER(total err/clean)=-51.16 dB | in-gap err/clean=-39.77 dB (gap samples=26364) | gap out pwr/clean=-0.02 dB | band3.5-6.5k out/clean=-0.35 dB
+sc=0 mode=0 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-8.99 dB | in-gap err/clean=0.27 dB (gap samples=42588) | gap out pwr/clean=-12.59 dB | band3.5-6.5k out/clean=69.49 dB
+sc=0 mode=4 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-8.57 dB | in-gap err/clean=0.69 dB (gap samples=42588) | gap out pwr/clean=-7.85 dB | band3.5-6.5k out/clean=67.30 dB
+sc=0 mode=5 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-59.39 dB | in-gap err/clean=-50.13 dB (gap samples=42588) | gap out pwr/clean=0.02 dB | band3.5-6.5k out/clean=-0.57 dB
+sc=3 mode=0 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-9.04 dB | in-gap err/clean=0.26 dB (gap samples=42588) | gap out pwr/clean=-12.65 dB | band3.5-6.5k out/clean=69.37 dB
+sc=3 mode=4 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-8.58 dB | in-gap err/clean=0.72 dB (gap samples=42588) | gap out pwr/clean=-7.60 dB | band3.5-6.5k out/clean=66.82 dB
+sc=3 mode=5 hang=1.00ms imp=1 D=5060 | SER(total err/clean)=-40.34 dB | in-gap err/clean=-31.04 dB (gap samples=42588) | gap out pwr/clean=-0.06 dB | band3.5-6.5k out/clean=-0.58 dB
+sc=0 mode=0 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-6.64 dB | in-gap err/clean=0.15 dB (gap samples=75036) | gap out pwr/clean=-15.05 dB | band3.5-6.5k out/clean=69.74 dB
+sc=0 mode=4 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-6.22 dB | in-gap err/clean=0.57 dB (gap samples=75036) | gap out pwr/clean=-8.63 dB | band3.5-6.5k out/clean=67.56 dB
+sc=0 mode=5 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-47.58 dB | in-gap err/clean=-40.79 dB (gap samples=75036) | gap out pwr/clean=0.06 dB | band3.5-6.5k out/clean=-1.07 dB
+sc=3 mode=0 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-6.68 dB | in-gap err/clean=0.15 dB (gap samples=75036) | gap out pwr/clean=-15.10 dB | band3.5-6.5k out/clean=69.58 dB
+sc=3 mode=4 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-6.21 dB | in-gap err/clean=0.62 dB (gap samples=75036) | gap out pwr/clean=-8.27 dB | band3.5-6.5k out/clean=67.03 dB
+sc=3 mode=5 hang=2.00ms imp=1 D=5252 | SER(total err/clean)=-30.16 dB | in-gap err/clean=-23.32 dB (gap samples=75036) | gap out pwr/clean=-0.29 dB | band3.5-6.5k out/clean=-1.07 dB

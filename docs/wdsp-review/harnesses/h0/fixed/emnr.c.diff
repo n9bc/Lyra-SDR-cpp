@@ -1,0 +1,286 @@
+--- wdsp-2.11/emnr.c
++++ fixed/emnr.c
+@@ -675,6 +675,36 @@
+ {
+ 	decalc_emnr (a);
+ 	_aligned_free (a);
++}
++
++#include <float.h>
++/* ---- harness fix: proposal (a)/(b)/(c) and skeptic clamp, selected by FIXMODE bits ----
++   bit0 (1): (a)+(c) floors tied to long-term mean of lambda_y, robust ratios
++   bit1 (2): (b) hold estimator state on digital silence
++   bit2 (4): clamp invQeq to >= 0 (varHat negative-residue guard)                     */
++#ifndef FIXMODE
++#define FIXMODE 7
++#endif
++static double fx_ltmean = 0.0;
++static int fx_init = 0;
++#define FX_TINY ((double)FLT_MIN)
++static double fx_floor(void) { return 1.0e-10 * fx_ltmean + FX_TINY; }
++/* returns 1 if the frame is digital silence (estimator should hold) */
++static int fx_update_and_check(EMNR a)
++{
++	int k; double m = 0.0;
++	for (k = 0; k < a->msize; k++) m += a->g.lambda_y[k];
++	m /= (double)a->msize;
++	double tau = 10.0, al = exp(-a->incr / a->rate / tau);
++	if (!fx_init) { fx_ltmean = m; fx_init = 1; }
++	int silent = (m <= 1.0e-10 * fx_ltmean + FX_TINY);
++	if (!silent) fx_ltmean = al * fx_ltmean + (1.0 - al) * m;
++	return silent;
++}
++static void fx_floor_lambda_y(EMNR a)
++{
++	int k; double fl = fx_floor();
++	for (k = 0; k < a->msize; k++) if (a->g.lambda_y[k] < fl) a->g.lambda_y[k] = fl;
+ }
+ 
+ void LambdaD(EMNR a)
+@@ -703,14 +733,26 @@
+ 	}
+ 	for (k = 0; k < a->np.msize; k++)
+ 	{
++		#if FIXMODE & 1
++		f0 = a->np.p[k] / (a->np.sigma2N[k] + FX_TINY) - 1.0;
++#else
+ 		f0 = a->np.p[k] / a->np.sigma2N[k] - 1.0;
++#endif
+ 		a->np.alphaOptHat[k] = 1.0 / (1.0 + f0 * f0);
+ 	}
++	#if FIXMODE & 1
++	SNR = sum_prev_p / (sum_prev_sigma2N + FX_TINY);
++#else
+ 	SNR = sum_prev_p / sum_prev_sigma2N;
++#endif
+ 	alphaMin = min (a->np.alphaMin_max_value, pow (SNR, a->np.snrq));
+ 	for (k = 0; k < a->np.msize; k++)
+ 		if (a->np.alphaOptHat[k] < alphaMin) a->np.alphaOptHat[k] = alphaMin;
++	#if FIXMODE & 1
++	f1 = sum_prev_p / (sum_lambda_y + FX_TINY) - 1.0;
++#else
+ 	f1 = sum_prev_p / sum_lambda_y - 1.0;
++#endif
+ 	alphaCtilda = 1.0 / (1.0 + f1 * f1);
+ 	a->np.alphaC = a->np.alphaCsmooth * a->np.alphaC + (1.0 - a->np.alphaCsmooth) * max (alphaCtilda, a->np.alphaCmin);
+ 	f2 = a->np.alphaMax * a->np.alphaC;
+@@ -727,6 +769,9 @@
+ 		varHat = a->np.p2bar[k] - a->np.pbar[k] * a->np.pbar[k];
+ 		invQeq = varHat / (2.0 * a->np.sigma2N[k] * a->np.sigma2N[k]);
+ 		if (invQeq > a->np.invQeqMax) invQeq = a->np.invQeqMax;
++#if FIXMODE & 4
++		if (!(invQeq >= 0.0)) invQeq = 0.0;
++#endif
+ 		a->np.Qeq[k] = 1.0 / invQeq;
+ 		invQbar += invQeq;
+ 	}
+@@ -799,6 +844,9 @@
+ 		}
+ 		++a->np.subwc;
+ 	}
++#if FIXMODE & 1
++	{ double fl = fx_floor(); for (k = 0; k < a->np.msize; k++) { if (a->np.sigma2N[k] < fl) a->np.sigma2N[k] = fl; if (a->np.p[k] < fl) a->np.p[k] = fl; if (a->np.pbar[k] < fl) a->np.pbar[k] = fl; if (a->np.pmin_u[k] < fl) a->np.pmin_u[k] = fl; } }
++#endif
+ 	memcpy (a->np.lambda_d, a->np.sigma2N, a->np.msize * sizeof (double));
+ }
+ 
+@@ -807,12 +855,19 @@
+ 	int k;
+ 	for (k = 0; k < a->nps.msize; k++)
+ 	{
++		#if FIXMODE & 1
++		a->nps.PH1y[k] = 1.0 / (1.0 + (1.0 + a->nps.epsH1) * exp (- a->nps.epsH1r * a->nps.lambda_y[k] / (a->nps.sigma2N[k] + FX_TINY)));
++#else
+ 		a->nps.PH1y[k] = 1.0 / (1.0 + (1.0 + a->nps.epsH1) * exp (- a->nps.epsH1r * a->nps.lambda_y[k] / a->nps.sigma2N[k]));
++#endif
+ 		a->nps.Pbar[k] = a->nps.alpha_Pbar * a->nps.Pbar[k] + (1.0 - a->nps.alpha_Pbar) * a->nps.PH1y[k];
+ 		if (a->nps.Pbar[k] > 0.99)
+ 			a->nps.PH1y[k] = min (a->nps.PH1y[k], 0.99);
+ 		a->nps.EN2y[k] = (1.0 - a->nps.PH1y[k]) * a->nps.lambda_y[k] + a->nps.PH1y[k] * a->nps.sigma2N[k];
+ 		a->nps.sigma2N[k] = a->nps.alpha_pow * a->nps.sigma2N[k] + (1.0 - a->nps.alpha_pow) * a->nps.EN2y[k];
++#if FIXMODE & 1
++		if (a->nps.sigma2N[k] < fx_floor()) a->nps.sigma2N[k] = fx_floor();
++#endif
+ 	}
+ 	memcpy (a->nps.lambda_d, a->nps.sigma2N, a->nps.msize * sizeof (double));
+ }
+@@ -974,54 +1029,8 @@
+ 		a->revfftin[1] = 0.0;
+ 		memset(a->revfftin + 2 * ilim, 0, 2 * (a->msize - ilim) * sizeof(double));
+ 	}
+-}
+-
+-PORT
+-void SetRXAEMNRpost2Run(int channel, int run)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.run = run;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRpost2Factor(int channel, double factor)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.factor = factor / 100.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRpost2Nlevel(int channel, double nlevel)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->post2.nlevel = nlevel / 100.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+ }
+ 
+-PORT
+-void SetRXAEMNRpost2Taper(int channel, int taper)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	a->post2.taper = (double)taper / 100.0;
+-	post2_calc_w(a);
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRpost2Rate(int channel, double tc)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	if (tc < 0.2) tc = 0.2;
+-	a->post2.tc_decay = tc;
+-	a->post2.rate_decay = exp(-a->fsize / (a->post2.tc_decay * a->rate * a->ovrlp));
+-	a->post2.olddmag = 0.0;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+ /********************************************************************************************************
+ *										End Post-Processing Functions									*
+ ********************************************************************************************************/
+@@ -1101,6 +1110,17 @@
+ 	{
+ 		a->g.lambda_y[k] = a->g.y[2 * k + 0] * a->g.y[2 * k + 0] + a->g.y[2 * k + 1] * a->g.y[2 * k + 1];
+ 	}
++	{
++	int fx_silent = fx_update_and_check(a);
++#if FIXMODE & 2
++	if (!fx_silent)
++#endif
++	{
++#if FIXMODE & 1
++	double* fx_save = (double*)malloc(a->msize * sizeof(double));
++	memcpy(fx_save, a->g.lambda_y, a->msize * sizeof(double));
++	fx_floor_lambda_y(a);
++#endif
+ 	switch (a->g.npe_method)
+ 	{
+ 	case 0:
+@@ -1113,6 +1133,13 @@
+ 		LambdaDl(a);
+ 		break;
+ 	}
++#if FIXMODE & 1
++	memcpy(a->g.lambda_y, fx_save, a->msize * sizeof(double));
++	free(fx_save);
++#endif
++	}
++	(void)fx_silent;
++	}
+ 	switch (a->g.gain_method)
+ 	{
+ 	case 0:
+@@ -1301,92 +1328,3 @@
+ 	calc_emnr (a);
+ }
+ 
+-/********************************************************************************************************
+-*																										*
+-*											RXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-PORT
+-void SetRXAEMNRRun (int channel, int run)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	if (a->run != run)
+-	{
+-		RXAbp1Check (channel, rxa[channel].amd.p->run, rxa[channel].snba.p->run,
+-			run, getRun_nnrbypass (rxa[channel].nnrbypass.p), 
+-			rxa[channel].anf.p->run, rxa[channel].anr.p->run);
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		RXAbp1Set (channel);
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-PORT
+-void SetRXAEMNRgainMethod (int channel, int method)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.gain_method = method;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRnpeMethod (int channel, int method)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.npe_method = method;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRaeRun (int channel, int run)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.ae_run = run;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRPosition (int channel, int position)
+-{
+-	EMNR a = rxa[channel].emnr.p;
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	a->position = position;
+-	RXAbp1Set (channel);
+-	flush_emnr (a);
+-	a->post2.olddmag = 0.0;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRaeZetaThresh (int channel, double zetathresh)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.zetaThresh = zetathresh;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRaePsi (int channel, double psi)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.psi = psi;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRtrainZetaThresh(int channel, double thresh)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->g.zeta_thresh = thresh;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}
+-
+-PORT
+-void SetRXAEMNRtrainT2(int channel, double t2)
+-{
+-	EnterCriticalSection(&ch[channel].csDSP);
+-	rxa[channel].emnr.p->ae.t2 = t2;
+-	LeaveCriticalSection(&ch[channel].csDSP);
+-}

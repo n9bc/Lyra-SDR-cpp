@@ -1,0 +1,16 @@
+--- wdsp-2.11/nobII.h
++++ fixed/nobII.h
+@@ -74,6 +74,13 @@
+ 	double deltaI, deltaQ;
+ 	double Inext, Qnext;
+ 	int overflow;
++	// LP-residual detector (proposed fix)
++	int lp_order;					// complex NLMS order
++	double lp_mu;					// NLMS step
++	int lp_cap;						// max consecutive frozen samples (-1 = never unfreeze)
++	int lp_run;						// current run of flagged samples
++	double lp_w[2 * 32];
++	double lp_h[2 * 32];				// history x[n-1..n-p]
+ 	CRITICAL_SECTION cs_update;
+ 	double *legacy;																										////////////  legacy interface - remove
+ } nob, *NOB;

@@ -1,0 +1,26 @@
+--- wdsp-2.11/amd.h
++++ fixed2/amd.h
+@@ -72,6 +72,23 @@
+ 	double dc_insert;					// dc component to insert in output
+ 	int sbmode;							// sideband mode
+ 	int levelfade;						// Fade Leveler switch
++	// ---- proposed fix (finding 9) ----
++	int arm_order;						// 0 = off, 1 or 2 one-pole sections
++	double arm_fc, arm_a;				// arm-filter corner (Hz), one-pole coefficient
++	double arm[2][2];					// arm-filter state [section][I/Q]
++	int fade_run;						// carrier-fade flywheel on/off
++	double cmag, cref, cm_a, cr_a;		// fast / slow carrier magnitude averages
++	double fade_thresh;					// linear fade threshold (e.g. -12 dB)
++	int fading, hold, hold_max;			// flywheel state
++	double lockm, lk_a;					// lock metric (I^2-Q^2)/(I^2+Q^2), smoothed
++	int locked;
++	int acq_run;						// FFT-aided acquisition on/off
++	int acq_n, acq_cnt, acq_wp;			// FFT size, samples since last FFT, ring write pointer
++	double *acq_ring;					// complex ring of raw input
++	double *acq_win;
++	void *acq_in, *acq_out, *acq_plan;	// fftw_complex*, fftw_complex*, fftw_plan
++	int acq_count;
++	double omega_s, os_a;				// smoothed omega for flywheel (fade mode 2)						// number of FFT presets performed (diagnostic)
+ 
+ }amd, *AMD;
+ 

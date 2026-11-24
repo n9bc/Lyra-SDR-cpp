@@ -1,0 +1,4 @@
+talker 0 argmin per segment: 260 220 310 170 | 50-600Hz: mean rel. SD across segments 7.7%, mean |dJ|/J per 10 Hz step 4.5%, J range 0.0578..0.1112
+talker 2 argmin per segment: 900 800 850 800 | 50-600Hz: mean rel. SD across segments 5.2%, mean |dJ|/J per 10 Hz step 5.1%, J range 0.0761..0.1932
+talker 100 argmin per segment: 80 80 260 80 | 50-600Hz: mean rel. SD across segments 5.2%, mean |dJ|/J per 10 Hz step 5.7%, J range 0.0541..0.1265
+talker 101 argmin per segment: 190 210 220 220 | 50-600Hz: mean rel. SD across segments 6.2%, mean |dJ|/J per 10 Hz step 5.7%, J range 0.0575..0.1627

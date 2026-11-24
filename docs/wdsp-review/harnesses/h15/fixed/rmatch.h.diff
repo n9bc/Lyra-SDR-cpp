@@ -1,0 +1,10 @@
+--- wdsp-2.11/rmatch.h
++++ fixed/rmatch.h
+@@ -52,6 +52,7 @@
+ 	int pos;
+ 	int neg;
+ 	double nom_ratio;
++	double last;		// FIX: last valid ratio, held when pos == 0
+ } aamav, *AAMAV;
+ 
+ typedef struct _rmatch

@@ -1,0 +1,58 @@
+A tdecay=0.100 ratio=3.16 dly=0 gap= 300ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 450ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 510ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 520ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 550ms : onset50ms=  -3.43 dB onset100ms=  -3.03 dB burst400ms=  -0.58 dB mingain=-10.00 dB t_to_0.99=  76.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 600ms : onset50ms=  -2.66 dB onset100ms=  -1.13 dB burst400ms=  -0.26 dB mingain=-10.00 dB t_to_0.99=  26.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=0.100 ratio=3.16 dly=0 gap= 700ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=0.100 ratio=3.16 dly=0 gap= 900ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=0.100 ratio=3.16 dly=0 gap=1200ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=0.100 ratio=3.16 dly=0 gap=1400ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=0.100 ratio=3.16 dly=0 gap=1600ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=1.000 ratio=3.16 dly=0 gap= 300ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 450ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 510ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 520ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 550ms : onset50ms=  -0.04 dB onset100ms=  -0.09 dB burst400ms=  -0.87 dB mingain= -2.64 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 600ms : onset50ms=  -0.15 dB onset100ms=  -0.24 dB burst400ms=  -1.20 dB mingain= -3.29 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 700ms : onset50ms=  -0.59 dB onset100ms=  -0.75 dB burst400ms=  -2.07 dB mingain= -4.76 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap= 900ms : onset50ms=  -2.34 dB onset100ms=  -2.64 dB burst400ms=  -4.51 dB mingain= -8.00 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap=1200ms : onset50ms=  -6.79 dB onset100ms=  -7.18 dB burst400ms=  -5.23 dB mingain=-10.00 dB t_to_0.99= 326.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap=1400ms : onset50ms=  -9.54 dB onset100ms=  -9.71 dB burst400ms=  -1.44 dB mingain=-10.00 dB t_to_0.99= 126.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=1.000 ratio=3.16 dly=0 gap=1600ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+A tdecay=1.000 ratio=10.00 dly=0 gap= 300ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 450ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 510ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 520ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 550ms : onset50ms=  -0.05 dB onset100ms=  -0.12 dB burst400ms=  -1.15 dB mingain= -3.68 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 600ms : onset50ms=  -0.20 dB onset100ms=  -0.32 dB burst400ms=  -1.60 dB mingain= -4.65 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 700ms : onset50ms=  -0.78 dB onset100ms=  -1.00 dB burst400ms=  -2.78 dB mingain= -7.04 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap= 900ms : onset50ms=  -3.23 dB onset100ms=  -3.67 dB burst400ms=  -6.43 dB mingain=-13.65 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0147 vox_on=1 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap=1200ms : onset50ms= -10.87 dB onset100ms= -11.68 dB burst400ms=  -6.72 dB mingain=-20.00 dB t_to_0.99= 326.8 ms max|dgain|/smp=0.0147 vox_on=2 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap=1400ms : onset50ms= -18.23 dB onset100ms= -18.82 dB burst400ms=  -1.62 dB mingain=-20.00 dB t_to_0.99= 126.8 ms max|dgain|/smp=0.0147 vox_on=2 off=0
+A tdecay=1.000 ratio=10.00 dly=0 gap=1600ms : onset50ms=  -0.27 dB onset100ms=  -0.13 dB burst400ms=  -0.03 dB mingain=-20.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0147 vox_on=2 off=1
+A tdecay=1.000 ratio=3.16 dly=1 gap= 300ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 450ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 510ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 520ms : onset50ms=   0.00 dB onset100ms=   0.00 dB burst400ms=   0.00 dB mingain=  0.00 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 550ms : onset50ms=  -0.04 dB onset100ms=  -0.09 dB burst400ms=  -0.87 dB mingain= -2.64 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 600ms : onset50ms=  -0.15 dB onset100ms=  -0.24 dB burst400ms=  -1.20 dB mingain= -3.29 dB t_to_0.99=   0.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 700ms : onset50ms=  -0.59 dB onset100ms=  -0.75 dB burst400ms=  -2.07 dB mingain= -4.76 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap= 900ms : onset50ms=  -2.34 dB onset100ms=  -2.64 dB burst400ms=  -4.51 dB mingain= -8.00 dB t_to_0.99=never(> 400.0 ms max|dgain|/smp=0.0112 vox_on=1 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap=1200ms : onset50ms=  -6.79 dB onset100ms=  -7.18 dB burst400ms=  -5.23 dB mingain=-10.00 dB t_to_0.99= 326.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap=1400ms : onset50ms=  -9.54 dB onset100ms=  -9.71 dB burst400ms=  -1.44 dB mingain=-10.00 dB t_to_0.99= 126.8 ms max|dgain|/smp=0.0112 vox_on=2 off=0
+A tdecay=1.000 ratio=3.16 dly=1 gap=1600ms : onset50ms=  -0.24 dB onset100ms=  -0.12 dB burst400ms=  -0.03 dB mingain=-10.00 dB t_to_0.99=   3.7 ms max|dgain|/smp=0.0112 vox_on=2 off=1
+S tdecay=0.100 thold=0.500 ratio=3.16 : syllables=99  first60ms loss= -0.14 dB  syl>1dB loss=4  syl>3dB loss=2  voiced energy= -0.07 dB  vox_on=32 off=29
+S tdecay=0.500 thold=0.500 ratio=3.16 : syllables=99  first60ms loss= -0.49 dB  syl>1dB loss=15  syl>3dB loss=10  voiced energy= -0.42 dB  vox_on=29 off=20
+S tdecay=1.000 thold=0.500 ratio=3.16 : syllables=99  first60ms loss= -1.25 dB  syl>1dB loss=34  syl>3dB loss=24  voiced energy= -1.13 dB  vox_on=23 off=14
+S tdecay=1.000 thold=0.100 ratio=10.00 : syllables=99  first60ms loss= -2.25 dB  syl>1dB loss=45  syl>3dB loss=36  voiced energy= -2.20 dB  vox_on=38 off=28
+B 1x SetDEXPAttackThreshold          : zero-output samples= 2880 (60.0 ms)  samples gain<0.99= 3067 (63.9 ms)  min gain=-inf/-999.00 dB  max |dgain|/sample=1.000
+B 10x AttackThreshold @100ms (drag)  : zero-output samples=28800 (600.0 ms)  samples gain<0.99=30660 (638.8 ms)  min gain=-inf/-999.00 dB  max |dgain|/sample=1.000
+B 1x SetDEXPReleaseTime              : zero-output samples= 2880 (60.0 ms)  samples gain<0.99= 3057 (63.7 ms)  min gain=-inf/-999.00 dB  max |dgain|/sample=1.000
+B 1x SetDEXPDetectorTau              : zero-output samples= 2880 (60.0 ms)  samples gain<0.99= 3145 (65.5 ms)  min gain=-inf/-999.00 dB  max |dgain|/sample=1.000
+B 1x SetDEXPExpansionRatio           : zero-output samples= 2880 (60.0 ms)  samples gain<0.99= 3058 (63.7 ms)  min gain=-inf/-999.00 dB  max |dgain|/sample=1.000
+B no setter (control)                : zero-output samples=    0 (0.0 ms)  samples gain<0.99=    0 (0.0 ms)  min gain=0.00 dB  max |dgain|/sample=0.000
+C noise level=0.020 tdecay=0.100 : gain-rise events=27  vox_on=28 off=24  total gain variation=38.3
+C noise level=0.020 tdecay=1.000 : gain-rise events=12  vox_on=13 off=10  total gain variation=17.8
+C noise level=0.040 tdecay=0.100 : gain-rise events=29  vox_on=30 off=22  total gain variation=41.0
+C noise level=0.040 tdecay=1.000 : gain-rise events=13  vox_on=14 off=9  total gain variation=19.1

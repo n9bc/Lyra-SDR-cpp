@@ -1,0 +1,4 @@
+E2 orig  talker 0 300s: live coefficient events 18, final fc 397.3 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -167.6 worst -4.2; events > -40 dB: 4, > -30 dB: 4 | HF>3k click median -158.9 worst -12.6
+E2 orig  talker 2 300s: live coefficient events 18, final fc 348.1 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -48.0 worst -5.7; events > -40 dB: 8, > -30 dB: 8 | HF>3k click median -45.0 worst -10.0
+E2 orig  talker 100 300s: live coefficient events 18, final fc 245.5 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -122.2 worst -8.2; events > -40 dB: 7, > -30 dB: 7 | HF>3k click median -124.0 worst -18.2
+E2 orig  talker 101 300s: live coefficient events 18, final fc 202.2 converged 1 | click (peak BL err vs 10ms xfade, dB re 0.5): median -31.2 worst -13.0; events > -40 dB: 9, > -30 dB: 8 | HF>3k click median -43.0 worst -23.4

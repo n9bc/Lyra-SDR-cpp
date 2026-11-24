@@ -1,0 +1,17 @@
+scen      build  n badRejected rejAfter(sum) refRejAfter consecMax LRESETs maxdph vs ref deg (med/max)  max|ds| worstTruePhErr clipViol
+phase180  orig   6           6            12           0         2       6        87.782/87.809          1.6795          87.97        0
+phase180  fixed  6           6             0           0         0       0         0.080/0.155           0.0027           0.55        0
+phase90   orig   6           6            12           0         2       6        87.782/87.809          1.6795          87.97        0
+phase90   fixed  6           6             0           0         0       0         0.080/0.155           0.0027           0.55        0
+phase60   orig   6           6            12           0         2       6        87.782/87.809          1.6795          87.97        0
+phase60   fixed  6           6             0           0         0       0         0.080/0.155           0.0027           0.55        0
+phase45   orig   6           6            12           0         2       6        87.782/87.809          1.6795          87.97        0
+phase45   fixed  6           6             0           0         0       0         0.080/0.155           0.0027           0.55        0
+phase30   orig   6           0             0           0         0       0         1.892/1.925           0.0271           2.07        0
+phase30   fixed  6           0             0           0         0       0         1.892/1.925           0.0271           2.07        0
+ampm3x    orig   6           6             6           0         1       0         2.602/2.614           0.0196           2.63        0
+ampm3x    fixed  6           6             0           0         0       0         0.080/0.155           0.0027           0.55        0
+compress  orig   6           0             0           0         0       0         0.529/0.538           0.0076           0.55        0
+compress  fixed  6           0             0           0         0       0         0.529/0.538           0.0076           0.55        0
+none      orig   6           0             0           0         0       0         0.000/0.000           0.0000           0.53        0
+none      fixed  6           0             0           0         0       0         0.000/0.000           0.0000           0.53        0

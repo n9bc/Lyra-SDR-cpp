@@ -1,0 +1,209 @@
+--- wdsp-2.11/amd.c
++++ fixed/amd.c
+@@ -25,7 +25,14 @@
+ */
+ 
+ #include "comm.h"
++#include <fftw3.h>
+ 
++// harness knobs: set before create_amd
++int amd_fix_arm_order = 1;
++double amd_fix_arm_fc = 300.0;
++int amd_fix_fade = 1;
++int amd_fix_acq = 1;
++
+ AMD create_amd
+ 	(
+ 	int run,
+@@ -60,6 +67,16 @@
+ 	a->tauR = tauR;
+ 	a->tauI = tauI;
+ 
++	a->arm_order = amd_fix_arm_order;
++	a->arm_fc = amd_fix_arm_fc;
++	a->fade_run = amd_fix_fade;
++	a->acq_run = amd_fix_acq;
++	a->acq_n = 4096;
++	a->acq_ring = (double *)malloc0(2 * a->acq_n * sizeof(double));
++	a->acq_win = (double *)malloc0(a->acq_n * sizeof(double));
++	a->acq_in = fftw_malloc(a->acq_n * sizeof(fftw_complex));
++	a->acq_out = fftw_malloc(a->acq_n * sizeof(fftw_complex));
++	a->acq_plan = fftw_plan_dft_1d(a->acq_n, (fftw_complex *)a->acq_in, (fftw_complex *)a->acq_out, FFTW_FORWARD, FFTW_ESTIMATE);
+ 	init_amd(a);
+ 	return a;
+ }
+@@ -80,6 +97,20 @@
+ 	a->fil_out = 0.0;
+ 	a->omega = 0.0;
+ 
++	// arm filter / lock / fade / acquisition
++	a->arm_a = 1.0 - exp(-TWOPI * a->arm_fc / a->sample_rate);
++	memset(a->arm, 0, sizeof(a->arm));
++	a->cm_a = 1.0 - exp(-1.0 / (0.010 * a->sample_rate));		// 10 ms
++	a->cr_a = 1.0 - exp(-1.0 / (0.500 * a->sample_rate));		// 500 ms
++	a->lk_a = 1.0 - exp(-1.0 / (0.050 * a->sample_rate));		// 50 ms
++	a->fade_thresh = pow(10.0, -12.0 / 20.0);
++	a->hold_max = (int)(0.75 * a->sample_rate);				// cap hold at 0.75 s
++	a->cmag = a->cref = a->lockm = 0.0;
++	a->fading = a->hold = a->locked = 0;
++	a->acq_cnt = a->acq_wp = 0;
++	for (int n = 0; n < a->acq_n; n++)
++		a->acq_win[n] = 0.5 - 0.5 * cos(TWOPI * n / a->acq_n);
++
+ 	//fade leveler
+ 	a->dc = 0.0;
+ 	a->dc_insert = 0.0;
+@@ -112,6 +143,42 @@
+ 	a->dc_insert = 0.0;
+ }
+ 
++static void acquire_amd (AMD a)
++{
++	int N = a->acq_n, n, k, kbest = 0;
++	fftw_complex *in = (fftw_complex *)a->acq_in, *out = (fftw_complex *)a->acq_out;
++	double pbest = -1.0, psum = 0.0; int pcnt = 0;
++	for (n = 0; n < N; n++)
++	{
++		int r = (a->acq_wp + n) % N;
++		in[n][0] = a->acq_ring[2 * r + 0] * a->acq_win[n];
++		in[n][1] = a->acq_ring[2 * r + 1] * a->acq_win[n];
++	}
++	fftw_execute((fftw_plan)a->acq_plan);
++	int kmin = (int)ceil (a->fmin * N / a->sample_rate);
++	int kmax = (int)floor(a->fmax * N / a->sample_rate);
++	for (k = kmin; k <= kmax; k++)
++	{
++		int kk = (k + N) % N;
++		double p = out[kk][0] * out[kk][0] + out[kk][1] * out[kk][1];
++		psum += p; pcnt++;
++		if (p > pbest) { pbest = p; kbest = k; }
++	}
++	// require a line at least 10 dB above the mean in the search band
++	if (pcnt == 0 || pbest < 10.0 * psum / pcnt) return;
++	double lm = log(1e-300 + out[(kbest - 1 + N) % N][0] * out[(kbest - 1 + N) % N][0] + out[(kbest - 1 + N) % N][1] * out[(kbest - 1 + N) % N][1]);
++	double l0 = log(1e-300 + pbest);
++	double lp = log(1e-300 + out[(kbest + 1 + N) % N][0] * out[(kbest + 1 + N) % N][0] + out[(kbest + 1 + N) % N][1] * out[(kbest + 1 + N) % N][1]);
++	double den = lm - 2.0 * l0 + lp, delta = 0.0;
++	if (den < 0.0) delta = 0.5 * (lm - lp) / den;
++	double f = (kbest + delta) * a->sample_rate / N;
++	a->omega = TWOPI * f / a->sample_rate;
++	if (a->omega < a->omega_min) a->omega = a->omega_min;
++	if (a->omega > a->omega_max) a->omega = a->omega_max;
++	a->fil_out = a->omega;
++	a->acq_count++;
++}
++
+ void xamd (AMD a)
+ {
+ 	int i;
+@@ -219,13 +286,63 @@
+ 						a->out_buff[2 * i + 0] = audio;
+ 						a->out_buff[2 * i + 1] = audio;
+ 
++						// (1) arm filters on the PLL path only
++						{
++							double pr = corr[0], pq = corr[1];
++							for (j = 0; j < a->arm_order; j++)
++							{
++								a->arm[j][0] += a->arm_a * (pr - a->arm[j][0]);
++								a->arm[j][1] += a->arm_a * (pq - a->arm[j][1]);
++								pr = a->arm[j][0];
++								pq = a->arm[j][1];
++							}
++							corr[0] = pr; corr[1] = pq;
++						}
++						// lock + fade detection
++						{
++							double p2 = corr[0] * corr[0] + corr[1] * corr[1];
++							a->cmag += a->cm_a * (sqrt(p2) - a->cmag);
++							if (p2 > 0.0) a->lockm += a->lk_a * ((corr[0] * corr[0] - corr[1] * corr[1]) / p2 - a->lockm);
++							if (a->fade_run)
++							{
++								if (!a->fading)
++								{
++									if (a->locked && a->cmag < a->fade_thresh * a->cref) { a->fading = 1; a->hold = 0; }
++									else a->cref += a->cr_a * (a->cmag - a->cref);
++								}
++								else if (++a->hold > a->hold_max || a->cmag > 1.41 * a->fade_thresh * a->cref)
++									a->fading = 0;
++							}
++							if (!a->fading)
++							{
++								if (a->lockm > 0.6) a->locked = 1;
++								else if (a->lockm < 0.2) a->locked = 0;
++							}
++						}
++						// (3) FFT-aided acquisition while unlocked
++						if (a->acq_run)
++						{
++							a->acq_ring[2 * a->acq_wp + 0] = a->in_buff[2 * i + 0];
++							a->acq_ring[2 * a->acq_wp + 1] = a->in_buff[2 * i + 1];
++							if (++a->acq_wp == a->acq_n) a->acq_wp = 0;
++							if (++a->acq_cnt >= a->acq_n && !a->locked && !a->fading)
++							{
++								acquire_amd(a);
++								a->acq_cnt = 0;
++							}
++						}
+ 						if ((corr[0] == 0.0) && (corr[1] == 0.0)) corr[0] = 1.0;
+ 						det = atan2(corr[1], corr[0]);
+ 						del_out = a->fil_out;
+-						a->omega += a->g2 * det;
+-						if (a->omega < a->omega_min) a->omega = a->omega_min;
+-						if (a->omega > a->omega_max) a->omega = a->omega_max;
+-						a->fil_out = a->g1 * det + a->omega;
++						if (a->fading)
++							a->fil_out = a->omega;			// (2) flywheel: hold omega, drop g1 term
++						else
++						{
++							a->omega += a->g2 * det;
++							if (a->omega < a->omega_min) a->omega = a->omega_min;
++							if (a->omega > a->omega_max) a->omega = a->omega_max;
++							a->fil_out = a->g1 * det + a->omega;
++						}
+ 						a->phs += del_out;
+ 						while (a->phs >= TWOPI) a->phs -= TWOPI;
+ 						while (a->phs < 0.0) a->phs += TWOPI;
+@@ -254,41 +371,3 @@
+ {
+ 	a->buff_size = size;
+ }
+-
+-/********************************************************************************************************
+-*																										*
+-*											RXA Properties												*
+-*																										*
+-********************************************************************************************************/
+-
+-PORT void
+-SetRXAAMDRun(int channel, int run)
+-{
+-	AMD a = rxa[channel].amd.p;
+-	if (a->run != run)
+-	{
+-		RXAbp1Check (channel, run, rxa[channel].snba.p->run, rxa[channel].emnr.p->run, 
+-			getRun_nnrbypass (rxa[channel].nnrbypass.p), 
+-			rxa[channel].anf.p->run, rxa[channel].anr.p->run);
+-		EnterCriticalSection (&ch[channel].csDSP);
+-		a->run = run;
+-		RXAbp1Set (channel);
+-		LeaveCriticalSection (&ch[channel].csDSP);
+-	}
+-}
+-
+-PORT void
+-SetRXAAMDSBMode(int channel, int sbmode)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].amd.p->sbmode = sbmode;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+-
+-PORT void
+-SetRXAAMDFadeLevel(int channel, int levelfade)
+-{
+-	EnterCriticalSection (&ch[channel].csDSP);
+-	rxa[channel].amd.p->levelfade = levelfade;
+-	LeaveCriticalSection (&ch[channel].csDSP);
+-}
+\ No newline at end of file

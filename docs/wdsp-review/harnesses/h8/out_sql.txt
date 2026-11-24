@@ -1,0 +1,40 @@
+orig sca=20.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00065 max=0.00066 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 5.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00049 max=0.00050 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=10.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00055 max=0.00056 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=30.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00078 max=0.00080 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=10.0% rds= 5.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00055 max=0.00057 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00048 max=0.00049 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds=10.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00050 max=0.00052 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds=20.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00056 max=0.00060 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  30.0 dB | pwrNoise mean=0.00132 max=0.00135 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  25.0 dB | pwrNoise mean=0.00357 max=0.00367 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  20.0 dB | pwrNoise mean=0.01086 max=0.01116 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  14.0 dB | pwrNoise mean=0.04345 max=0.04478 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  12.0 dB | pwrNoise mean=0.06975 max=0.07199 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  17.0 dB | pwrNoise mean=0.02161 max=0.02223 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=   6.0 dB | pwrNoise mean=0.33038 max=0.34100 (low_th 0.15, high_th 0.50) | mag19=0.0550 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=  10.0 dB | pwrNoise mean=0.11327 max=0.11698 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca= 0.0% rds= 0.0% pilot=10.0% cnr=   8.0 dB | pwrNoise mean=0.18902 max=0.19494 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=10.0% rds= 5.0% pilot=10.0% cnr=  20.0 dB | pwrNoise mean=0.01086 max=0.01114 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=10.0% rds= 5.0% pilot=10.0% cnr=  14.0 dB | pwrNoise mean=0.04326 max=0.04438 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+orig sca=10.0% rds= 5.0% pilot=10.0% cnr=  10.0 dB | pwrNoise mean=0.11263 max=0.11567 (low_th 0.15, high_th 0.50) | mag19=0.0551 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00026 max=0.00026 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=20.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00037 max=0.00037 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=30.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00046 max=0.00047 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=10.0% rds= 0.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00030 max=0.00030 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds=10.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00027 max=0.00028 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 5.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00026 max=0.00027 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds=20.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00030 max=0.00032 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=10.0% rds= 5.0% pilot=10.0% cnr=   inf dB | pwrNoise mean=0.00030 max=0.00031 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  25.0 dB | pwrNoise mean=0.00178 max=0.00181 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  30.0 dB | pwrNoise mean=0.00067 max=0.00068 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  20.0 dB | pwrNoise mean=0.00539 max=0.00549 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  17.0 dB | pwrNoise mean=0.01071 max=0.01093 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  14.0 dB | pwrNoise mean=0.02153 max=0.02200 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  12.0 dB | pwrNoise mean=0.03457 max=0.03536 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=   8.0 dB | pwrNoise mean=0.09397 max=0.09632 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=  10.0 dB | pwrNoise mean=0.05618 max=0.05750 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca= 0.0% rds= 0.0% pilot=10.0% cnr=   6.0 dB | pwrNoise mean=0.16533 max=0.17140 (low_th 0.15, high_th 0.50) | mag19=0.0550 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=10.0% rds= 5.0% pilot=10.0% cnr=  20.0 dB | pwrNoise mean=0.00541 max=0.00553 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=10.0% rds= 5.0% pilot=10.0% cnr=  14.0 dB | pwrNoise mean=0.02150 max=0.02192 (low_th 0.15, high_th 0.50) | mag19=0.0552 | open   0.0% of blocks, closes=1, mean sqgain=0.050
+fixed sca=10.0% rds= 5.0% pilot=10.0% cnr=  10.0 dB | pwrNoise mean=0.05601 max=0.05708 (low_th 0.15, high_th 0.50) | mag19=0.0551 | open   0.0% of blocks, closes=1, mean sqgain=0.050

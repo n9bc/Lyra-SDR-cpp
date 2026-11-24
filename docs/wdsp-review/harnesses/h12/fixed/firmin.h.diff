@@ -1,0 +1,18 @@
+--- wdsp-2.11/firmin.h
++++ fixed/firmin.h
+@@ -162,7 +162,15 @@
+ 	int masks_ready;
+ 	int pfactor;
+ 	MINPHASE pminphase;
++	// filter-exchange crossfade (harness fix)
++	int pset;				// mask set in use before the last flip
++	int xfade_left;			// blocks of crossfade remaining
++	int xfade_total;		// blocks in this crossfade
++	double* accum2;			// accumulator for old mask set
++	double* out2;			// IFFT output for old mask set
++	fftw_plan crev2;
+ } fircore, *FIRCORE;
++extern int fircore_xfade_blocks;
+ 
+ extern FIRCORE create_fircore (int size, double* in, double* out, 
+ 	int nc, int mp, int pfactor, double* impulse);

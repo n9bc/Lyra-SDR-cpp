@@ -1,0 +1,35 @@
+--- wdsp-2.11/analyzer.c
++++ fixed/analyzer.c
+@@ -1120,6 +1120,7 @@
+ 				a->av_sum[i][j] = 1.0e-12;
+ 			break;
+ 		case 2:
++			memset((void*)a->av_sum[i], 0, sizeof(double) * dMAX_PIXELS);	// FIX: clear running sum
+ 			//done below
+ 			//a->avail_frames[i] = 0;
+ 			//a->av_in_idx[i] = 0;
+@@ -1799,6 +1800,7 @@
+ 			a->avail_frames[pixout] = 0;
+ 			a->av_in_idx[pixout] = 0;
+ 			a->av_out_idx[pixout] = 0;
++			memset ((void *)a->av_sum[pixout], 0, sizeof(double) * dMAX_PIXELS);	// FIX: clear running sum
+ 			break;
+ 		case 3:
+ 			for (i = 0; i < dMAX_PIXELS; i++)
+@@ -1816,6 +1818,8 @@
+ void SetDisplayNumAverage (int disp, int pixout, int num)
+ {
+ 	DP a = pdisp[disp];
++	if (num < 1) num = 1;								// FIX: clamp to ring size
++	if (num > dMAX_AVERAGE) num = dMAX_AVERAGE;
+ 	if (a->num_average[pixout] != num)
+ 	{
+ 		EnterCriticalSection (&a->ResampleSection);
+@@ -1823,6 +1827,7 @@
+ 		a->avail_frames[pixout] = 0;
+ 		a->av_in_idx[pixout] = 0;
+ 		a->av_out_idx[pixout] = 0;
++		memset ((void *)a->av_sum[pixout], 0, sizeof(double) * dMAX_PIXELS);	// FIX: clear running sum
+ 		LeaveCriticalSection (&a->ResampleSection);
+ 	}
+ }

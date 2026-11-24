@@ -1,0 +1,24 @@
+=== FIXED (NLMS order 8, mu 0.05, cap 20) ===
+S1 noise only T=2.5 (P_fa=7.35e-03)                        flags=  1058 blanked= 16834
+S1 noise only T=6.0 (P_fa=0.00e+00)                        flags=     0 blanked=     0
+S1b noise + 40 impulses 8 x rms, T=4                       flags=     0 blanked=     0 imp_hit=40/40 resid_dB=-16.7 blank/imp=17.0 win_err_dB=-5.2
+S1b noise + 40 impulses 15 x rms, T=4                      flags=     0 blanked=     0 imp_hit=40/40 resid_dB=-22.2 blank/imp=17.0 win_err_dB=-10.6
+S1b noise + 40 impulses 30 x rms, T=4                      flags=     0 blanked=     0 imp_hit=40/40 resid_dB=-28.4 blank/imp=17.9 win_err_dB=-16.5
+S2 shaped(5ms RC) keying 40 dB, 10 cycles, T=12            flags=     0 blanked=     0
+S2 shaped(5ms RC) keying 20 dB, 10 cycles, T=6             flags=     0 blanked=     0
+S4 40dB carrier + 15 imp 10x noise rms, T=4                flags=     0 blanked=     0 imp_hit=15/15 resid_dB=24.2 blank/imp=17.0 win_err_dB=+32.7
+S4 40dB carrier + 15 imp 30x noise rms, T=4                flags=     0 blanked=     0 imp_hit=15/15 resid_dB=14.0 blank/imp=21.9 win_err_dB=+24.7
+S4 40dB carrier + 15 imp 100x noise rms, T=4               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=2.8 blank/imp=25.0 win_err_dB=+14.6
+S4 40dB carrier + 15 imp 300x noise rms, T=4               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=-6.8 blank/imp=25.0 win_err_dB=+5.0
+S5 hard key-down 40dB, T=6, cap=20 (1 s after step)        flags=    47 blanked=    55
+S5 hard key-down 40dB, T=6, cap=-1 (1 s after step)        flags=   167 blanked=   175
+S5b start-up with 40dB carrier, T=6, cap=20 (first 1 s)    flags=    46 blanked=    54
+S5b start-up with 40dB carrier, T=6, cap=-1 (first 1 s)    flags=   165 blanked=   173
+S6  1 carriers @30dB each + 15 imp 300x, T=6               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=-19.3 blank/imp=25.0 win_err_dB=-4.8
+S6  4 carriers @30dB each + 15 imp 300x, T=6               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=-11.9 blank/imp=25.0 win_err_dB=+1.2
+S6  8 carriers @30dB each + 15 imp 300x, T=6               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=-11.2 blank/imp=25.0 win_err_dB=+4.2
+S6 16 carriers @30dB each + 15 imp 300x, T=6               flags=     0 blanked=     0 imp_hit=15/15 resid_dB=-8.2 blank/imp=23.7 win_err_dB=+6.8
+S6 32 carriers @30dB each + 15 imp 300x, T=6               flags=     0 blanked=     0 imp_hit=0/15 resid_dB=0.0 blank/imp=0.0 win_err_dB=+0.0
+S7 SSB-like 40dB + 15 imp 300x, T=6                        flags=     0 blanked=     0 imp_hit=15/15 resid_dB=1.2 blank/imp=25.0 win_err_dB=+14.0
+S7 SSB-like 40dB + 15 imp 300x, T=12                       flags=     0 blanked=     0 imp_hit=15/15 resid_dB=0.4 blank/imp=22.0 win_err_dB=+13.4
+CPU: 16.75 ns/sample (0.64% of one core at 384 kS/s)

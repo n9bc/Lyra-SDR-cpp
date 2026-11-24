@@ -1,0 +1,8 @@
+a0/300/f1/q0 S4   beta=0.9 fd=0.3Hz sb=0 cnr=25      lock_s=18.427 fin_df=   0.141Hz rms_e= 0.185rad slips=   2 snr_pll= 11.40dB snr_genie= 14.95dB acq=0
+a0/300/f1/q0 S4   beta=0.9 fd=0.3Hz sb=2 cnr=25      lock_s=18.427 fin_df=   0.141Hz rms_e= 0.185rad slips=   2 snr_pll= 11.37dB snr_genie= 14.89dB acq=0
+a0/300/f1/q0 S4   beta=0.9 fd=1Hz sb=0 cnr=25        lock_s=19.571 fin_df=  -0.325Hz rms_e= 0.486rad slips=   1 snr_pll= 11.40dB snr_genie= 14.79dB acq=0
+a0/300/f1/q0 S4   beta=0.9 fd=1Hz sb=2 cnr=25        lock_s=19.571 fin_df=  -0.325Hz rms_e= 0.486rad slips=   1 snr_pll=  8.05dB snr_genie= 14.85dB acq=0
+a0/300/f1/q0 S4   beta=0.97 fd=0.3Hz sb=0 cnr=25     lock_s=18.432 fin_df=   0.149Hz rms_e= 0.306rad slips=   1 snr_pll= 11.99dB snr_genie= 14.92dB acq=0
+a0/300/f1/q0 S4   beta=0.97 fd=0.3Hz sb=2 cnr=25     lock_s=18.432 fin_df=   0.149Hz rms_e= 0.306rad slips=   1 snr_pll=  9.55dB snr_genie= 15.19dB acq=0
+a0/300/f1/q0 S4   beta=0.97 fd=1Hz sb=0 cnr=25       lock_s=19.570 fin_df=   1.293Hz rms_e= 0.666rad slips=   5 snr_pll=  9.88dB snr_genie= 14.90dB acq=0
+a0/300/f1/q0 S4   beta=0.97 fd=1Hz sb=2 cnr=25       lock_s=19.570 fin_df=   1.293Hz rms_e= 0.666rad slips=   5 snr_pll=  6.93dB snr_genie= 15.21dB acq=0

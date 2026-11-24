@@ -1,0 +1,43 @@
+=== FIXED build ===
+
+[A] passband 0..3000 Hz, nc=2048, size=1024, wintype 0, autoincr 1. Notches added in order: 1000/200, 2000/200, 925/2050
+  after 2 notches: numpb=3 bands: [0,900] [1100,1900] [2100,3000]
+  after 3 notches: numpb=1 bands: [2100,3000]
+  expected bands: [2100,3000]
+  tone   450 Hz -> -143.42 dB  (should be notched)
+  tone  1500 Hz -> -145.62 dB  (should be notched)
+  tone  2500 Hz ->   -0.00 dB  (should be ~0 dB, passband)
+  tone  2800 Hz ->   -0.00 dB  (should be ~0 dB, passband)
+
+[A2] same three notches, wide notch inserted at index 0 (database ordered by center)
+  after 3 notches: numpb=1 bands: [2100,3000]
+  tone   450 Hz -> -143.42 dB
+  tone  1500 Hz -> -145.62 dB
+  tone  2500 Hz ->   -0.00 dB
+  tone  2800 Hz ->   -0.00 dB
+
+[B] random make_nbp trials (arbitrary notch order), passband 0..3000, 2-8 notches: 0/200000 wrong (0.000%), wrong band count in 0; mean wrong-spectrum 0 Hz when wrong, worst 0 Hz
+
+[B] random make_nbp trials (sorted-by-center notch order), passband 0..3000, 2-8 notches: 0/200000 wrong (0.000%), wrong band count in 0; mean wrong-spectrum 0 Hz when wrong, worst 0 Hz
+
+[C] min_notch_width (rate 48000):
+  nc= 128 wintype=0 -> 3200.00 Hz
+  nc= 128 wintype=1 -> 4400.00 Hz
+  nc= 255 wintype=0 -> 1606.27 Hz
+  nc= 255 wintype=1 -> 2208.63 Hz
+  nc= 256 wintype=0 -> 1600.00 Hz
+  nc= 256 wintype=1 -> 2200.00 Hz
+  nc= 384 wintype=0 -> 1066.67 Hz
+  nc= 384 wintype=1 -> 1466.67 Hz
+  nc= 640 wintype=0 -> 640.00 Hz
+  nc= 640 wintype=1 -> 880.00 Hz
+  nc=2048 wintype=0 -> 200.00 Hz
+  nc=2048 wintype=1 -> 275.00 Hz
+  nc=3072 wintype=0 -> 133.33 Hz
+  nc=3072 wintype=1 -> 183.33 Hz
+
+[C2] nc=128, size=128, autoincr 1: one 50 Hz notch at 1000 Hz, passband 0..3000
+  bands: numpb=1 bands: [2600,3000]
+  tone   500 Hz -> -114.89 dB
+  tone  1000 Hz -> -108.52 dB
+  tone  2000 Hz ->  -23.50 dB

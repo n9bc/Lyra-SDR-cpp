@@ -1,0 +1,40 @@
+--- wdsp-2.11/rmatch.c
++++ fixed/rmatch.c
+@@ -80,6 +80,7 @@
+ 	a->load = 0;
+ 	a->pos = 0;
+ 	a->neg = 0;
++	a->last = nom_ratio;
+ 	return a;
+ }
+ 
+@@ -96,6 +97,7 @@
+ 	a->load = 0;
+ 	a->pos = 0;
+ 	a->neg = 0;
++	a->last = a->nom_ratio;
+ }
+ 
+ void xaamav (AAMAV a, int input, double* output)
+@@ -114,7 +116,10 @@
+     else
+         a->neg -= a->ring[a->i];
+ 	if (a->load >= a->ringmin)
+-		*output = (double)a->neg / (double)a->pos;
++	{
++		if (a->pos > 0) a->last = (double)a->neg / (double)a->pos;	// FIX: hold last ratio when pos == 0
++		*output = a->last;
++	}
+ 	else if (a->neg > 0 && a->pos > 0)
+ 	{
+ 		double frac = (double)a->load / (double)a->ringmin;
+@@ -259,7 +264,8 @@
+ 		double current_ratio;
+ 		xaamav (a->ffmav, change, &current_ratio);
+ 		current_ratio *= a->inv_nom_ratio;
+-		a->feed_forward = a->ff_alpha * current_ratio + (1.0 - a->ff_alpha) * a->feed_forward;
++		if (isfinite (current_ratio))	// FIX: never let a non-finite ratio into the EMA
++			a->feed_forward = a->ff_alpha * current_ratio + (1.0 - a->ff_alpha) * a->feed_forward;
+ 	}
+ 	{
+ 		int deviation = a->n_ring - a->rsize / 2;

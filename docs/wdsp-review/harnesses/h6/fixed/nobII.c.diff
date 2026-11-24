@@ -1,0 +1,22 @@
+--- wdsp-2.11/nobII.c
++++ fixed/nobII.c
+@@ -41,7 +41,10 @@
+ 	a->adv_count = (int)(a->advtime * a->samplerate);
+ 	a->hang_count = (int)(a->hangtime * a->samplerate);
+     a->hang_slew_count = (int)(a->hangslewtime * a->samplerate);
+-    a->max_imp_seq = (int)(a->max_imp_seq_time * a->samplerate);
++    // FIX (finding 6): zero mode needs no whole-sequence look-ahead; route every
++    // detection through the causal overflow path (states 5-9), which extends the
++    // gate online while impulses keep arriving.
++    a->max_imp_seq = (a->mode == 0) ? 0 : (int)(a->max_imp_seq_time * a->samplerate);
+     a->backmult = exp (-1.0 / (a->samplerate * a->backtau));
+     a->ombackmult = 1.0 - a->backmult;
+     if (a->adv_slew_count > 0)
+@@ -660,6 +663,7 @@
+ 	NOB a = pnob[id];
+ 	EnterCriticalSection (&a->cs_update);
+ 	a->mode = mode;
++	init_nob (a);
+ 	LeaveCriticalSection (&a->cs_update);
+ }
+ 

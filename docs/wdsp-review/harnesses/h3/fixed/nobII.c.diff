@@ -1,0 +1,71 @@
+--- wdsp-2.11/nobII.c
++++ fixed/nobII.c
+@@ -116,6 +116,9 @@
+ 	a->fcoefs[8] = 0.017797128;
+ 	a->fcoefs[9] = 0.012457989;
+ 
++	a->lp_order = 8;
++	a->lp_mu = 0.05;
++	a->lp_cap = 20;
+ 	InitializeCriticalSectionAndSpinCount (&a->cs_update, 2500);
+ 	init_nob (a);
+ 
+@@ -152,6 +155,9 @@
+ 	memset (a->imp, 0, a->dline_size * sizeof (int));
+ 	memset (a->bfbuff, 0, a->filterlen * sizeof (complex));
+ 	memset (a->ffbuff, 0, a->filterlen * sizeof (complex));
++	memset (a->lp_w, 0, sizeof (a->lp_w));
++	memset (a->lp_h, 0, sizeof (a->lp_h));
++	a->lp_run = 0;
+ }
+ 
+ PORT
+@@ -176,12 +182,42 @@
+ 		{
+ 			a->dline[2 * a->in_idx + 0] = a->in[2 * i + 0];
+ 			a->dline[2 * a->in_idx + 1] = a->in[2 * i + 1];
+-			mag = sqrt(a->dline[2 * a->in_idx + 0] * a->dline[2 * a->in_idx + 0] + a->dline[2 * a->in_idx + 1] * a->dline[2 * a->in_idx + 1]);
+-			a->avg = a->backmult * a->avg + a->ombackmult * mag;
+-			if (mag > (a->avg * a->threshold))
+-				a->imp[a->in_idx] = 1;
+-			else
+-				a->imp[a->in_idx] = 0;
++			{
++				double xr = a->dline[2 * a->in_idx + 0], xi = a->dline[2 * a->in_idx + 1];
++				double pr = 0.0, pi_ = 0.0, pw = 1e-30, er, ei;
++				int p;
++				for (p = 0; p < a->lp_order; p++)
++				{
++					double wr = a->lp_w[2*p], wi = a->lp_w[2*p+1], hr = a->lp_h[2*p], hi = a->lp_h[2*p+1];
++					pr += wr * hr - wi * hi;
++					pi_ += wr * hi + wi * hr;
++					pw += hr * hr + hi * hi;
++				}
++				er = xr - pr; ei = xi - pi_;
++				mag = sqrt (er * er + ei * ei);
++				a->avg = a->backmult * a->avg + a->ombackmult * mag;
++				if (mag > (a->avg * a->threshold))
++					a->imp[a->in_idx] = 1;
++				else
++					a->imp[a->in_idx] = 0;
++				if (a->imp[a->in_idx]) a->lp_run++; else a->lp_run = 0;
++				if (a->imp[a->in_idx] == 0 || (a->lp_cap >= 0 && a->lp_run > a->lp_cap))
++				{
++					double g = a->lp_mu / pw;
++					for (p = 0; p < a->lp_order; p++)
++					{	// w += mu * e * conj(h) / |h|^2
++						double hr = a->lp_h[2*p], hi = a->lp_h[2*p+1];
++						a->lp_w[2*p]   += g * (er * hr + ei * hi);
++						a->lp_w[2*p+1] += g * (ei * hr - er * hi);
++					}
++				}
++				for (p = a->lp_order - 1; p > 0; p--)
++				{
++					a->lp_h[2*p] = a->lp_h[2*(p-1)];
++					a->lp_h[2*p+1] = a->lp_h[2*(p-1)+1];
++				}
++				a->lp_h[0] = xr; a->lp_h[1] = xi;
++			}
+ 			if ((bf_idx = a->out_idx + a->adv_slew_count) >= a->dline_size) bf_idx -= a->dline_size;
+ 			if (a->imp[bf_idx] == 0)
+ 			{

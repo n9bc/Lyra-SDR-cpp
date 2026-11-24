@@ -1,0 +1,8 @@
+a0/300/f1/q0 S3   dip=-20dB 300ms/1.5s sb=0 cnr=25   lock_s=19.060 fin_df=   0.004Hz rms_e= 0.301rad slips=   3 snr_pll= 12.45dB snr_genie= 15.33dB acq=0
+a0/300/f1/q0 S3   dip=-30dB 300ms/1.5s sb=0 cnr=25   lock_s=19.064 fin_df=   0.003Hz rms_e= 0.339rad slips=   3 snr_pll= 12.34dB snr_genie= 15.31dB acq=0
+a0/300/f1/q0 S3   dip=-40dB 300ms/1.5s sb=0 cnr=25   lock_s=19.067 fin_df=   0.001Hz rms_e= 0.386rad slips=   5 snr_pll= 11.96dB snr_genie= 15.33dB acq=0
+a0/300/f1/q0 S3   dip=-20dB 300ms/1.5s sb=2 cnr=25   lock_s=19.060 fin_df=   0.004Hz rms_e= 0.239rad slips=   2 snr_pll= 10.60dB snr_genie= 12.30dB acq=0
+a0/300/f1/q0 S3   dip=-30dB 300ms/1.5s sb=2 cnr=25   lock_s=19.063 fin_df=  -0.003Hz rms_e= 0.382rad slips=   4 snr_pll=  9.18dB snr_genie= 12.31dB acq=0
+a0/300/f1/q0 S3   dip=-40dB 300ms/1.5s sb=2 cnr=25   lock_s=19.067 fin_df=  -0.004Hz rms_e= 0.488rad slips=  11 snr_pll=  8.25dB snr_genie= 12.31dB acq=0
+a0/300/f1/q0 S3   dip=-30dB 300ms/1.5s sb=2 cnr=15 I/C=none lock_s=18.978 fin_df=  -0.004Hz rms_e= 0.345rad slips=   5 snr_pll=  1.90dB snr_genie=  2.28dB acq=0
+a0/300/f1/q0 S3   dip=-30dB 300ms/1.5s sb=2 cnr=15 I/C=+6 lock_s=20.000 fin_df= 934.294Hz rms_e= 1.762rad slips=21460 snr_pll=-18.59dB snr_genie=  2.31dB acq=0
