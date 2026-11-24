@@ -1,0 +1,174 @@
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Read of size 8 at 0x000100bac008 by thread T2:
+    #0 get_impulse_cache_entry impulse_cache.c (orig_m8_tsan:arm64+0x100000ad4)
+    #1 fir_bandpass fir.c:240 (orig_m8_tsan:arm64+0x100003480)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous write of size 8 at 0x000100bac008 by thread T1:
+    #0 add_impulse_to_cache impulse_cache.c:183 (orig_m8_tsan:arm64+0x100000e10)
+    #1 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is global '_cache_heads' at 0x000100bac008 (orig_m8_tsan+0x10000c008)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c in get_impulse_cache_entry
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Read of size 4 at 0x000109901660 by thread T2:
+    #0 get_impulse_cache_entry impulse_cache.c:145 (orig_m8_tsan:arm64+0x100000b04)
+    #1 fir_bandpass fir.c:240 (orig_m8_tsan:arm64+0x100003480)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous write of size 4 at 0x000109901660 by thread T1:
+    #0 add_impulse_to_cache impulse_cache.c:178 (orig_m8_tsan:arm64+0x100000d70)
+    #1 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is heap block of size 24 at 0x000109901660 allocated by thread T1:
+    #0 posix_memalign <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x681e8)
+    #1 _aligned_malloc posix_shim.h:17 (orig_m8_tsan:arm64+0x100000d3c)
+    #2 malloc0 comm.h:13 (orig_m8_tsan:arm64+0x100000d3c)
+    #3 add_impulse_to_cache impulse_cache.c:177 (orig_m8_tsan:arm64+0x100000d3c)
+    #4 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #5 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c:145 in get_impulse_cache_entry
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Read of size 8 at 0x000109901670 by thread T2:
+    #0 get_impulse_cache_entry impulse_cache.c (orig_m8_tsan:arm64+0x100000aec)
+    #1 fir_bandpass fir.c:240 (orig_m8_tsan:arm64+0x100003480)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous write of size 8 at 0x000109901670 by thread T1:
+    #0 add_impulse_to_cache impulse_cache.c:182 (orig_m8_tsan:arm64+0x100000e04)
+    #1 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is heap block of size 24 at 0x000109901660 allocated by thread T1:
+    #0 posix_memalign <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x681e8)
+    #1 _aligned_malloc posix_shim.h:17 (orig_m8_tsan:arm64+0x100000d3c)
+    #2 malloc0 comm.h:13 (orig_m8_tsan:arm64+0x100000d3c)
+    #3 add_impulse_to_cache impulse_cache.c:177 (orig_m8_tsan:arm64+0x100000d3c)
+    #4 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #5 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c in get_impulse_cache_entry
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Read of size 8 at 0x000109901690 by thread T2:
+    #0 get_impulse_cache_entry impulse_cache.c (orig_m8_tsan:arm64+0x100000aec)
+    #1 fir_bandpass fir.c:240 (orig_m8_tsan:arm64+0x100003480)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous write of size 8 at 0x000109901690 by thread T1:
+    #0 remove_impulse_cache_tail impulse_cache.c:108 (orig_m8_tsan:arm64+0x100000d08)
+    #1 add_impulse_to_cache impulse_cache.c:175 (orig_m8_tsan:arm64+0x100000d08)
+    #2 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #3 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is heap block of size 24 at 0x000109901680 allocated by thread T1:
+    #0 posix_memalign <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x681e8)
+    #1 _aligned_malloc posix_shim.h:17 (orig_m8_tsan:arm64+0x100000d3c)
+    #2 malloc0 comm.h:13 (orig_m8_tsan:arm64+0x100000d3c)
+    #3 add_impulse_to_cache impulse_cache.c:177 (orig_m8_tsan:arm64+0x100000d3c)
+    #4 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #5 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c in get_impulse_cache_entry
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Read of size 8 at 0x000100bac028 by thread T2:
+    #0 add_impulse_to_cache impulse_cache.c:175 (orig_m8_tsan:arm64+0x100000c9c)
+    #1 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #2 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous write of size 8 at 0x000100bac028 by thread T1:
+    #0 remove_impulse_cache_tail impulse_cache.c:109 (orig_m8_tsan:arm64+0x100000d1c)
+    #1 add_impulse_to_cache impulse_cache.c:175 (orig_m8_tsan:arm64+0x100000d1c)
+    #2 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #3 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is global '_cache_counts' at 0x000100bac028 (orig_m8_tsan+0x10000c028)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c:175 in add_impulse_to_cache
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=84907)
+  Write of size 8 at 0x000109901710 by thread T2:
+    #0 remove_impulse_cache_tail impulse_cache.c:108 (orig_m8_tsan:arm64+0x100000d08)
+    #1 add_impulse_to_cache impulse_cache.c:175 (orig_m8_tsan:arm64+0x100000d08)
+    #2 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #3 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Previous read of size 8 at 0x000109901710 by thread T1:
+    #0 remove_impulse_cache_tail impulse_cache.c:99 (orig_m8_tsan:arm64+0x100000cd8)
+    #1 add_impulse_to_cache impulse_cache.c:175 (orig_m8_tsan:arm64+0x100000cd8)
+    #2 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #3 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Location is heap block of size 24 at 0x000109901700 allocated by thread T1:
+    #0 posix_memalign <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x681e8)
+    #1 _aligned_malloc posix_shim.h:17 (orig_m8_tsan:arm64+0x100000d3c)
+    #2 malloc0 comm.h:13 (orig_m8_tsan:arm64+0x100000d3c)
+    #3 add_impulse_to_cache impulse_cache.c:177 (orig_m8_tsan:arm64+0x100000d3c)
+    #4 fir_bandpass fir.c:311 (orig_m8_tsan:arm64+0x100003850)
+    #5 worker driver.c:24 (orig_m8_tsan:arm64+0x100001a1c)
+
+  Thread T2 (tid=7941880, running) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+  Thread T1 (tid=7941879, finished) created by main thread at:
+    #0 pthread_create <null> (libclang_rt.tsan_osx_dynamic.dylib:arm64e+0x33bac)
+    #1 main driver.c:41 (orig_m8_tsan:arm64+0x10000169c)
+
+SUMMARY: ThreadSanitizer: data race impulse_cache.c:108 in remove_impulse_cache_tail
+==================
+threads=2 iters/thr=300 keys=64 max_entries=8 calls=600 mismatches=0 nulls=0 list_walked=8 count_field=8 cycle=0 duplicate_entries=0 corrupt_entries=0 time=2.509s
+ThreadSanitizer: reported 6 warnings

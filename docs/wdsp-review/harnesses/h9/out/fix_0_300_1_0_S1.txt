@@ -1,0 +1,6 @@
+a0/300/f1/q0 S1   off=20Hz cnr=30                    lock_s= 0.009 fin_df=   0.001Hz rms_e= 0.004rad slips=   0 snr_pll= 17.60dB snr_genie= 17.60dB acq=0
+a0/300/f1/q0 S1   off=100Hz cnr=30                   lock_s= 0.014 fin_df=   0.004Hz rms_e= 0.004rad slips=   0 snr_pll= 17.61dB snr_genie= 17.61dB acq=0
+a0/300/f1/q0 S1   off=300Hz cnr=30                   lock_s= 0.017 fin_df=  -0.001Hz rms_e= 0.004rad slips=   0 snr_pll= 17.46dB snr_genie= 17.46dB acq=0
+a0/300/f1/q0 S1   off=500Hz cnr=30                   lock_s= 0.042 fin_df=  -0.001Hz rms_e= 0.004rad slips=   0 snr_pll= 17.43dB snr_genie= 17.43dB acq=0
+a0/300/f1/q0 S1   off=1000Hz cnr=30                  lock_s= 0.207 fin_df=   0.000Hz rms_e= 0.004rad slips=   0 snr_pll= 17.44dB snr_genie= 17.44dB acq=0
+a0/300/f1/q0 S1   off=1500Hz cnr=30                  lock_s= 0.501 fin_df=   0.003Hz rms_e= 0.004rad slips=   0 snr_pll= 17.23dB snr_genie= 17.23dB acq=0

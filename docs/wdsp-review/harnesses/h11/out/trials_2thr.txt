@@ -1,0 +1,8 @@
+orig_m4096 threads=2 iters=100 trials=40 ok=40 hang=0 crash=0 wrong=0
+orig_m4096 threads=2 iters=1000 trials=40 ok=40 hang=0 crash=0 wrong=0
+orig_m8 threads=2 iters=100 trials=40 ok=31 hang=2 crash=7 wrong=0
+orig_m8 threads=2 iters=1000 trials=40 ok=0 hang=6 crash=34 wrong=0
+fixed_m4096 threads=2 iters=100 trials=40 ok=40 hang=0 crash=0 wrong=0
+fixed_m4096 threads=2 iters=1000 trials=40 ok=40 hang=0 crash=0 wrong=0
+fixed_m8 threads=2 iters=100 trials=40 ok=40 hang=0 crash=0 wrong=0
+fixed_m8 threads=2 iters=1000 trials=40 ok=40 hang=0 crash=0 wrong=0

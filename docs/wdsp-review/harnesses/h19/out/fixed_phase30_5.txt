@@ -1,0 +1,1 @@
+fixed RESULT scen=phase30 seed=5 badcyc_ok=1 rej_after=0 consec_rej_after=0 lresets_after=0 ref_rej_after=0 max_dm=0.0036 max_dc=0.0278 max_ds=0.0266 max_dph_deg=1.925 dph_next_deg=1.455 worst_truephErr_deg=2.03 final_dph_deg=0.1790 clip_viol=0 nc_mismatch_cycles=0

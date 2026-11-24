@@ -1,0 +1,7 @@
+# Lyra TX: dsp_rate 96000, dsp_size 4096 (src/wdsp_engine.cpp:1148)
+orig m0 16384 4096 96000   latency_samples 12288 latency_ms 128.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+orig m0 8192 4096 96000    latency_samples 6144 latency_ms 64.00 impulse_peak_gain 1.0000 identity_snr_db 25.2 
+orig m0 4096 4096 96000    latency_samples 3072 latency_ms 32.00 impulse_peak_gain 1.0000 identity_snr_db 290.1 
+orig m0 2048 4096 96000    latency_samples 1536 latency_ms 16.00 impulse_peak_gain 1.0000 identity_snr_db 295.6 
+orig m0 1024 4096 96000    latency_samples 768 latency_ms 8.00 impulse_peak_gain 1.0000 identity_snr_db 312.8 
+orig m0 2048 64 96000      latency_samples 1984 latency_ms 20.67 impulse_peak_gain 1.0000 identity_snr_db 295.6 

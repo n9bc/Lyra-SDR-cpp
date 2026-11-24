@@ -1,0 +1,59 @@
+S1: +100ppm clock offset, 2ms jitter, 900s; steady-state window t>=300s. dev in samples (0.1s bins), var error in ppm vs true ratio
+build      B   ring   UF   OF UFss OFss  pk|dev|   rmsdev var_err_min var_err_max  var_rms
+orig      64  16384    0    0    0    0       53     32.5          -9           9        3
+origT     64  16384    0    0    0    0       53     32.5          -9           9        3
+fixed     64  16384    0    0    0    0       53     32.5         -23          28        7
+orig     128  16384    0    0    0    0      103     65.0         -46          49       15
+origT    128  16384    0    0    0    0      102     64.8         -34          36       18
+fixed    128  16384    0    0    0    0       97     64.7         -59          53       16
+orig     256  16384 7324 7185 7324 7185     8192   5596.7      -19170       19103    11375
+origT    256  16384    0    0    0    0      184    130.9        -199         158      111
+fixed    256  16384    0    0    0    0      186    131.4        -272         145      116
+orig     512  16384 8896 10414 8896 10414     8192   6544.6      -15107       15287     9969
+origT    512  16384    0    0    0    0      398    257.4        -506         213      195
+fixed    512  16384    0    0    0    0      464    261.3        -677         189      207
+orig    1024  16384 4431 5019 4431 5019     8192   5913.3      -10375       10678     6001
+origT   1024  16384    0    0    0    0     1033    511.4       -1152         358      293
+fixed   1024  16384    0    0    0    0     1218    520.1       -1698         283      322
+orig      64   4096    0    0    0    0       53     32.5          -9           9        3
+origT     64   4096    0    0    0    0       53     32.5          -9           9        3
+fixed     64   4096    0    0    0    0       53     32.5         -23          28        7
+orig     128   4096    0    0    0    0      103     65.0         -46          49       15
+origT    128   4096    0    0    0    0      102     64.8         -34          36       18
+fixed    128   4096    0    0    0    0       97     64.7         -59          53       16
+orig     256   4096 5900 5932 5900 5932     2048   1453.2       -4515        4464     2980
+origT    256   4096    0    0    0    0      184    130.9        -199         158      111
+fixed    256   4096    0    0    0    0      186    131.4        -272         145      116
+orig     512   4096 9698 11338 8194 9450     2048   1465.6       -3312        3470     2254
+origT    512   4096    0    0    0    0      398    257.4        -506         213      195
+fixed    512   4096    0    0    0    0      464    261.3        -677         189      207
+orig    1024   4096 7608 6843 5903 6842     2048   1369.2       -2019        2342     1533
+origT   1024   4096    0    0    0    0     1033    511.4       -1152         358      293
+fixed   1024   4096    0    0    0    0     1218    520.1       -1698         283      322
+
+S2: 100ms input stall at t=400s (4800 samples lost), ring 16384
+build      B pre_mean      min overshoot% settle10%_s  UF  OF
+orig      64      -33    -4902       39.1        34.9   0   0
+origT     64      -33    -4902       39.1        34.9   0   0
+fixed     64      -32    -4891       23.5        29.0   0   0
+orig     128      -65    -4938       74.3       394.9   0   0
+origT    128      -67    -4923       37.3        35.9   0   0
+fixed    128      -66    -4919       23.5        29.2   0   0
+orig     256     1547    -8192      133.1       399.9 6747 6384
+origT    256     -140    -5024       38.1        35.9   0   0
+fixed    256     -145    -5018       24.5        30.2   0   0
+orig     512     2425    -8192      109.5       399.9 7066 6209
+origT    512     -272    -5393       41.9        36.0   0   0
+fixed    512     -255    -5372       27.6        31.7   0   0
+orig    1024     4987    -8192       45.4       399.9 2806 1946
+origT   1024     -519    -5638       49.8       247.7   0   0
+fixed   1024     -512    -5629       35.7       251.6   0   0
+64 orig post-stall var_err ppm min/max -5417 13396
+64 origT post-stall var_err ppm min/max -5417 13396
+64 fixed post-stall var_err ppm min/max -1404 16706
+128 orig post-stall var_err ppm min/max -9186 9529
+128 origT post-stall var_err ppm min/max -5357 13337
+128 fixed post-stall var_err ppm min/max -1420 16693
+256 orig post-stall var_err ppm min/max -12567 15135
+256 origT post-stall var_err ppm min/max -5445 13465
+256 fixed post-stall var_err ppm min/max -1594 16852

@@ -1,0 +1,1 @@
+fixed RESULT scen=compress seed=5 badcyc_ok=1 rej_after=0 consec_rej_after=0 lresets_after=0 ref_rej_after=0 max_dm=0.0182 max_dc=0.0054 max_ds=0.0075 max_dph_deg=0.529 dph_next_deg=0.401 worst_truephErr_deg=0.51 final_dph_deg=0.0185 clip_viol=0 nc_mismatch_cycles=0

@@ -1,0 +1,1 @@
+orig RESULT scen=none seed=4 badcyc_ok=1 rej_after=0 consec_rej_after=0 lresets_after=0 ref_rej_after=0 max_dm=0.0000 max_dc=0.0000 max_ds=0.0000 max_dph_deg=0.000 dph_next_deg=0.000 worst_truephErr_deg=0.39 final_dph_deg=0.0000 clip_viol=0 nc_mismatch_cycles=0

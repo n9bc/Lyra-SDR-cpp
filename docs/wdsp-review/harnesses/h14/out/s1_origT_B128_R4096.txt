@@ -1,0 +1,1 @@
+insize=128 outsize=128 rsize=4096 var_true_ppm=-100.0 uf=0 of=0

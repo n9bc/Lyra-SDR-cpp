@@ -1,0 +1,14 @@
+16384 64 48000     latency_samples 16320 latency_ms 340.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+16384 256 48000    latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+16384 1024 48000   latency_samples 15360 latency_ms 320.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+16384 64 96000     latency_samples 16320 latency_ms 170.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+16384 1024 96000   latency_samples 15360 latency_ms 160.00 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+16384 2048 96000   latency_samples 14336 latency_ms 149.33 impulse_peak_gain 1.0000 identity_snr_db 300.3 
+1024 64 48000      latency_samples 960 latency_ms 20.00 impulse_peak_gain 1.0000 identity_snr_db 312.8 
+1024 128 48000     latency_samples 896 latency_ms 18.67 impulse_peak_gain 1.0000 identity_snr_db 312.8 
+1024 256 48000     latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000 identity_snr_db 312.8 
+512 64 48000       latency_samples 448 latency_ms 9.33 impulse_peak_gain 1.0000 identity_snr_db 313.0 
+512 128 48000      latency_samples 384 latency_ms 8.00 impulse_peak_gain 1.0000 identity_snr_db 313.0 
+512 256 48000      latency_samples 384 latency_ms 8.00 impulse_peak_gain 1.0000 identity_snr_db 25.4 
+2048 256 96000     latency_samples 1792 latency_ms 18.67 impulse_peak_gain 1.0000 identity_snr_db 295.6 
+2048 1024 96000    latency_samples 1536 latency_ms 16.00 impulse_peak_gain 1.0000 identity_snr_db 25.3 

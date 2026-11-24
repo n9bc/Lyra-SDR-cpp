@@ -1,0 +1,14 @@
+== noise (mode 2, gaussian, 262144 samples, size 64, 48k) ==
+bw=100: (orig-fixed) error / output power = -68.5 dB; max|diff|/rms = 1.09e-03
+bw=69: (orig-fixed) error / output power = -47.3 dB; max|diff|/rms = 1.18e-02
+bw=35: (orig-fixed) error / output power = -48.0 dB; max|diff|/rms = 1.06e-02
+== bandwidth change at block 200 (sample 12800), steady 600 Hz tone, mode 2 ==
+70->60 (nc 2048->4096, setNc): env pre orig=1.4105 fixed=1.4162, post orig=1.4158 fixed=1.4159
+   first block after change: min|y| orig=0.0065 fixed=1.3952; |y[sw]-y[sw-1]| orig=1.4027 fixed=0.1112
+   samples to settle within 1% of final env: orig=19968 fixed=19968; envelope-deviation energy (sample-units) orig=217.1 fixed=2.2
+60->50 (nc unchanged, setImpulse): env pre orig=1.4158 fixed=1.4159, post orig=1.4151 fixed=1.4156
+   first block after change: min|y| orig=1.3977 fixed=1.3983; |y[sw]-y[sw-1]| orig=0.1076 fixed=0.1111
+   samples to settle within 1% of final env: orig=19968 fixed=19968; envelope-deviation energy (sample-units) orig=1.5 fixed=1.5
+36->30 (nc 4096->8192, setNc): env pre orig=1.4104 fixed=1.4152, post orig=1.4149 fixed=1.4150
+   first block after change: min|y| orig=0.0033 fixed=1.4047; |y[sw]-y[sw-1]| orig=1.4063 fixed=0.1111
+   samples to settle within 1% of final env: orig=5111 fixed=0; envelope-deviation energy (sample-units) orig=432.1 fixed=0.5

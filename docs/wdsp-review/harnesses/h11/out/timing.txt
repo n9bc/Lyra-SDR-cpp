@@ -1,0 +1,6 @@
+cache=0 N=1024 per_call=6.42 us
+cache=0 N=2048 per_call=7.98 us
+cache=0 N=4096 per_call=15.96 us
+cache=1 N=1024 per_call=0.38 us
+cache=1 N=2048 per_call=0.63 us
+cache=1 N=4096 per_call=1.74 us

@@ -1,0 +1,7 @@
+a1/300/f1/q1 S2   I/C=-10dB usb cnr=30               lock_s= 0.002 fin_df=  -0.002Hz rms_e= 0.011rad slips=   0 snr_pll= -8.36dB snr_genie= -8.28dB acq=0
+a1/300/f1/q1 S2   I/C=+0dB usb cnr=30                lock_s= 0.001 fin_df=   0.040Hz rms_e= 0.034rad slips=   0 snr_pll=-18.34dB snr_genie=-18.26dB acq=0
+a1/300/f1/q1 S2   I/C=+6dB usb cnr=30                lock_s=19.720 fin_df=  -0.031Hz rms_e= 0.071rad slips=   0 snr_pll=-24.33dB snr_genie=-24.24dB acq=1
+a1/300/f1/q1 S2   I/C=+10dB usb cnr=30               lock_s=19.747 fin_df=  -0.046Hz rms_e= 0.117rad slips=   0 snr_pll=-28.34dB snr_genie=-28.26dB acq=2
+a1/300/f1/q1 S2   I/C=+15dB usb cnr=30               lock_s=19.965 fin_df=-662.546Hz rms_e= 1.425rad slips=14825 snr_pll=-32.25dB snr_genie=-33.25dB acq=219
+a1/300/f1/q1 S2   I/C=+20dB usb cnr=30               lock_s=20.000 fin_df=-1240.535Hz rms_e= 1.748rad slips=21584 snr_pll=-36.63dB snr_genie=-38.23dB acq=210
+a1/300/f1/q1 S2   I/C=+25dB usb cnr=30               lock_s=20.000 fin_df=-1785.472Hz rms_e= 1.817rad slips=24848 snr_pll=-41.15dB snr_genie=-43.22dB acq=202

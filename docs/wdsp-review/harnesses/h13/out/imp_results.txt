@@ -1,0 +1,12 @@
+bw=100 nc=2048 firstNZ orig=0 fixed=0 peak=0.00769998 maxdiff(n<nc)/peak=1.92e-15 tail(n>=nc) orig=1.34e-21 fixed/peak=-68.5dB theory exp(-a*nc)=-68.5dB errEnergy/E=-68.5dB
+    600Hz: orig 6.0340 fixed 6.0373 dB; 650Hz: orig 0.1356 fixed 0.1378 dB; 900Hz: orig -14.1767 fixed -14.1757 dB; 3000Hz: orig -32.1587 fixed -32.1614 dB
+bw=69 nc=2048 firstNZ orig=0 fixed=0 peak=0.00531299 maxdiff(n<nc)/peak=1.86e-15 tail(n>=nc) orig=7.19e-21 fixed/peak=-47.3dB theory exp(-a*nc)=-47.3dB errEnergy/E=-47.3dB
+    600Hz: orig 5.9944 fixed 6.0321 dB; 634Hz: orig 0.1697 fixed 0.1326 dB; 807Hz: orig -14.1997 fixed -14.1811 dB; 3000Hz: orig -35.3588 fixed -35.3892 dB
+bw=60 nc=4096 firstNZ orig=0 fixed=0 peak=0.00461999 maxdiff(n<nc)/peak=3.35e-15 tail(n>=nc) orig=1.17e-22 fixed/peak=-82.2dB theory exp(-a*nc)=-82.2dB errEnergy/E=-82.2dB
+    600Hz: orig 6.0300 fixed 6.0306 dB; 630Hz: orig 0.1318 fixed 0.1311 dB; 780Hz: orig -14.1823 fixed -14.1827 dB; 3000Hz: orig -36.6048 fixed -36.6046 dB
+bw=35 nc=4096 firstNZ orig=0 fixed=0 peak=0.00269499 maxdiff(n<nc)/peak=2.25e-14 tail(n>=nc) orig=3.59e-21 fixed/peak=-47.9dB theory exp(-a*nc)=-47.9dB errEnergy/E=-47.9dB
+    600Hz: orig 5.9916 fixed 6.0265 dB; 618Hz: orig 0.1617 fixed 0.1270 dB; 705Hz: orig -14.2208 fixed -14.1870 dB; 3000Hz: orig -41.3010 fixed -41.2903 dB
+bw=20 nc=8192 firstNZ orig=0 fixed=0 peak=0.00154 maxdiff(n<nc)/peak=1.11e-14 tail(n>=nc) orig=9.99e-22 fixed/peak=-54.8dB theory exp(-a*nc)=-54.8dB errEnergy/E=-54.8dB
+    600Hz: orig 6.0081 fixed 6.0239 dB; 610Hz: orig 0.1287 fixed 0.1244 dB; 660Hz: orig -14.1906 fixed -14.1896 dB; 3000Hz: orig -46.1407 fixed -46.1535 dB
+bw=16 nc=16384 firstNZ orig=0 fixed=0 peak=0.001232 maxdiff(n<nc)/peak=1.67e-14 tail(n>=nc) orig=2.12e-23 fixed/peak=-87.7dB theory exp(-a*nc)=-87.7dB errEnergy/E=-87.7dB
+    600Hz: orig 6.0229 fixed 6.0233 dB; 608Hz: orig 0.1238 fixed 0.1238 dB; 648Hz: orig -14.1900 fixed -14.1903 dB; 3000Hz: orig -48.0925 fixed -48.0924 dB

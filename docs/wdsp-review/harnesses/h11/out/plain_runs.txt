@@ -1,0 +1,32 @@
+== orig_m4096 T=1
+threads=1 iters/thr=20000 keys=64 max_entries=4096 calls=20000 mismatches=0 nulls=0 list_walked=64 count_field=64 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.029s
+exit=0
+== orig_m4096 T=4
+exit=124
+== orig_m4096 T=8
+exit=124
+== fixed_m4096 T=1
+threads=1 iters/thr=20000 keys=64 max_entries=4096 calls=20000 mismatches=0 nulls=0 list_walked=64 count_field=64 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.022s
+exit=0
+== fixed_m4096 T=4
+threads=4 iters/thr=20000 keys=64 max_entries=4096 calls=80000 mismatches=0 nulls=0 list_walked=68 count_field=68 cycle=0 duplicate_entries=4 corrupt_entries=0 time=0.200s
+exit=0
+== fixed_m4096 T=8
+threads=8 iters/thr=20000 keys=64 max_entries=4096 calls=160000 mismatches=0 nulls=0 list_walked=68 count_field=68 cycle=0 duplicate_entries=4 corrupt_entries=0 time=0.397s
+exit=0
+== orig_m8 T=1
+threads=1 iters/thr=20000 keys=64 max_entries=8 calls=20000 mismatches=0 nulls=0 list_walked=8 count_field=8 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.135s
+exit=0
+== orig_m8 T=4
+exit=134
+== orig_m8 T=8
+exit=134
+== fixed_m8 T=1
+threads=1 iters/thr=20000 keys=64 max_entries=8 calls=20000 mismatches=0 nulls=0 list_walked=8 count_field=8 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.156s
+exit=0
+== fixed_m8 T=4
+threads=4 iters/thr=20000 keys=64 max_entries=8 calls=80000 mismatches=0 nulls=0 list_walked=8 count_field=8 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.529s
+exit=0
+== fixed_m8 T=8
+threads=8 iters/thr=20000 keys=64 max_entries=8 calls=160000 mismatches=0 nulls=0 list_walked=8 count_field=8 cycle=0 duplicate_entries=0 corrupt_entries=0 time=0.807s
+exit=0

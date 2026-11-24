@@ -1,0 +1,1 @@
+insize=1024 outsize=1024 rsize=16384 var_true_ppm=-100.0 uf=2806 of=1947

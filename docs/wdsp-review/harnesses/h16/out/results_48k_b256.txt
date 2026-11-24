@@ -1,0 +1,150 @@
+######## precomp 20 dB, 48 kHz, bsize 256
+== A orig m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 9.36 (reduction 0.00 dB)
+speech papr_in_db 21.02 papr_out_db 26.21 talkpower_gain_db -5.19 rms_gain_db 23.54
+vowel_am0 interharm_in_db -94.2 interharm_out_db -62.4 env_cv 0.1103
+vowel_am4 interharm_in_db -127.3 interharm_out_db -82.9 env_cv 0.0000
+burst pre_echo_400ms_db -37.1 pre_echo_50ms_db -27.5 post_echo_400ms_db -36.6 first_-60dB_sample_rel_onset_ms -115.7
+== C fixed-build m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 9.36 (reduction 0.00 dB)
+speech papr_in_db 21.02 papr_out_db 26.21 talkpower_gain_db -5.19 rms_gain_db 23.54
+vowel_am0 interharm_in_db -94.2 interharm_out_db -62.4 env_cv 0.1103
+vowel_am4 interharm_in_db -127.3 interharm_out_db -82.9 env_cv 0.0000
+burst pre_echo_400ms_db -37.1 pre_echo_50ms_db -27.5 post_echo_400ms_db -36.6 first_-60dB_sample_rel_onset_ms -115.7
+== B orig m0 fsize1024 (interim)
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 9.22 (reduction 0.16 dB)
+speech papr_in_db 21.10 papr_out_db 24.85 talkpower_gain_db -3.75 rms_gain_db 22.49
+vowel_am0 interharm_in_db -94.2 interharm_out_db -53.4 env_cv 0.1103
+vowel_am4 interharm_in_db -127.3 interharm_out_db -37.0 env_cv 0.0000
+burst pre_echo_400ms_db -118.3 pre_echo_50ms_db -108.4 post_echo_400ms_db -120.4 first_-60dB_sample_rel_onset_ms -4.4
+== D fixed m1 fsize1024 R20 k6 a1ms r60ms
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 9.17 (reduction 0.21 dB)
+speech papr_in_db 21.10 papr_out_db 24.37 talkpower_gain_db -3.27 rms_gain_db 22.26
+vowel_am0 interharm_in_db -94.2 interharm_out_db -61.4 env_cv 0.1119
+vowel_am4 interharm_in_db -127.3 interharm_out_db -41.7 env_cv 0.0000
+burst pre_echo_400ms_db -118.4 pre_echo_50ms_db -108.5 post_echo_400ms_db -80.5 first_-60dB_sample_rel_onset_ms -4.4
+== E fixed m1 fsize512  R20 k6 a1ms r60ms
+latency_samples 384 latency_ms 8.00 impulse_peak_gain 1.0000
+identity_snr_db 25.4
+speech band_level_sd_in_db 9.33 band_level_sd_out_db 8.61 (reduction 0.71 dB)
+speech papr_in_db 21.11 papr_out_db 23.48 talkpower_gain_db -2.36 rms_gain_db 21.06
+vowel_am0 interharm_in_db -94.2 interharm_out_db -24.8 env_cv 0.1004
+vowel_am4 interharm_in_db -127.3 interharm_out_db -24.9 env_cv 0.0000
+burst pre_echo_400ms_db -300.0 pre_echo_50ms_db -300.0 post_echo_400ms_db -300.0 first_-60dB_sample_rel_onset_ms -7.5
+== F fixed m1 fsize1024 hardclip no-smooth
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 9.23 (reduction 0.15 dB)
+speech papr_in_db 21.10 papr_out_db 25.02 talkpower_gain_db -3.92 rms_gain_db 22.60
+vowel_am0 interharm_in_db -94.2 interharm_out_db -52.7 env_cv 0.1133
+vowel_am4 interharm_in_db -127.3 interharm_out_db -37.2 env_cv 0.0000
+burst pre_echo_400ms_db -118.6 pre_echo_50ms_db -108.7 post_echo_400ms_db -120.7 first_-60dB_sample_rel_onset_ms -4.4
+A==C bit-exact
+######## precomp 30 dB, 48 kHz, bsize 256
+== A orig m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 9.21 (reduction 0.15 dB)
+speech papr_in_db 21.02 papr_out_db 26.82 talkpower_gain_db -5.80 rms_gain_db 32.87
+vowel_am0 interharm_in_db -94.2 interharm_out_db -55.5 env_cv 0.0931
+vowel_am4 interharm_in_db -127.3 interharm_out_db -71.9 env_cv 0.0000
+burst pre_echo_400ms_db -21.3 pre_echo_50ms_db -11.5 post_echo_400ms_db -21.5 first_-60dB_sample_rel_onset_ms -202.3
+== C fixed-build m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 9.21 (reduction 0.15 dB)
+speech papr_in_db 21.02 papr_out_db 26.82 talkpower_gain_db -5.80 rms_gain_db 32.87
+vowel_am0 interharm_in_db -94.2 interharm_out_db -55.5 env_cv 0.0931
+vowel_am4 interharm_in_db -127.3 interharm_out_db -71.9 env_cv 0.0000
+burst pre_echo_400ms_db -21.3 pre_echo_50ms_db -11.5 post_echo_400ms_db -21.5 first_-60dB_sample_rel_onset_ms -202.3
+== B orig m0 fsize1024 (interim)
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 8.21 (reduction 1.16 dB)
+speech papr_in_db 21.10 papr_out_db 23.51 talkpower_gain_db -2.40 rms_gain_db 28.28
+vowel_am0 interharm_in_db -94.2 interharm_out_db -33.3 env_cv 0.0931
+vowel_am4 interharm_in_db -127.3 interharm_out_db -29.0 env_cv 0.0000
+burst pre_echo_400ms_db -102.6 pre_echo_50ms_db -92.7 post_echo_400ms_db -113.2 first_-60dB_sample_rel_onset_ms -9.5
+== D fixed m1 fsize1024 R20 k6 a1ms r60ms
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 8.11 (reduction 1.27 dB)
+speech papr_in_db 21.10 papr_out_db 23.63 talkpower_gain_db -2.53 rms_gain_db 27.75
+vowel_am0 interharm_in_db -94.2 interharm_out_db -48.9 env_cv 0.0940
+vowel_am4 interharm_in_db -127.3 interharm_out_db -32.7 env_cv 0.0000
+burst pre_echo_400ms_db -104.4 pre_echo_50ms_db -94.5 post_echo_400ms_db -69.9 first_-60dB_sample_rel_onset_ms -9.1
+== E fixed m1 fsize512  R20 k6 a1ms r60ms
+latency_samples 384 latency_ms 8.00 impulse_peak_gain 1.0000
+identity_snr_db 25.4
+speech band_level_sd_in_db 9.33 band_level_sd_out_db 7.19 (reduction 2.14 dB)
+speech papr_in_db 21.11 papr_out_db 23.50 talkpower_gain_db -2.39 rms_gain_db 25.73
+vowel_am0 interharm_in_db -94.2 interharm_out_db -22.9 env_cv 0.0869
+vowel_am4 interharm_in_db -127.3 interharm_out_db -21.9 env_cv 0.0000
+burst pre_echo_400ms_db -300.0 pre_echo_50ms_db -300.0 post_echo_400ms_db -300.0 first_-60dB_sample_rel_onset_ms -7.6
+== F fixed m1 fsize1024 hardclip no-smooth
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 8.23 (reduction 1.15 dB)
+speech papr_in_db 21.10 papr_out_db 23.68 talkpower_gain_db -2.58 rms_gain_db 28.36
+vowel_am0 interharm_in_db -94.2 interharm_out_db -34.4 env_cv 0.0927
+vowel_am4 interharm_in_db -127.3 interharm_out_db -29.0 env_cv 0.0000
+burst pre_echo_400ms_db -102.9 pre_echo_50ms_db -93.0 post_echo_400ms_db -113.5 first_-60dB_sample_rel_onset_ms -9.5
+A==C bit-exact
+######## precomp 40 dB, 48 kHz, bsize 256
+== A orig m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 8.59 (reduction 0.76 dB)
+speech papr_in_db 21.02 papr_out_db 25.89 talkpower_gain_db -4.87 rms_gain_db 40.48
+vowel_am0 interharm_in_db -94.2 interharm_out_db -47.7 env_cv 0.0807
+vowel_am4 interharm_in_db -127.3 interharm_out_db -60.1 env_cv 0.0000
+burst pre_echo_400ms_db -14.8 pre_echo_50ms_db -4.9 post_echo_400ms_db -14.6 first_-60dB_sample_rel_onset_ms -203.6
+== C fixed-build m0 fsize16384
+latency_samples 16128 latency_ms 336.00 impulse_peak_gain 1.0000
+identity_snr_db 300.3
+speech band_level_sd_in_db 9.36 band_level_sd_out_db 8.59 (reduction 0.76 dB)
+speech papr_in_db 21.02 papr_out_db 25.89 talkpower_gain_db -4.87 rms_gain_db 40.48
+vowel_am0 interharm_in_db -94.2 interharm_out_db -47.7 env_cv 0.0807
+vowel_am4 interharm_in_db -127.3 interharm_out_db -60.1 env_cv 0.0000
+burst pre_echo_400ms_db -14.8 pre_echo_50ms_db -4.9 post_echo_400ms_db -14.6 first_-60dB_sample_rel_onset_ms -203.6
+== B orig m0 fsize1024 (interim)
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 6.08 (reduction 3.29 dB)
+speech papr_in_db 21.10 papr_out_db 22.60 talkpower_gain_db -1.50 rms_gain_db 32.36
+vowel_am0 interharm_in_db -94.2 interharm_out_db -27.4 env_cv 0.0806
+vowel_am4 interharm_in_db -127.3 interharm_out_db -20.9 env_cv 0.0000
+burst pre_echo_400ms_db -85.2 pre_echo_50ms_db -75.4 post_echo_400ms_db -70.6 first_-60dB_sample_rel_onset_ms -10.7
+== D fixed m1 fsize1024 R20 k6 a1ms r60ms
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 6.30 (reduction 3.07 dB)
+speech papr_in_db 21.10 papr_out_db 23.13 talkpower_gain_db -2.03 rms_gain_db 31.64
+vowel_am0 interharm_in_db -94.2 interharm_out_db -43.6 env_cv 0.0808
+vowel_am4 interharm_in_db -127.3 interharm_out_db -27.0 env_cv 0.0000
+burst pre_echo_400ms_db -86.9 pre_echo_50ms_db -77.1 post_echo_400ms_db -68.3 first_-60dB_sample_rel_onset_ms -10.1
+== E fixed m1 fsize512  R20 k6 a1ms r60ms
+latency_samples 384 latency_ms 8.00 impulse_peak_gain 1.0000
+identity_snr_db 25.4
+speech band_level_sd_in_db 9.33 band_level_sd_out_db 5.48 (reduction 3.84 dB)
+speech papr_in_db 21.11 papr_out_db 23.11 talkpower_gain_db -2.00 rms_gain_db 28.98
+vowel_am0 interharm_in_db -94.2 interharm_out_db -22.3 env_cv 0.0775
+vowel_am4 interharm_in_db -127.3 interharm_out_db -20.1 env_cv 0.0000
+burst pre_echo_400ms_db -300.0 pre_echo_50ms_db -300.0 post_echo_400ms_db -300.0 first_-60dB_sample_rel_onset_ms -8.0
+== F fixed m1 fsize1024 hardclip no-smooth
+latency_samples 768 latency_ms 16.00 impulse_peak_gain 1.0000
+identity_snr_db 312.8
+speech band_level_sd_in_db 9.37 band_level_sd_out_db 6.10 (reduction 3.27 dB)
+speech papr_in_db 21.10 papr_out_db 23.17 talkpower_gain_db -2.06 rms_gain_db 32.47
+vowel_am0 interharm_in_db -94.2 interharm_out_db -29.3 env_cv 0.0774
+vowel_am4 interharm_in_db -127.3 interharm_out_db -21.0 env_cv 0.0000
+burst pre_echo_400ms_db -86.0 pre_echo_50ms_db -76.1 post_echo_400ms_db -71.2 first_-60dB_sample_rel_onset_ms -10.6
+A==C bit-exact

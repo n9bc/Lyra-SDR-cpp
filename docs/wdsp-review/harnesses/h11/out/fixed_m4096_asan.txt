@@ -1,0 +1,1 @@
+threads=4 iters/thr=3000 keys=64 max_entries=4096 calls=12000 mismatches=0 nulls=0 list_walked=74 count_field=74 cycle=0 duplicate_entries=10 corrupt_entries=0 time=0.087s

@@ -1,0 +1,1 @@
+orig RESULT scen=phase60 seed=5 badcyc_ok=0 rej_after=2 consec_rej_after=2 lresets_after=1 ref_rej_after=0 max_dm=0.2562 max_dc=0.2660 max_ds=1.6790 max_dph_deg=87.771 dph_next_deg=0.084 worst_truephErr_deg=87.97 final_dph_deg=0.1167 clip_viol=0 nc_mismatch_cycles=0
