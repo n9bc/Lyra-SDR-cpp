@@ -10,10 +10,11 @@ enum TerrainRendererError: Error {
     case no32BitFloatFiltering
 }
 
-/// Draws the audio terrain as one smooth, lit surface: the feed's rows are mapped through a
-/// following dB scale (`TerrainAutoRange`), smoothed across frequency and time, upsampled with
-/// Catmull-Rom onto a 320 x 120 height texture, and drawn as a static 320 x 140 mesh with 4x MSAA,
-/// per-pixel lighting, an inferno-style colour map and depth fog.
+/// Draws the audio terrain as one smooth, lit surface: the feed's rows are smoothed across
+/// frequency and time in dB, upsampled with Catmull-Rom onto a 320 x 120 height texture, and
+/// mapped through a following dB scale (`TerrainAutoRange`) in the shader, every frame, so a
+/// rescale glides rather than jumping at each row. The surface is a static 320 x 140 mesh drawn
+/// with 4x MSAA, per-pixel lighting, an inferno-style colour map and depth fog.
 ///
 /// Main thread only. The renderer draws only what its source holds: an empty grid is a flat
 /// surface at level 0, and missing (young) rows are flat at the back. The scroll fraction runs
@@ -62,8 +63,10 @@ final class TerrainRenderer: LyraMetalRenderer {
     private var clock = TerrainScrollClock()
     private var lastNewest: [Float]?
     private var lastCount = -1
-    private var lastIngest: TimeInterval?
-    /// The level rows upsampled across frequency, newest first, `TerrainHistory.rows` of them.
+    private var lastFrame: TimeInterval?
+    /// The dB the height texture is measured from: the scale's floor when the rows were built.
+    private var referenceDb: Float = -100
+    /// The height rows (dB above `referenceDb`) upsampled across frequency, newest first, `TerrainHistory.rows` of them.
     private var columns: [[Float]] = []
     private var heights: [Float]
 
@@ -133,7 +136,7 @@ final class TerrainRenderer: LyraMetalRenderer {
         source = newSource
         lastNewest = nil
         lastCount = -1
-        lastIngest = nil
+        lastFrame = nil
         if case .sample(let grid) = newSource {
             for _ in 0..<20 { range.update(grid: grid, dt: 1) }
         }
@@ -201,9 +204,19 @@ final class TerrainRenderer: LyraMetalRenderer {
                                        SIMD4<Float>(-simd_dot(s, eye), -simd_dot(u, eye), simd_dot(f, eye), 1)))
     }
 
+    /// How far below the floor the height texture's reference sits: one second of fall.
+    nonisolated static let referenceMarginDb = TerrainAutoRange.fallDbPerSecond
+
+    /// The shader's level mapping for `range`, relative to a height texture measured from
+    /// `referenceDb`.
+    nonisolated static func rangeUniform(_ range: TerrainAutoRange, referenceDb: Float) -> SIMD4<Float> {
+        SIMD4<Float>(range.floorDb - referenceDb, range.ceilingDb - referenceDb, TerrainAutoRange.kneeLevel, 0)
+    }
+
     // MARK: - Frame preparation
 
-    /// Takes a new grid into the scale and the cached rows. Only runs when the grid changed.
+    /// Takes a new grid into the scale's targets and the cached rows. Only runs when the grid
+    /// changed. The scale itself moves per frame, in `prepare`.
     private func ingest(_ grid: [[Float]], now: TimeInterval) {
         let newest = grid.first
         guard grid.count != lastCount || newest != lastNewest else { return }
@@ -211,12 +224,13 @@ final class TerrainRenderer: LyraMetalRenderer {
         lastCount = grid.count
         lastNewest = newest
 
-        let dt = lastIngest.map { min(max(now - $0, 0), 1) } ?? TerrainScrollClock.rowPeriod
-        lastIngest = now
-        if case .feed = source { range.update(grid: grid, dt: dt) }
-
-        let levels = TerrainSurface.levelRows(grid: grid, range: range)
-        columns = Self.padded(levels, rows: TerrainHistory.rows, points: Self.points)
+        if case .feed = source { range.retarget(grid: grid) }
+        // Measured from below both where the floor is and where it is heading (with a second of
+        // fall to spare), so nothing the scale shows before the next row is clamped away and the
+        // flat padding rows stay at level 0.
+        referenceDb = min(range.floorDb, range.targetFloorDb) - Self.referenceMarginDb
+        let heights = TerrainSurface.heightRows(grid: grid, referenceDb: referenceDb)
+        columns = Self.padded(heights, rows: TerrainHistory.rows, points: Self.points)
             .map { TerrainSurface.upsampleRow($0, width: Self.textureWidth) }
         if isNewRow { clock.rowArrived(at: now) }
     }
@@ -224,6 +238,12 @@ final class TerrainRenderer: LyraMetalRenderer {
     private func prepare(now: TimeInterval, aspect newAspect: Float) -> Bool {
         let (grid, live) = current
         ingest(grid, now: now)
+        // The scale glides only while live (a dim, paused terrain holds still). A long gap (the
+        // view was paused) is capped at one row period, so waking never jumps the scale.
+        let dt = lastFrame.map { min(max(now - $0, 0), TerrainScrollClock.rowPeriod) } ?? 0
+        lastFrame = now
+        if live { range.advance(dt: dt) }
+        uniforms.range = Self.rangeUniform(range, referenceDb: referenceDb)
         let fraction = clock.fraction(now: now, live: live)
         heights.withUnsafeMutableBufferPointer {
             TerrainSurface.upsampleTime(columns: columns, fraction: fraction, height: Self.textureHeight, into: $0)

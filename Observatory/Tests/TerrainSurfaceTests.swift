@@ -146,6 +146,28 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(s.floorDb, -40, accuracy: 0.01)
     }
 
+    /// The scale moves every frame toward targets set when a row arrives, so a rescale is a glide
+    /// at 60 fps rather than a jump at each of the feed's 7.5 rows per second.
+    func testAdvanceGlidesBetweenRows() {
+        var r = TerrainAutoRange()
+        r.retarget(grid: grid(noise: -30, peak: 20))
+        XCTAssertEqual(r.targetCeilingDb, 23, accuracy: 0.01)
+        XCTAssertEqual(r.ceilingDb, -50)                       // retarget alone moves nothing
+        let frame = 1.0 / 60
+        for _ in 0..<8 {
+            let before = r
+            r.advance(dt: frame)
+            XCTAssertGreaterThan(r.ceilingDb, before.ceilingDb)
+            XCTAssertLessThanOrEqual(r.ceilingDb - before.ceilingDb, 0.5 + 1e-4)
+            XCTAssertLessThanOrEqual(r.floorDb - before.floorDb, 0.5 + 1e-4)
+        }
+        // Eight frames land where one row-period update would.
+        var once = TerrainAutoRange()
+        once.update(grid: grid(noise: -30, peak: 20), dt: 8 * frame)
+        XCTAssertEqual(r.floorDb, once.floorDb, accuracy: 1e-3)
+        XCTAssertEqual(r.ceilingDb, once.ceilingDb, accuracy: 1e-3)
+    }
+
     func testEmptyGridHoldsTheRange() {
         var r = TerrainAutoRange()
         r.update(grid: [], dt: 1)
@@ -250,21 +272,56 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(b[0], 0.55, accuracy: 1e-6)
         XCTAssertEqual(b[1], 0.45, accuracy: 1e-6)
 
-        // levelRows applies it oldest to newest: a step to 0.8 reaches 0.55 x 0.8 on its first row.
-        let range = TerrainAutoRange()          // -100 ... -50
+        // heightRows applies it oldest to newest, in dB above the reference: a 40 dB step reaches
+        // 0.55 x 40 on its first row.
         let quiet = [Float](repeating: -100, count: 41), loud = [Float](repeating: -60, count: 41)
-        let levels = TerrainSurface.levelRows(grid: [loud, quiet], range: range)
-        XCTAssertEqual(levels.count, 2)
-        XCTAssertEqual(levels[1][20], 0, accuracy: 1e-5)        // oldest
-        XCTAssertEqual(levels[0][20], 0.55 * 0.8, accuracy: 1e-4)     // newest, blended with the older
-        let three = TerrainSurface.levelRows(grid: [loud, loud, quiet], range: range)
-        XCTAssertEqual(three[0][20], (0.55 + 0.45 * 0.55) * 0.8, accuracy: 1e-4)
+        let rows = TerrainSurface.heightRows(grid: [loud, quiet], referenceDb: -100)
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[1][20], 0, accuracy: 1e-5)                 // oldest
+        XCTAssertEqual(rows[0][20], 0.55 * 40, accuracy: 1e-3)         // newest, blended with the older
+        let three = TerrainSurface.heightRows(grid: [loud, loud, quiet], referenceDb: -100)
+        XCTAssertEqual(three[0][20], (0.55 + 0.45 * 0.55) * 40, accuracy: 1e-3)
     }
+
+    /// The height rows are dB above a reference, clamped at it, so the level mapping can run per
+    /// frame on the GPU. Smoothing and blending are affine-invariant, so mapping afterwards gives
+    /// what mapping first gave, wherever nothing is clipped.
+    func testHeightRowsAreDbAboveTheReference() {
+        var row = [Float](repeating: -200, count: 41)                   // floor-clamped stopband
+        row[20] = -40
+        row[3] = .nan
+        let h = TerrainSurface.heightRows(grid: [row], referenceDb: -90, sigmaPoints: 0.0001)
+        XCTAssertEqual(h[0][0], 0)                                      // below the reference: 0
+        XCTAssertEqual(h[0][3], 0)                                      // non-finite: 0
+        XCTAssertEqual(h[0][20], 50, accuracy: 1e-3)
+
+        let range = TerrainAutoRange()                                  // -100 ... -50
+        let g: [[Float]] = [(0..<41).map { -100 + Float($0) }, (0..<41).map { -95 + Float($0) / 2 }]
+        let heights = TerrainSurface.heightRows(grid: g, referenceDb: range.floorDb)
+        // What the shader does per texel: the level of (height + reference) dBFS.
+        let levels = heights.map { $0.map { range.level($0 + range.floorDb) } }
+        var expected: [Float]?
+        for age in [1, 0] {
+            let smoothed = TerrainSurface.smoothRow(g[age].map { range.level($0) })
+            expected = TerrainSurface.blend(new: smoothed, previous: expected)
+            for i in 0..<41 { XCTAssertEqual(levels[age][i], expected![i], accuracy: 1e-4, "row \(age) bin \(i)") }
+        }
+    }
+
 }
 
 @MainActor final class TerrainRendererTests: XCTestCase {
+    func testRangeUniformCarriesTheScaleRelativeToTheTexture() {
+        var range = TerrainAutoRange()
+        for _ in 0..<50 { range.update(grid: [[Float]](repeating: [Float](repeating: -80, count: 4), count: 2), dt: 1) }
+        let u = TerrainRenderer.rangeUniform(range, referenceDb: -90)
+        XCTAssertEqual(u.x, range.floorDb + 90, accuracy: 1e-4)
+        XCTAssertEqual(u.y, range.ceilingDb + 90, accuracy: 1e-4)
+        XCTAssertEqual(u.z, TerrainAutoRange.kneeLevel)
+    }
+
     func testUniformsLayoutMatchesShader() {
-        // MSL: float4x4 (64) + 6 x float4 (96) = 160 bytes, then 5 x 32-byte stops.
+        // MSL: float4x4 (64) + 7 x float4 (112) = 176 bytes, then 5 x 32-byte stops.
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.viewProjection), 0)
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.light), 64)
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.eye), 80)
@@ -272,8 +329,9 @@ final class TerrainSurfaceTests: XCTestCase {
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.surface), 112)
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.shading), 128)
         XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.grid), 144)
-        XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.stops), 160)
-        XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.stride, 320)
+        XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.range), 160)
+        XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.offset(of: \.stops), 176)
+        XCTAssertEqual(MemoryLayout<TerrainGPUUniforms>.stride, 336)
     }
 
     func testColourMapIsDarkToBright() {

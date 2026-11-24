@@ -19,7 +19,7 @@ enum TerrainPalette {
     }
 }
 
-/// Mirrors MSL `TerrainUniforms` (320 bytes). Field order and padding must match the shader.
+/// Mirrors MSL `TerrainUniforms` (336 bytes). Field order and padding must match the shader.
 struct TerrainGPUUniforms {
     var viewProjection = matrix_identity_float4x4
     /// xyz: unit vector toward the light.
@@ -34,6 +34,9 @@ struct TerrainGPUUniforms {
     var shading: SIMD4<Float> = .zero
     /// x: mesh columns, y: mesh rows, z: 1 / texture width, w: 1 / texture height.
     var grid: SIMD4<Float> = .zero
+    /// The level mapping, per frame: x: floor and y: ceiling, both in dB above the height
+    /// texture's reference; z: `TerrainAutoRange.kneeLevel`.
+    var range: SIMD4<Float> = .zero
     var stops: (SpectrumGPUStop, SpectrumGPUStop, SpectrumGPUStop, SpectrumGPUStop, SpectrumGPUStop)
 
     nonisolated static let stopCount = 5
@@ -70,6 +73,7 @@ enum TerrainShaders {
         float4 surface;
         float4 shading;
         float4 grid;
+        float4 range;
         TerrainStop stops[5];
     };
 
@@ -96,6 +100,22 @@ enum TerrainShaders {
         return u.stops[4].color.rgb;
     }
 
+    // The texture holds dB above a reference; this is TerrainAutoRange.level of it: the linear
+    // scale, 0 below the floor, and a soft knee above range.z that approaches but never reaches 1.
+    static float levelOf(constant TerrainUniforms &u, float db) {
+        float x = (db - u.range.x) / max(u.range.y - u.range.x, 1e-3);
+        if (x <= 0.0) { return 0.0; }
+        float k = u.range.z;
+        if (x <= k) { return x; }
+        float room = 1.0 - k;
+        float v = (x - k) / room;
+        return k + room * v / (1.0 + v);
+    }
+
+    static float heightAt(constant TerrainUniforms &u, texture2d<float> heights, float2 uv) {
+        return levelOf(u, heights.sample(heightSampler, uv, level(0)).r);
+    }
+
     // uv.x: 0 (0 Hz, left) ... 1 (3 kHz, right); uv.y: 0 (front, newest) ... 1 (back, oldest).
     static float3 worldPoint(constant TerrainUniforms &u, float2 uv, float h) {
         return float3((uv.x - 0.5) * u.surface.x, h * u.surface.z, (0.5 - uv.y) * u.surface.y);
@@ -109,7 +129,7 @@ enum TerrainShaders {
         uint col = vid % cols;
         uint row = min(vid / cols, rows - 1u);
         float2 uv = float2(float(col) / float(cols - 1u), float(row) / float(rows - 1u));
-        float h = heights.sample(heightSampler, uv, level(0)).r;
+        float h = heightAt(u, heights, uv);
         TerrainOut out;
         out.world = worldPoint(u, uv, h);
         out.position = u.viewProjection * float4(out.world, 1.0);
@@ -122,11 +142,11 @@ enum TerrainShaders {
                                      texture2d<float> heights [[texture(0)]]) {
         float2 uv = in.uv;
         float2 texel = u.grid.zw;
-        float h = heights.sample(heightSampler, uv).r;
-        float hl = heights.sample(heightSampler, uv - float2(texel.x, 0.0)).r;
-        float hr = heights.sample(heightSampler, uv + float2(texel.x, 0.0)).r;
-        float hf = heights.sample(heightSampler, uv - float2(0.0, texel.y)).r;   // toward the front
-        float hb = heights.sample(heightSampler, uv + float2(0.0, texel.y)).r;   // toward the back
+        float h = heightAt(u, heights, uv);
+        float hl = heightAt(u, heights, uv - float2(texel.x, 0.0));
+        float hr = heightAt(u, heights, uv + float2(texel.x, 0.0));
+        float hf = heightAt(u, heights, uv - float2(0.0, texel.y));   // toward the front
+        float hb = heightAt(u, heights, uv + float2(0.0, texel.y));   // toward the back
 
         // World-space slope: x grows with uv.x; z shrinks as uv.y grows (the back is -z).
         float dhdx = (hr - hl) * u.surface.z / (2.0 * texel.x * u.surface.x);

@@ -24,23 +24,37 @@ struct TerrainAutoRange: Equatable, Sendable {
 
     private(set) var floorDb: Float = -100
     private(set) var ceilingDb: Float = -50
+    /// Where the scale is heading: set by `retarget` when a row arrives, reached by `advance`.
+    private(set) var targetFloorDb: Float = -100
+    private(set) var targetCeilingDb: Float = -50
 
-    /// Moves the scale toward `grid` (any row order) by at most `dt` seconds of slew. A grid with no
-    /// finite value leaves the scale where it is.
+    /// `retarget` then `advance`: moves the scale toward `grid` by at most `dt` seconds of slew.
     mutating func update(grid: [[Float]], dt: TimeInterval) {
+        retarget(grid: grid)
+        advance(dt: dt)
+    }
+
+    /// Points the scale at `grid` (any row order) without moving it. A grid with no finite value
+    /// keeps the previous targets.
+    mutating func retarget(grid: [[Float]]) {
         var values: [Float] = []
         values.reserveCapacity(grid.reduce(0) { $0 + $1.count })
         for row in grid { for v in row where v.isFinite { values.append(v) } }
-        guard !values.isEmpty, dt > 0 else { return }
+        guard !values.isEmpty else { return }
         values.sort()
         let k = min(Int(Float(values.count - 1) * Self.floorPercentile), values.count - 1)
         let peakCeiling = values[values.count - 1] + Self.headroomDb
-        let targetFloor = max(values[k], peakCeiling - Self.maxSpanDb)
-        let targetCeiling = max(peakCeiling, targetFloor + Self.minSpanDb)
+        targetFloorDb = max(values[k], peakCeiling - Self.maxSpanDb)
+        targetCeilingDb = max(peakCeiling, targetFloorDb + Self.minSpanDb)
+    }
 
+    /// Moves the scale toward its targets by at most `dt` seconds of slew. Called every frame, so
+    /// a rescale glides instead of stepping at each row.
+    mutating func advance(dt: TimeInterval) {
+        guard dt > 0 else { return }
         let up = Self.riseDbPerSecond * Float(dt), down = Self.fallDbPerSecond * Float(dt)
-        let newFloor = Self.slew(floorDb, toward: targetFloor, up: up, down: down)
-        let slewedCeiling = Self.slew(ceilingDb, toward: targetCeiling, up: up, down: down)
+        let newFloor = Self.slew(floorDb, toward: targetFloorDb, up: up, down: down)
+        let slewedCeiling = Self.slew(ceilingDb, toward: targetCeilingDb, up: up, down: down)
         // Holding the span on every step only ever moves one end up by as much as the other end
         // moved up, so it stays inside the slew limits while the previous state was a legal span.
         floorDb = max(newFloor, slewedCeiling - Self.maxSpanDb)
@@ -111,14 +125,18 @@ enum TerrainSurface {
         return out
     }
 
-    /// `grid` (dBFS, newest row first) as smoothed, temporally blended levels, newest first. The
-    /// blend runs oldest to newest, so each row carries its predecessors as the stored rows would.
-    nonisolated static func levelRows(grid: [[Float]], range: TerrainAutoRange, sigmaPoints: Float = 3) -> [[Float]] {
+    /// `grid` (dBFS, newest row first) as smoothed, temporally blended heights in dB above
+    /// `referenceDb` (clamped at 0; non-finite is 0), newest first. The blend runs oldest to newest,
+    /// so each row carries its predecessors as the stored rows would. The level mapping happens
+    /// later, per frame, in the shader (`TerrainAutoRange.level` of height + reference): smoothing
+    /// and blending are affine, so mapping afterwards matches mapping first wherever the knee is
+    /// not reached, and it lets the scale glide every frame without rebuilding these rows.
+    nonisolated static func heightRows(grid: [[Float]], referenceDb: Float, sigmaPoints: Float = 3) -> [[Float]] {
         var out = [[Float]](repeating: [], count: grid.count)
         var previous: [Float]?
         for age in stride(from: grid.count - 1, through: 0, by: -1) {
-            let smoothed = smoothRow(grid[age].map { range.level($0) }, sigmaPoints: sigmaPoints)
-            let blended = blend(new: smoothed, previous: previous)
+            let above = grid[age].map { $0.isFinite ? max($0 - referenceDb, 0) : 0 }
+            let blended = blend(new: smoothRow(above, sigmaPoints: sigmaPoints), previous: previous)
             out[age] = blended
             previous = blended
         }
