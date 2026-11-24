@@ -36,4 +36,17 @@ enum RadioCommand: Equatable, Sendable {
     /// Middle or option click: focus Main when Sub is focused, else put VFO B (and Sub) here and focus Sub.
     case spectrumFocusToggle(hz: Int64)
     case setZoom(Double)
+
+    // Display toolbar settings. The engine owns them; the snapshot reports them back.
+    /// The wheel step in Hz (Prefs `scrollStepHz`).
+    case setWheelStep(Int)
+    /// Exact tuning: clicks and wheel never go finer than 100 Hz (Prefs `round100`).
+    case setExactTuning(Bool)
+    case setPeakHold(PeakHoldSetting)
+    /// Spectrum averaging on or off; on restores the last non-zero smoothing.
+    case setAveraging(Bool)
+    case setBandPlanVisible(Bool)
+    case setSpotsVisible(Bool)
+    /// One receiver's tuning step in Hz (the STEP chip).
+    case setTuningStep(ReceiverID, Int)
 }

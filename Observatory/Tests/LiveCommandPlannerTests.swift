@@ -339,4 +339,44 @@ final class LiveCommandPlannerTests: XCTestCase {
         XCTAssertEqual(plan(.setZoom(0.5), cw()), [.setZoomPref(1)])
         XCTAssertEqual(plan(.setZoom(2.5), cw()), [.setZoomPref(2.5)])
     }
+
+    // MARK: - Display toolbar settings
+
+    func testPeakOptionsMapToPrefs() {
+        let e = EngineState.idle
+        XCTAssertEqual(plan(.setPeakHold(.off), e), [.setPeakPref(enabled: false, secs: 0)])
+        XCTAssertEqual(plan(.setPeakHold(.hold), e), [.setPeakPref(enabled: true, secs: -1)])
+        XCTAssertEqual(plan(.setPeakHold(.live), e), [.setPeakPref(enabled: true, secs: -2)])
+        for secs in [0.5, 2, 5] {
+            XCTAssertEqual(plan(.setPeakHold(.seconds(secs)), e), [.setPeakPref(enabled: true, secs: secs)])
+        }
+    }
+
+    func testAveragingRestoresLastSmoothing() {
+        let e = EngineState.idle
+        XCTAssertEqual(LiveCommandPlanner.calls(for: .setAveraging(false), state: e, vfoLocked: false,
+                                                lastSmoothing: 7), [.setSmoothingPref(0)])
+        XCTAssertEqual(LiveCommandPlanner.calls(for: .setAveraging(true), state: e, vfoLocked: false,
+                                                lastSmoothing: 7), [.setSmoothingPref(7)])
+    }
+
+    func testAveragingDefaultsToFive() {
+        XCTAssertEqual(plan(.setAveraging(true), .idle), [.setSmoothingPref(5)])
+    }
+
+    func testWheelStepAndExact() {
+        XCTAssertEqual(plan(.setWheelStep(500), .idle), [.setScrollStepPref(500)])
+        XCTAssertEqual(plan(.setExactTuning(true), .idle), [.setRound100Pref(true)])
+        XCTAssertEqual(plan(.setExactTuning(false), .idle), [.setRound100Pref(false)])
+    }
+
+    func testBandPlanAndSpotsToggles() {
+        XCTAssertEqual(plan(.setBandPlanVisible(false), .idle), [.setBandPlanSegmentsPref(false)])
+        XCTAssertEqual(plan(.setSpotsVisible(true), .idle), [.setShowSpotsPref(true)])
+    }
+
+    func testStepChipTargetsItsReceiver() {
+        XCTAssertEqual(plan(.setTuningStep(.main, 50), .idle), [.setStepPref(.main, 50)])
+        XCTAssertEqual(plan(.setTuningStep(.sub, 5000), .idle), [.setStepPref(.sub, 5000)])
+    }
 }

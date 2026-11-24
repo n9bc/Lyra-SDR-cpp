@@ -130,8 +130,8 @@ enum LiveSnapshotMapper {
             display: DisplaySnapshot(
                 spanLowHz: spanLow, spanHighHz: spanHigh,
                 subSpanLowHz: subCentre - subSpan / 2, subSpanHighHz: subCentre + subSpan / 2,
-                zoom: zoom, wheelStepHz: focused == .sub ? e.filter.stepHzRx2 : e.filter.stepHz,
-                peakHold: peakHold(d), bandPlanVisible: false, bandPlan: [], spots: [],
+                zoom: zoom, wheelStepHz: d.scrollStepHz,
+                peakHold: peakHold(d), bandPlanVisible: d.bandPlanSegments, bandPlan: [], spots: [],
                 mainCarrierHz: mainCarrier, mainPassband: mainPassband,
                 subCarrierHz: subCarrier, subPassband: subPassband,
                 subOverlay: subOverlay, subSpectrumAvailable: d.rx2SpectrumAvailable,

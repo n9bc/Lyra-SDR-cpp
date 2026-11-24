@@ -29,4 +29,12 @@ enum EngineCall: Equatable, Sendable {
     case setDsp(DSPFunction, Bool)
     case setCtuneCenterHz(UInt32)
     case setZoomPref(Double)
+    case setScrollStepPref(Int)
+    case setRound100Pref(Bool)
+    /// `secs`: 0 off, -1 hold, -2 live, above 0 seconds (the engine's `peakHoldSecs`).
+    case setPeakPref(enabled: Bool, secs: Double)
+    case setSmoothingPref(Int)
+    case setBandPlanSegmentsPref(Bool)
+    case setShowSpotsPref(Bool)
+    case setStepPref(ReceiverID, Int)
 }

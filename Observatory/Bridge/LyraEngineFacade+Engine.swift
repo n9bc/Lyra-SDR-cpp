@@ -119,6 +119,13 @@ extension LyraEngineFacade: EngineFacade {
             case .setDsp(let function, let on): setDspFunction(function.rawValue, enabled: on)
             case .setCtuneCenterHz(let hz): setCtuneCenter(hz)
             case .setZoomPref(let zoom): setZoomPreference(zoom)
+            case .setScrollStepPref(let hz): setScrollStepPreference(hz)
+            case .setRound100Pref(let on): setRound100Preference(on)
+            case .setPeakPref(let enabled, let secs): setPeakPreference(enabled: enabled, secs: secs)
+            case .setSmoothingPref(let value): setSmoothingPreference(value)
+            case .setBandPlanSegmentsPref(let on): setBandPlanSegmentsPreference(on)
+            case .setShowSpotsPref(let on): setShowSpotsPreference(on)
+            case .setStepPref(let id, let hz): setStepPreference(id, hz: hz)
             }
         }
     }
@@ -127,6 +134,15 @@ extension LyraEngineFacade: EngineFacade {
     // preference yet; Task 7 replaces these no-ops with the real calls.
     func setCtuneCenter(_ hz: UInt32) {}
     func setZoomPreference(_ zoom: Double) {}
+    // TODO(M4 Task 7): the display-setting Prefs writes. `setStepPreference` writes
+    // `Prefs::setVfoStepHz(mode, hz)` / `setVfoStepHzRx2(modeRx2, hz)`, the keys `consoleFilter` reads.
+    func setScrollStepPreference(_ hz: Int) {}
+    func setRound100Preference(_ on: Bool) {}
+    func setPeakPreference(enabled: Bool, secs: Double) {}
+    func setSmoothingPreference(_ value: Int) {}
+    func setBandPlanSegmentsPreference(_ on: Bool) {}
+    func setShowSpotsPreference(_ on: Bool) {}
+    func setStepPreference(_ receiver: ReceiverID, hz: Int) {}
 
     /// One `-amateurBands` entry, or nil if a key is missing.
     private nonisolated static func band(from d: [String: Any]) -> EngineBand? {

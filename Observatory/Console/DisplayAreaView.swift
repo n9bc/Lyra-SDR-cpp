@@ -138,7 +138,7 @@ struct DisplayAreaView: View {
                 ctuneEnabled: ctunEnabled, subEnabled: sub.enabled, splitEnabled: main.splitTx,
                 focused: focused, status: capabilities.control(.spectrumTuning), send: send)
             VStack(spacing: 0) {
-                DisplayToolbarView(display: display, capabilities: capabilities)
+                DisplayToolbarView(display: display, capabilities: capabilities, send: send)
                 ReceiverDisplayStack(display: display, receiver: main, label: subStack ? "MAIN" : nil,
                                      labelHighlighted: focused == .main,
                                      spectrumHeight: lay.spectrum, waterfallHeight: lay.waterfall,

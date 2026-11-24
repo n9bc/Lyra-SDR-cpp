@@ -5,8 +5,13 @@ import Foundation
 /// are ported from `TuningPanel.qml` (`assignTx`, `abBlocked`, `bFromHz`, `copyAtoB`, `copyBtoA`,
 /// `swapAB`) and `BandPanel.qml` (`goBand`). An empty list means refused or nothing to do.
 enum LiveCommandPlanner {
+    /// The smoothing averaging turns on with when the engine has not reported one.
+    nonisolated static let defaultSmoothing = 5
+
+    /// `lastSmoothing` is the last non-zero smoothing the engine reported, which turning
+    /// averaging back on restores (5 when there has been none).
     nonisolated static func calls(for command: RadioCommand, state e: EngineState,
-                                  vfoLocked: Bool) -> [EngineCall] {
+                                  vfoLocked: Bool, lastSmoothing: Int? = nil) -> [EngineCall] {
         let r = e.radio
         switch command {
         case .connect: return [.connect]
@@ -72,7 +77,7 @@ enum LiveCommandPlanner {
             if vfoLocked { return [] }
             guard let carrier = currentCarrier(id, r) else { return [] }
             let d = e.display
-            let step = d.round100 ? max(100, d.scrollStepHz) : d.scrollStepHz
+            let step = SpectrumGestureModel.effectiveStep(stepHz: d.scrollStepHz, round100: d.round100)
             let next = nextWheelHz(carrier, stepHz: step, ticks: ticks, sticky: d.stickyWheel)
             return tuneCarrier(id, next, r)
         case .ctunPan(let delta):
@@ -86,6 +91,21 @@ enum LiveCommandPlanner {
             return plan + [.setFocusedRx(2)]
         case .setZoom(let zoom):
             return [.setZoomPref(min(max(zoom.isNaN ? 1 : zoom, 1), 16))]
+
+        case .setWheelStep(let hz): return [.setScrollStepPref(hz)]
+        case .setExactTuning(let on): return [.setRound100Pref(on)]
+        case .setPeakHold(let setting):
+            switch setting {
+            case .off: return [.setPeakPref(enabled: false, secs: 0)]
+            case .hold: return [.setPeakPref(enabled: true, secs: -1)]
+            case .live: return [.setPeakPref(enabled: true, secs: -2)]
+            case .seconds(let s): return [.setPeakPref(enabled: true, secs: s)]
+            }
+        case .setAveraging(let on):
+            return [.setSmoothingPref(on ? (lastSmoothing.flatMap { $0 > 0 ? $0 : nil } ?? defaultSmoothing) : 0)]
+        case .setBandPlanVisible(let on): return [.setBandPlanSegmentsPref(on)]
+        case .setSpotsVisible(let on): return [.setShowSpotsPref(on)]
+        case .setTuningStep(let id, let hz): return [.setStepPref(id, hz)]
         }
     }
 

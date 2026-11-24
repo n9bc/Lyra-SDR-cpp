@@ -74,6 +74,29 @@ struct VFOPanelView: View {
             .help(ConsoleAvailability.help(status, normal: help))
     }
 
+    /// The tuning steps the STEP chip offers, in Hz.
+    nonisolated static let stepOptions = [1, 10, 50, 100, 500, 1000, 5000]
+
+    /// STEP menu: shows the engine's step for this receiver; a choice only sends the command.
+    private var stepChip: some View {
+        let status = capabilities.control(.tuningStep)
+        return Menu {
+            ForEach(Self.stepOptions, id: \.self) { hz in
+                Button("\(hz) Hz") { send(.setTuningStep(receiver.id, hz)) }
+            }
+        } label: {
+            Text("STEP \(receiver.stepHz)")
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(VFOChipButtonStyle(.plain))
+        .fixedSize()
+        .disabled(ConsoleAvailability.isDisabled(status))
+        .accessibilityLabel("Set tuning step")
+        .accessibilityValue("\(receiver.stepHz) hertz")
+        .help(ConsoleAvailability.help(status, normal: "Set tuning step"))
+    }
+
     private func mono(_ size: CGFloat) -> Font { .system(size: size, design: .monospaced) }
 
     private var filterText: String { String(format: "%.1fk", Double(receiver.filterHz) / 1000) }
@@ -124,7 +147,7 @@ struct VFOPanelView: View {
             chip(receiver.antenna, "Select antenna input", status: capabilities.control(.frontEnd))
             chip("BW \(filterText.uppercased())", "Set filter bandwidth",
                  status: capabilities.control(.vfoBandwidth))
-            chip("STEP \(receiver.stepHz)", "Set tuning step", status: capabilities.control(.tuningStep))
+            stepChip
             Spacer(minLength: 0)
             Text(title)
                 .font(mono(13)).tracking(1.82).lineLimit(1)

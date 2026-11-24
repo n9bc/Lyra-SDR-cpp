@@ -253,4 +253,60 @@ private final class Flag: @unchecked Sendable {
         m.send(.setZoom(0.1))
         XCTAssertEqual(m.snapshot.display.zoom, 1)
     }
+
+    func testDisplaySettingsApplyToTheSnapshot() {
+        let m = MockRadioBackend()
+        m.send(.setWheelStep(50))
+        XCTAssertEqual(m.snapshot.display.wheelStepHz, 50)
+        m.send(.setExactTuning(true))
+        XCTAssertTrue(m.snapshot.display.exactTuning)
+        for p: PeakHoldSetting in [.off, .hold, .live, .seconds(5)] {
+            m.send(.setPeakHold(p))
+            XCTAssertEqual(m.snapshot.display.peakHold, p)
+        }
+        m.send(.setBandPlanVisible(false))
+        XCTAssertFalse(m.snapshot.display.bandPlanVisible)
+        m.send(.setSpotsVisible(false))
+        XCTAssertFalse(m.snapshot.display.spotsVisible)
+        m.send(.setTuningStep(.sub, 5000))
+        XCTAssertEqual(m.snapshot.sub.stepHz, 5000)
+        XCTAssertEqual(m.snapshot.main.stepHz, 100)
+    }
+
+    func testAveragingRestoresTheLastSmoothing() {
+        var snap = RadioSnapshot.sample
+        snap.display.smoothing = 7
+        let m = MockRadioBackend(snapshot: snap)
+        m.send(.setAveraging(false))
+        XCTAssertEqual(m.snapshot.display.smoothing, 0)
+        XCTAssertFalse(m.snapshot.display.averaging)
+        m.send(.setAveraging(true))
+        XCTAssertEqual(m.snapshot.display.smoothing, 7)
+        var fresh = RadioSnapshot.sample
+        fresh.display.smoothing = 0
+        let n = MockRadioBackend(snapshot: fresh)
+        n.send(.setAveraging(true))
+        XCTAssertEqual(n.snapshot.display.smoothing, 5)
+    }
+
+    func testClickSnapAndWheelShareOneStep() {
+        for (step, exact, grid) in [(500, false, 500), (50, true, 100), (1000, true, 1000), (50, false, 50)] {
+            var snap = RadioSnapshot.sample
+            snap.display.wheelStepHz = step
+            snap.display.exactTuning = exact
+            snap.display.stickyWheel = true
+            let ctx = SpectrumGestureModel.context(
+                stack: .main, display: snap.display,
+                inputs: SpectrumGestureInputs(ctuneEnabled: false, subEnabled: false, splitEnabled: false,
+                                              focused: .main, status: .mocked, send: { _ in }),
+                width: 1000)
+            let snapped = SpectrumGestureModel.snapCarrier(14_201_333, stepHz: ctx.stepHz, round100: ctx.round100)
+            XCTAssertEqual(snapped % Int64(grid), 0, "\(step) \(exact)")
+            // The first sticky wheel notch from an off-grid carrier lands on the same grid.
+            let m = MockRadioBackend(snapshot: snap)
+            m.send(.wheelTune(.main, ticks: 1))
+            XCTAssertEqual(m.snapshot.main.frequencyHz % Int64(grid), 0, "\(step) \(exact)")
+            XCTAssertEqual(SpectrumGestureModel.effectiveStep(stepHz: ctx.stepHz, round100: ctx.round100), grid)
+        }
+    }
 }

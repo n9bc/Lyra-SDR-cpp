@@ -21,6 +21,14 @@ final class FakeEngineFacade: EngineFacade {
     private(set) var zoomPreferences: [Double] = []
     func setCtuneCenter(_ hz: UInt32) { ctuneCentres.append(hz) }
     func setZoomPreference(_ zoom: Double) { zoomPreferences.append(zoom) }
+    // The batch is recorded in `applied`; the display preferences need no further state here.
+    func setScrollStepPreference(_ hz: Int) {}
+    func setRound100Preference(_ on: Bool) {}
+    func setPeakPreference(enabled: Bool, secs: Double) {}
+    func setSmoothingPreference(_ value: Int) {}
+    func setBandPlanSegmentsPreference(_ on: Bool) {}
+    func setShowSpotsPreference(_ on: Bool) {}
+    func setStepPreference(_ receiver: ReceiverID, hz: Int) {}
 
     func perform(_ calls: [EngineCall]) {
         performed.append(calls)
@@ -30,6 +38,13 @@ final class FakeEngineFacade: EngineFacade {
             switch call {
             case .setCtuneCenterHz(let hz): setCtuneCenter(hz)
             case .setZoomPref(let zoom): setZoomPreference(zoom)
+            case .setScrollStepPref(let hz): setScrollStepPreference(hz)
+            case .setRound100Pref(let on): setRound100Preference(on)
+            case .setPeakPref(let enabled, let secs): setPeakPreference(enabled: enabled, secs: secs)
+            case .setSmoothingPref(let value): setSmoothingPreference(value)
+            case .setBandPlanSegmentsPref(let on): setBandPlanSegmentsPreference(on)
+            case .setShowSpotsPref(let on): setShowSpotsPreference(on)
+            case .setStepPref(let id, let hz): setStepPreference(id, hz: hz)
             default: break
             }
             applied.append(call)
@@ -398,5 +413,25 @@ final class LiveRadioBackendTests: XCTestCase {
         advance(6)
         backend.tick()
         XCTAssertEqual(backend.snapshot.connection.phase, .error("No radio answered at 192.168.1.40"))
+    }
+
+    func testAveragingOnRestoresTheLastNonZeroSmoothing() {
+        facade.state.display.smoothing = 7
+        let backend = make()
+        facade.fire(.radio)
+        backend.send(.setAveraging(false))
+        facade.state.display.smoothing = 0
+        facade.fire(.radio)
+        backend.send(.setAveraging(true))
+        XCTAssertEqual(facade.applied.suffix(2), [.setSmoothingPref(0), .setSmoothingPref(7)])
+    }
+
+    func testWheelStepComesFromTheDisplayPreferenceNotTheVfoStep() {
+        facade.state.display.scrollStepHz = 500
+        facade.state.display.round100 = true
+        facade.state.filter.stepHz = 10
+        let backend = make()
+        XCTAssertEqual(backend.snapshot.display.wheelStepHz, 500)
+        XCTAssertTrue(backend.snapshot.display.exactTuning)
     }
 }

@@ -36,9 +36,15 @@ enum SpectrumGestureModel {
         return centreHz + Int64(((x / width - 0.5) * Double(spanHz)).rounded())
     }
 
-    /// Rounds to the 100 Hz grid, else to the step grid when the step is above 1 Hz (QML `snapCarrier`).
+    /// The one tuning step clicks and the wheel share: the wheel step, never finer than 100 Hz
+    /// while exact tuning is on.
+    nonisolated static func effectiveStep(stepHz: Int, round100: Bool) -> Int {
+        round100 ? max(100, stepHz) : stepHz
+    }
+
+    /// Rounds to the effective step grid when it is above 1 Hz (QML `snapCarrier`).
     nonisolated static func snapCarrier(_ hz: Int64, stepHz: Int, round100: Bool) -> Int64 {
-        let grid = round100 ? 100 : Int64(stepHz)
+        let grid = Int64(effectiveStep(stepHz: stepHz, round100: round100))
         guard grid > 1 else { return hz }
         let (q, _) = (hz + grid / 2).quotientAndRemainderFloor(by: grid)
         return q * grid

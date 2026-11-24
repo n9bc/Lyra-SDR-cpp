@@ -18,6 +18,8 @@ final class LiveRadioBackend: RadioBackend {
     @ObservationIgnored private var state: EngineState
     @ObservationIgnored private var tracker = ConnectionTracker()
     @ObservationIgnored private var vfoLocked = false
+    /// The last non-zero smoothing the engine reported, restored when averaging comes back on.
+    @ObservationIgnored private var lastSmoothing: Int?
     @ObservationIgnored private var capabilityKey: CapabilityKey
     @ObservationIgnored private var lastApply: Date
     @ObservationIgnored private var meterPending = false
@@ -35,6 +37,7 @@ final class LiveRadioBackend: RadioBackend {
         let initial = facade.readState()
         let t = now()
         state = initial
+        lastSmoothing = initial.display.smoothing > 0 ? initial.display.smoothing : nil
         tracker.update(running: initial.link.running, p2Running: initial.link.p2Running,
                        datagramsPerSec: initial.link.datagramsPerSec, now: t)
         capabilityKey = CapabilityKey(nnrAvailable: initial.dsp.nnrAvailable,
@@ -69,7 +72,8 @@ final class LiveRadioBackend: RadioBackend {
             break
         }
         // One batch, one perform: the executor stops at a blocked jump guard itself.
-        let calls = LiveCommandPlanner.calls(for: command, state: state, vfoLocked: vfoLocked)
+        let calls = LiveCommandPlanner.calls(for: command, state: state, vfoLocked: vfoLocked,
+                                                lastSmoothing: lastSmoothing)
         if !calls.isEmpty { facade.perform(calls) }
         if command == .connect {
             // After the perform: connecting may first close a dead earlier attempt, and the
@@ -101,6 +105,7 @@ final class LiveRadioBackend: RadioBackend {
     private func engineChanged(_ change: EngineChange) {
         let t = now()
         state = facade.readState()
+        if state.display.smoothing > 0 { lastSmoothing = state.display.smoothing }
         feedTracker(at: t)
         updateCapabilities()
         if change.subtracting(.meters).isEmpty {
@@ -195,7 +200,7 @@ extension BackendCapabilities {
         controls[.profile] = later
         controls[.tools] = later
         controls[.displaySettings] = .unavailable("Display settings arrive in Milestone 4")
-        controls[.tuningStep] = .unavailable("Tuning step arrives in Milestone 4")
+        controls[.tuningStep] = .unavailable("Tuning step arrives with the live spectrum")
         controls[.spectrumTuning] = .unavailable("Spectrum tuning arrives with the live spectrum")
         controls[.vfoBandwidth] = .unavailable("Use the filter chips to change the bandwidth")
         return BackendCapabilities(statuses: statuses, controls: controls,

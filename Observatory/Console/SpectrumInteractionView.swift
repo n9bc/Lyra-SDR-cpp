@@ -89,15 +89,20 @@ struct SpectrumInteractionView: NSViewRepresentable {
 
         private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
+        /// Where an Option press began, so a release after a drag does not switch receivers.
+        private var optionDownAt = CGPoint.zero
+
         override func mouseDown(with event: NSEvent) {
-            guard let (ctx, _) = context() else { return }
+            guard let (ctx, _) = context() else { return super.mouseDown(with: event) }
             let p = point(event)
             optionClick = event.modifierFlags.contains(.option)
+            optionDownAt = p
             session = optionClick ? nil : SpectrumGestureSession(startX: p.x, startY: p.y, context: ctx)
         }
 
         override func mouseDragged(with event: NSEvent) {
-            guard let (_, inputs) = context(), session != nil else { return }
+            guard let (_, inputs) = context() else { return super.mouseDragged(with: event) }
+            guard session != nil else { return }
             if let command = session?.moved(toX: point(event).x, at: event.timestamp) {
                 inputs.send(command)
             }
@@ -105,29 +110,35 @@ struct SpectrumInteractionView: NSViewRepresentable {
 
         override func mouseUp(with event: NSEvent) {
             defer { session = nil; optionClick = false }
-            guard let (ctx, inputs) = context() else { return }
-            let x = point(event).x
+            guard let (ctx, inputs) = context() else { return super.mouseUp(with: event) }
+            let p = point(event)
             if optionClick {
-                inputs.send(SpectrumGestureModel.middleClick(atX: x, context: ctx))
-            } else if let command = session?.ended(atX: x) {
+                let moved = hypot(p.x - optionDownAt.x, p.y - optionDownAt.y)
+                if moved <= SpectrumGestureModel.dragThresholdPx {
+                    inputs.send(SpectrumGestureModel.middleClick(atX: p.x, context: ctx))
+                }
+            } else if let command = session?.ended(atX: p.x) {
                 inputs.send(command)
             }
         }
 
         override func otherMouseUp(with event: NSEvent) {
-            guard event.buttonNumber == 2, let (ctx, inputs) = context() else { return }
+            guard event.buttonNumber == 2, let (ctx, inputs) = context() else {
+                return super.otherMouseUp(with: event)
+            }
             inputs.send(SpectrumGestureModel.middleClick(atX: point(event).x, context: ctx))
         }
 
         override func scrollWheel(with event: NSEvent) {
+            guard let (ctx, inputs) = context(), let display else { return super.scrollWheel(with: event) }
             // Trackpad momentum would keep tuning after the fingers lift.
-            guard event.momentumPhase.isEmpty, let (ctx, inputs) = context(), let display else { return }
+            guard event.momentumPhase.isEmpty else { return }
             if event.phase.contains(.began) { scrollAccumulator = 0 }
             let ticks = SpectrumGestureModel.wheelTicks(
                 deltaY: Double(event.scrollingDeltaY), deltaX: Double(event.scrollingDeltaX),
                 precise: event.hasPreciseScrollingDeltas, accumulator: &scrollAccumulator)
             guard ticks != 0 else { return }
-            if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
+            if event.modifierFlags.contains(.command) {
                 inputs.send(.setZoom(display.zoom * SpectrumGestureModel.zoomFactor(ticks: ticks)))
             } else {
                 inputs.send(.wheelTune(ctx.receiver, ticks: ticks))
@@ -135,7 +146,7 @@ struct SpectrumInteractionView: NSViewRepresentable {
         }
 
         override func magnify(with event: NSEvent) {
-            guard let (_, inputs) = context(), let display else { return }
+            guard let (_, inputs) = context(), let display else { return super.magnify(with: event) }
             inputs.send(.setZoom(display.zoom * max(0.1, 1 + Double(event.magnification))))
         }
     }

@@ -10,14 +10,20 @@ final class MockRadioBackend: RadioBackend {
 
     init(snapshot: RadioSnapshot = .sample) {
         self.snapshot = snapshot
+        lastSmoothing = snapshot.display.smoothing > 0 ? snapshot.display.smoothing : nil
     }
 
+    /// The last non-zero smoothing, which turning averaging back on restores.
+    @ObservationIgnored private var lastSmoothing: Int?
+
     func send(_ command: RadioCommand) {
-        snapshot = Self.applying(command, to: snapshot)
+        if snapshot.display.smoothing > 0 { lastSmoothing = snapshot.display.smoothing }
+        snapshot = Self.applying(command, to: snapshot, lastSmoothing: lastSmoothing)
     }
 
     /// The mock's stand-in for engine behaviour: what the snapshot becomes after `command`.
-    nonisolated static func applying(_ command: RadioCommand, to s: RadioSnapshot) -> RadioSnapshot {
+    nonisolated static func applying(_ command: RadioCommand, to s: RadioSnapshot,
+                                     lastSmoothing: Int? = nil) -> RadioSnapshot {
         var s = s
         switch command {
         case .focus(let id):
@@ -87,7 +93,8 @@ final class MockRadioBackend: RadioBackend {
         case .wheelTune(let id, let ticks):
             guard !s.session.vfoLocked, s.receiver(id).enabled else { return s }
             let next = SpectrumGestureModel.nextWheelHz(
-                s.receiver(id).frequencyHz, stepHz: s.display.exactTuning ? max(100, s.display.wheelStepHz) : s.display.wheelStepHz,
+                s.receiver(id).frequencyHz, stepHz: SpectrumGestureModel.effectiveStep(stepHz: s.display.wheelStepHz,
+                                                           round100: s.display.exactTuning),
                 ticks: ticks, sticky: s.display.stickyWheel)
             retune(&s, id, to: next)
             announceTuning(&s, id)
@@ -111,6 +118,17 @@ final class MockRadioBackend: RadioBackend {
             let half = Int64((Double(s.display.spanHighHz - s.display.spanLowHz) * s.display.zoom / z / 2).rounded())
             s.display.spanLowHz = centre - half; s.display.spanHighHz = centre + half
             s.display.zoom = z
+        case .setWheelStep(let hz): s.display.wheelStepHz = hz
+        case .setExactTuning(let on): s.display.exactTuning = on
+        case .setPeakHold(let setting): s.display.peakHold = setting
+        case .setAveraging(let on):
+            s.display.smoothing = on
+                ? (s.display.smoothing > 0 ? s.display.smoothing : lastSmoothing ?? LiveCommandPlanner.defaultSmoothing)
+                : 0
+        case .setBandPlanVisible(let on): s.display.bandPlanVisible = on
+        case .setSpotsVisible(let on): s.display.spotsVisible = on
+        case .setTuningStep(let id, let hz):
+            if id == .main { s.main.stepHz = hz } else { s.sub.stepHz = hz }
         }
         refreshOverlays(&s)
         return s

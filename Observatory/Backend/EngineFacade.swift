@@ -12,5 +12,12 @@ protocol EngineFacade: AnyObject {
     func setCtuneCenter(_ hz: UInt32)
     /// Writes the zoom preference the engine's zoom binding follows (`Prefs::setZoom`).
     func setZoomPreference(_ zoom: Double)
+    func setScrollStepPreference(_ hz: Int)
+    func setRound100Preference(_ on: Bool)
+    func setPeakPreference(enabled: Bool, secs: Double)
+    func setSmoothingPreference(_ value: Int)
+    func setBandPlanSegmentsPreference(_ on: Bool)
+    func setShowSpotsPreference(_ on: Bool)
+    func setStepPreference(_ receiver: ReceiverID, hz: Int)
     func quitApplication()
 }
